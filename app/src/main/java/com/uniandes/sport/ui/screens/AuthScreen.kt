@@ -48,34 +48,72 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
         )
     }
 
+    var isLoginMode by remember { mutableStateOf(true) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding(),
+            .imePadding()
+            .padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        
+        Text(
+            text = if (isLoginMode) "Iniciar Sesión" else "Registro",
+            style = MaterialTheme.typography.h4,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+
+        if (!isLoginMode) {
+            OutlinedTextField(
+                value = authViewModel.fullName,
+                onValueChange = { authViewModel.fullName = it },
+                label = { Text("Nombre Completo") },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+
+            OutlinedTextField(
+                value = authViewModel.program,
+                onValueChange = { authViewModel.program = it },
+                label = { Text("Programa (Ej. Ingeniería de Sistemas)") },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+
+            OutlinedTextField(
+                value = authViewModel.semester,
+                onValueChange = { authViewModel.semester = it },
+                label = { Text("Semestre (Ej. 8)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+
+            OutlinedTextField(
+                value = authViewModel.mainSport,
+                onValueChange = { authViewModel.mainSport = it },
+                label = { Text("Deporte Principal (Ej. futbol)") },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+        }
 
         OutlinedTextField(
             value = authViewModel.email,
             onValueChange = { authViewModel.email = it },
-            placeholder = { Text(text = "Email") },
+            label = { Text(text = "Email") },
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(vertical = 4.dp)
                 .fillMaxWidth(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
             )
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         OutlinedTextField(
             value = authViewModel.password,
             onValueChange = { authViewModel.password = it },
-            placeholder = { Text(text = "Password") },
+            label = { Text(text = "Password") },
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(vertical = 4.dp)
                 .fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
@@ -83,50 +121,59 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
             )
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = {
-                authViewModel.register(
-                    onSuccess = {
-                        logViewModel.log(screenName, "USER_REGISTERED")
-                        navController.navigate(Routes.WALL_SCREEN)
-                    },
-                    onFailure = { exception ->
-                        dialogMessage.value = exception.message.toString()
-                        showDialog.value = true
-                        logViewModel.crash(screenName, exception)
-                    }
-                )
-            },
-            modifier = Modifier
-                .height(60.dp)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth()
-        ) {
-            Text("Registrarse")
+        if (isLoginMode) {
+            Button(
+                onClick = {
+                    authViewModel.login(
+                        onSuccess = {
+                            logViewModel.log(screenName, "USER_LOGGED_IN")
+                            navController.navigate(Routes.WALL_SCREEN)
+                        },
+                        onFailure = { exception ->
+                            dialogMessage.value = exception.message.toString()
+                            showDialog.value = true
+                            logViewModel.crash(screenName, exception)
+                        }
+                    )
+                },
+                modifier = Modifier
+                    .height(50.dp)
+                    .fillMaxWidth()
+            ) {
+                Text("Ingresar")
+            }
+        } else {
+            Button(
+                onClick = {
+                    authViewModel.register(
+                        onSuccess = {
+                            logViewModel.log(screenName, "USER_REGISTERED")
+                            navController.navigate(Routes.WALL_SCREEN)
+                        },
+                        onFailure = { exception ->
+                            dialogMessage.value = exception.message.toString()
+                            showDialog.value = true
+                            logViewModel.crash(screenName, exception)
+                        }
+                    )
+                },
+                modifier = Modifier
+                    .height(50.dp)
+                    .fillMaxWidth()
+            ) {
+                Text("Crear Cuenta")
+            }
         }
 
-        Button(
-            onClick = {
-                authViewModel.login(
-                    onSuccess = {
-                        logViewModel.log(screenName, "USER_LOGGED_IN")
-                        navController.navigate(Routes.WALL_SCREEN)
-                    },
-                    onFailure = { exception ->
-                        dialogMessage.value = exception.message.toString()
-                        showDialog.value = true
-                        logViewModel.crash(screenName, exception)
-                    }
-                )
-            },
-            modifier = Modifier
-                .height(60.dp)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(
+            onClick = { isLoginMode = !isLoginMode },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Login")
+            Text(if (isLoginMode) "¿No tienes cuenta? Regístrate" else "¿Ya tienes cuenta? Ingresa")
         }
 
         Button(

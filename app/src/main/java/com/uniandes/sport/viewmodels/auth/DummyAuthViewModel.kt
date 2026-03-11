@@ -23,11 +23,39 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
             _password = value
         }
 
+    private var _fullName: String by mutableStateOf("")
+    override var fullName: String
+        get() = _fullName
+        set(value) {
+            _fullName = value
+        }
+
+    private var _program: String by mutableStateOf("")
+    override var program: String
+        get() = _program
+        set(value) {
+            _program = value
+        }
+
+    private var _semester: String by mutableStateOf("")
+    override var semester: String
+        get() = _semester
+        set(value) {
+            _semester = value
+        }
+
+    private var _mainSport: String by mutableStateOf("")
+    override var mainSport: String
+        get() = _mainSport
+        set(value) {
+            _mainSport = value
+        }
+
     override fun register(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit) {
         viewModelScope.launch {
             val result = async {
                 if (email.isNotEmpty() && password.isNotEmpty()) {
-                    User(id = "123", email = email)
+                    User(uid = "123", email = email, fullName = fullName, program = program, mainSport = mainSport)
                 } else {
                     throw Exception("Email or password is empty.")
                 }
@@ -61,7 +89,7 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
     override fun getUser(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit) {
         viewModelScope.launch {
             val result = async {
-                User(id = "123", email = email)
+                User(uid = "123", email = email)
             }
             try {
                 onSuccess(result.await())

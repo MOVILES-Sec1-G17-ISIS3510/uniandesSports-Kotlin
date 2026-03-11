@@ -5,6 +5,10 @@ import com.uniandes.sport.models.User
 interface AuthViewModelInterface {
     var email: String
     var password: String
+    var fullName: String
+    var program: String
+    var semester: String
+    var mainSport: String
 
     fun register(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit)
     fun login(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit)
