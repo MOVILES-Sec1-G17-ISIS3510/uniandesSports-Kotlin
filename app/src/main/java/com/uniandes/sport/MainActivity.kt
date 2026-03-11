@@ -24,12 +24,16 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.ktx.analytics
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessaging
-import android.Manifest.permission.POST_NOTIFICATIONS
 import android.util.Log
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.storage.FirebaseStorageViewModel
 import com.uniandes.sport.viewmodels.tweets.FirestoreTweetsViewModel
 import com.google.firebase.messaging.ktx.messaging
+import com.uniandes.sport.ui.components.MainScaffold
+import com.uniandes.sport.ui.theme.ThemeMode
+import com.uniandes.sport.ui.theme.UniandesSportsKotlinTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 
 class MainActivity : ComponentActivity() {
     private lateinit var  firebaseAnalytics: FirebaseAnalytics
@@ -67,28 +71,44 @@ class MainActivity : ComponentActivity() {
         firebaseAnalytics = Firebase.analytics
         askNotificationPermission()
         setContent {
-            val navController = rememberNavController()
-            val authViewModel = FirebaseAuthViewModel()
-            val tweetsViewModel = FirestoreTweetsViewModel()
-            val storageViewModel = FirebaseStorageViewModel()
-            val logViewModel = FirebaseLogViewModel()
+            val themeMode = remember { mutableStateOf(ThemeMode.SYSTEM) }
+            
+            UniandesSportsKotlinTheme(themeMode = themeMode.value) {
+                val navController = rememberNavController()
+                val authViewModel = FirebaseAuthViewModel()
+                val tweetsViewModel = FirestoreTweetsViewModel()
+                val storageViewModel = FirebaseStorageViewModel()
+                val logViewModel = FirebaseLogViewModel()
 
-            NavHost(navController = navController, startDestination = Routes.AUTH_SCREEN){
-                composable(Routes.AUTH_SCREEN) {
-                    AuthScreen(
-                        navController = navController,
-                        authViewModel = authViewModel,
-                        logViewModel = logViewModel
-                    )
-                }
-                composable(Routes.WALL_SCREEN) {
-                    WallScreen(
-                        tweetsViewModel = tweetsViewModel,
-                        authViewModel = authViewModel,
-                        navController = navController,
-                        storageViewModel = storageViewModel,
-                        logViewModel = logViewModel
-                    )
+                NavHost(navController = navController, startDestination = Routes.AUTH_SCREEN){
+                    composable(Routes.AUTH_SCREEN) {
+                        AuthScreen(
+                            navController = navController,
+                            authViewModel = authViewModel,
+                            logViewModel = logViewModel,
+                            onLoginSuccess = {
+                                navController.navigate(Routes.MAIN_TABS) {
+                                    popUpTo(Routes.AUTH_SCREEN) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                    composable(Routes.MAIN_TABS) {
+                        MainScaffold(
+                            themeMode = themeMode.value,
+                            onThemeChange = { themeMode.value = it }
+                        )
+                    }
+                    // WallScreen logic unmodified
+                    composable(Routes.WALL_SCREEN) {
+                        WallScreen(
+                            tweetsViewModel = tweetsViewModel,
+                            authViewModel = authViewModel,
+                            navController = navController,
+                            storageViewModel = storageViewModel,
+                            logViewModel = logViewModel
+                        )
+                    }
                 }
             }
         }

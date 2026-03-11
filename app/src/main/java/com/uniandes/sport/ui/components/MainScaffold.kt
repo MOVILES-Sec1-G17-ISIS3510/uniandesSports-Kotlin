@@ -1,0 +1,347 @@
+package com.uniandes.sport.ui.components
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.uniandes.sport.ui.navigation.Screen
+import com.uniandes.sport.ui.navigation.AppNavigation
+import com.uniandes.sport.ui.theme.ThemeMode
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScaffold(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeChange: (ThemeMode) -> Unit = {}
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
+    
+    var activeTabPageIndex by remember { mutableIntStateOf(0) }
+    
+    // Core screens list for BottomBar syncing
+    val coreScreens = listOf(Screen.Home, Screen.Retos, Screen.Play, Screen.Comunidades, Screen.Profesores)
+
+    // Update activeTabPageIndex when navigation occurs (e.g. back button or direct navigate)
+    LaunchedEffect(navBackStackEntry) {
+        if (fullRoute.startsWith("main_tabs")) {
+            val page = navBackStackEntry?.arguments?.getInt("initialPage") ?: 0
+            activeTabPageIndex = page
+        }
+    }
+
+    // Determine the logical screen based on the active tab or the full route
+    val currentRoute = when {
+        fullRoute.startsWith("main_tabs") -> coreScreens[activeTabPageIndex].route
+        else -> fullRoute
+    }
+
+    var isFabExpanded by remember { mutableStateOf(false) }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                if (currentRoute != Screen.Perfil.route) {
+                    TopAppBarDynamic(
+                        currentRoute = currentRoute, 
+                        onProfileClick = { navController.navigate(Screen.Perfil.route) },
+                        themeMode = themeMode,
+                        onThemeChange = onThemeChange
+                    )
+                }
+            },
+            bottomBar = {
+                if (currentRoute != Screen.Perfil.route) {
+                    BottomNavigationBar(
+                        navController = navController, 
+                        currentRoute = currentRoute, 
+                        onTabClick = { index ->
+                            // Navigate to the tabs route with the specific page
+                            navController.navigate("main_tabs/$index") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            },
+            floatingActionButton = {
+                if (currentRoute != Screen.Play.route && currentRoute != Screen.Perfil.route) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (currentRoute == Screen.Home.route) {
+                                isFabExpanded = !isFabExpanded
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = Color.White,
+                        shape = CircleShape
+                    ) {
+                        val rotation by animateFloatAsState(
+                            targetValue = if (isFabExpanded && currentRoute == Screen.Home.route) 135f else 0f, label = "fabScale"
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "FAB",
+                            modifier = Modifier.rotate(rotation)
+                        )
+                    }
+                }
+            }
+        ) { innerPadding ->
+            AppNavigation(
+                navController = navController, 
+                modifier = Modifier.padding(innerPadding),
+                onPageChanged = { page -> 
+                    activeTabPageIndex = page
+                }
+            )
+        }
+
+        // FAB Menu Overlay
+        if (isFabExpanded && currentRoute == Screen.Home.route) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { isFabExpanded = false },
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Column(
+                    modifier = Modifier.padding(end = 24.dp, bottom = 100.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    FabMenuItem(
+                        text = "Sorpréndeme",
+                        icon = Icons.Default.Casino,
+                        onClick = { isFabExpanded = false }
+                    )
+                    FabMenuItem(
+                        text = "Conectar Dispositivos",
+                        icon = Icons.Default.Link,
+                        onClick = { 
+                            isFabExpanded = false
+                            navController.navigate(Screen.Strava.route) 
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Agendar Partido",
+                        icon = Icons.Default.CalendarToday,
+                        onClick = { isFabExpanded = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TopAppBarDynamic(
+    currentRoute: String, 
+    onProfileClick: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit
+) {
+    var showThemeMenu by remember { mutableStateOf(false) }
+
+    val title = when (currentRoute) {
+        Screen.Home.route -> "Buenos días \uD83D\uDC4B"
+        Screen.Retos.route -> "Retos"
+        Screen.Play.route -> "Play"
+        Screen.Comunidades.route -> "Social"
+        Screen.Profesores.route -> "Profesores"
+        Screen.Torneos.route -> "Torneos"
+        Screen.Clima.route -> "Weather"
+        Screen.Strava.route -> "Strava"
+        Screen.Historial.route -> "History"
+        Screen.Perfil.route -> "Perfil de Usuario"
+        else -> ""
+    }
+    
+    val subtitle = when (currentRoute) {
+        Screen.Home.route -> "UNIANDES SPORTS"
+        Screen.Retos.route -> "COMPITE Y MEJORA"
+        Screen.Play.route -> "ENCUENTRA PARTIDO"
+        Screen.Comunidades.route -> "TU RED DEPORTIVA"
+        Screen.Profesores.route -> "APRENDE CON EXPERTOS"
+        Screen.Torneos.route -> "COMPETICIONES"
+        Screen.Perfil.route -> "MI CUENTA"
+        else -> ""
+    }
+
+    TopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        title = {
+            Column {
+                if (subtitle.isNotEmpty()) {
+                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
+                }
+                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
+            }
+        },
+        actions = {
+            if (currentRoute == Screen.Home.route) {
+                IconButton(onClick = onProfileClick) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurface)
+                }
+                Box {
+                    IconButton(onClick = { showThemeMenu = true }) {
+                        val themeIcon = when (themeMode) {
+                            ThemeMode.LIGHT -> Icons.Default.LightMode
+                            ThemeMode.DARK -> Icons.Default.DarkMode
+                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                        }
+                        Icon(themeIcon, contentDescription = "Theme Options")
+                    }
+                    DropdownMenu(
+                        expanded = showThemeMenu,
+                        onDismissRequest = { showThemeMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("System Theme") },
+                            onClick = { onThemeChange(ThemeMode.SYSTEM); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.SettingsBrightness, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Light Theme") },
+                            onClick = { onThemeChange(ThemeMode.LIGHT); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.LightMode, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dark Theme") },
+                            onClick = { onThemeChange(ThemeMode.DARK); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.DarkMode, null) }
+                        )
+                    }
+                }
+            } else {
+                IconButton(onClick = { /* TODO */ }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun BottomNavigationBar(navController: NavHostController, currentRoute: String?, onTabClick: (Int) -> Unit = {}) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        val items = listOf(
+            Screen.Home to Icons.Default.Home,
+            Screen.Retos to Icons.Default.EmojiEvents,
+            Screen.Play to Icons.Default.PlayCircle,
+            Screen.Comunidades to Icons.Default.Group,
+            Screen.Profesores to Icons.Default.School
+        )
+
+        items.forEachIndexed { index, (screen, icon) ->
+            val selected = currentRoute == screen.route
+            NavigationBarItem(
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = if (screen == Screen.Play) Color.White else MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = if (screen == Screen.Play) Color.Transparent else MaterialTheme.colorScheme.secondary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                icon = { 
+                    if (screen == Screen.Play) {
+                        Box(
+                            modifier = Modifier
+                                .offset(y = (-8).dp)
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, contentDescription = screen.route, tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
+                    } else {
+                        Icon(icon, contentDescription = screen.route) 
+                    }
+                },
+                label = { 
+                    if (screen == Screen.Play) {
+                        Text(
+                            text = screen.route.replaceFirstChar { it.uppercase() }, 
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                            modifier = Modifier.offset(y = (-8).dp)
+                        )
+                    } else {
+                        Text(
+                            text = screen.route.replaceFirstChar { it.uppercase() }, 
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                        )
+                    }
+                },
+                selected = selected,
+                onClick = {
+                    onTabClick(index)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun FabMenuItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 4.dp,
+            modifier = Modifier.padding(end = 12.dp)
+        ) {
+            Text(
+                text = text.uppercase(),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 4.dp,
+            modifier = Modifier.size(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(imageVector = icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}

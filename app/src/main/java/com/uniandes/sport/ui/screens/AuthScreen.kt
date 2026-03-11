@@ -18,7 +18,8 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 @Composable
 fun AuthScreen(authViewModel: AuthViewModelInterface,
                navController: NavController,
-               logViewModel: LogViewModelInterface) {
+               logViewModel: LogViewModelInterface,
+               onLoginSuccess: () -> Unit = { navController.navigate(Routes.MAIN_TABS) }) {
 
     val screenName = "AuthScreen"
     var showDialog = remember { mutableStateOf(false) }
@@ -27,7 +28,7 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
     LaunchedEffect(Unit) {
         authViewModel.isUserLoggedIn(onSuccess = { isLogged ->
             if (isLogged) {
-                navController.navigate(Routes.WALL_SCREEN)
+                onLoginSuccess()
             }
         }, onFailure = { exception ->
             logViewModel.crash(screenName, exception)
@@ -129,7 +130,7 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
                     authViewModel.login(
                         onSuccess = {
                             logViewModel.log(screenName, "USER_LOGGED_IN")
-                            navController.navigate(Routes.WALL_SCREEN)
+                            onLoginSuccess()
                         },
                         onFailure = { exception ->
                             dialogMessage.value = exception.message.toString()
@@ -150,7 +151,7 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
                     authViewModel.register(
                         onSuccess = {
                             logViewModel.log(screenName, "USER_REGISTERED")
-                            navController.navigate(Routes.WALL_SCREEN)
+                            onLoginSuccess()
                         },
                         onFailure = { exception ->
                             dialogMessage.value = exception.message.toString()
@@ -207,7 +208,7 @@ fun AuthScreen(authViewModel: AuthViewModelInterface,
                 .height(60.dp)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .fillMaxWidth()
-        ) {
+            ) {
             Text("Test Crashlytics")
         }
     }
