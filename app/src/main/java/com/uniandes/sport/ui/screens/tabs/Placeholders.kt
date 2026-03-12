@@ -30,13 +30,9 @@ fun PlayScreen(onNavigate: (String) -> Unit) {
 
 @Composable
 fun ComunidadesScreen(onNavigate: (String) -> Unit) {
-    // For now we inject the DummyViewModel to design the UI. 
-    // Later this will be passed down from MainActivity as an Interface.
-    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.communities.DummyCommunitiesViewModel>()
-    com.uniandes.sport.ui.screens.tabs.communities.CommunitiesMainScreen(
-        viewModel = viewModel,
-        onNavigate = onNavigate
-    )
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("TODO: COMUNIDADES SCREEN")
+    }
 }
 
 @Composable
