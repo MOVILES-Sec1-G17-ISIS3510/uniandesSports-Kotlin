@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import com.uniandes.sport.ui.navigation.Screen
 import com.uniandes.sport.ui.screens.tabs.*
+import com.uniandes.sport.viewmodels.profesores.FirestoreProfesoresViewModel
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,7 +43,13 @@ fun MainTabsScreen(
             Screen.Retos -> RetosScreen(onNavigate = onNavigate)
             Screen.Play -> PlayScreen(onNavigate = onNavigate)
             Screen.Comunidades -> ComunidadesScreen(onNavigate = onNavigate)
-            Screen.Profesores -> ProfesoresScreen(onNavigate = onNavigate)
+            Screen.Profesores -> {
+                val profesoresViewModel = FirestoreProfesoresViewModel()
+                ProfesoresScreen(
+                    profesoresViewModel = profesoresViewModel,
+                    onNavigate = onNavigate
+                )
+            }
             else -> {}
         }
     }

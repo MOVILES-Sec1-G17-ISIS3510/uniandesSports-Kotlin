@@ -35,12 +35,7 @@ fun ComunidadesScreen(onNavigate: (String) -> Unit) {
     }
 }
 
-@Composable
-fun ProfesoresScreen(onNavigate: (String) -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("TODO: PROFESORES SCREEN")
-    }
-}
+
 
 @Composable
 fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
