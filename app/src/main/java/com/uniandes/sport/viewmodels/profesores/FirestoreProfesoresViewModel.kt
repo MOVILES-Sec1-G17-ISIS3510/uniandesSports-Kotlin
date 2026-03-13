@@ -96,10 +96,7 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         val reviewToSave = review.copy(id = reviewRef.id)
 
         db.runTransaction { transaction ->
-            // 1. Add review to subcollection
-            transaction.set(reviewRef, reviewToSave)
-            
-            // 2. Read current prof to update ratings
+            // 1. Read current prof to update ratings (Reads must come BEFORE writes)
             val profRef = db.collection("profesores").document(profesorId)
             val profSnapshot = transaction.get(profRef)
             
@@ -110,7 +107,10 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             val newTotal = currentTotal + 1
             val newRating = ((currentRating * currentTotal) + reviewToSave.rating) / newTotal
             
-            // 3. Update prof document
+            // 2. Add review to subcollection (Write)
+            transaction.set(reviewRef, reviewToSave)
+            
+            // 3. Update prof document (Write)
             transaction.update(profRef, "totalReviews", newTotal)
             transaction.update(profRef, "rating", newRating)
         }.addOnSuccessListener {

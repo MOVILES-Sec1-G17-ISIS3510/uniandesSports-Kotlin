@@ -40,11 +40,13 @@ fun ProfesoresScreen(
     authViewModel: FirebaseAuthViewModel = viewModel(),
     onNavigate: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var profesores by remember { mutableStateOf<List<Profesor>>(emptyList()) }
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedProfesor by remember { mutableStateOf<Profesor?>(null) }
     var showReviewDialog by remember { mutableStateOf(false) }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
+    var reviewsRefreshKey by remember { mutableStateOf(0) }
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
     val coroutineScope = rememberCoroutineScope()
@@ -142,6 +144,7 @@ fun ProfesoresScreen(
         CoachDetailDialog(
             profesor = prof,
             profesoresViewModel = profesoresViewModel,
+            refreshKey = reviewsRefreshKey,
             onDismiss = { selectedProfesor = null },
             onAddReview = { showReviewDialog = true }
         )
@@ -173,9 +176,15 @@ fun ProfesoresScreen(
                     onSuccess = {
                         showReviewDialog = false
                         // Opcional: recargar profesores para mostrar el nuevo rating
-                        profesoresViewModel.fetchProfesores({ profesores = it }, {})
+                        profesoresViewModel.fetchProfesores({ 
+                            profesores = it 
+                            selectedProfesor = it.find { p -> p.id == profId }
+                        }, {})
+                        reviewsRefreshKey++
                     },
-                    onFailure = { /* Handle error */ }
+                    onFailure = { e -> 
+                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
                 )
             }
         )
@@ -376,12 +385,13 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
 fun CoachDetailDialog(
     profesor: Profesor,
     profesoresViewModel: ProfesoresViewModelInterface,
+    refreshKey: Int = 0,
     onDismiss: () -> Unit,
     onAddReview: () -> Unit
 ) {
     var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
 
-    LaunchedEffect(profesor.id) {
+    LaunchedEffect(profesor.id, refreshKey) {
         profesoresViewModel.fetchReviews(profesor.id,
             onSuccess = { reviews = it },
             onFailure = { /* Handle */ }
