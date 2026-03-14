@@ -25,3 +25,50 @@ data class Review(
     var comentario: String = "",
     var fecha: String = ""
 )
+
+class ProfesorBuilder(private val id: String) {
+    private var nombre: String = ""
+    private var deporte: String = "Soccer" // Default sport just in case
+    private var precio: String = ""
+    private var experiencia: String = ""
+    private var whatsapp: String = ""
+    private var especialidad: String = ""
+
+    fun setBasicInfo(nombre: String, deporte: String) = apply {
+        this.nombre = nombre
+        this.deporte = deporte
+    }
+
+    fun setProfessionalProfile(precio: String, experiencia: String, especialidad: String) = apply {
+        this.precio = precio
+        this.experiencia = experiencia
+        this.especialidad = especialidad
+    }
+
+    fun setContactInfo(whatsapp: String) = apply {
+        this.whatsapp = whatsapp
+    }
+
+    /**
+     * Constructs the Coach explicitly applying the business rules for a newly registered, unverified coach.
+     */
+    fun buildNewUnverifiedCoach(): Profesor {
+        return Profesor(
+            id = this.id,
+            nombre = this.nombre,
+            deporte = this.deporte,
+            precio = this.precio,
+            experiencia = this.experiencia,
+            whatsapp = this.whatsapp,
+            especialidad = this.especialidad,
+            disponibilidad = "A convenir",
+            rating = 5.0, // starts with perfect score technically
+            totalReviews = 0,
+            verified = false, // Must be verified by admin
+            sessionsDelivered = 0,
+            tournamentWins = 0,
+            rankInSport = 0,
+            totalCoachesInSport = 0
+        )
+    }
+}

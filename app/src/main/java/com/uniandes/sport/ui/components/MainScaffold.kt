@@ -55,8 +55,6 @@ fun MainScaffold(
         else -> fullRoute
     }
 
-    var isFabExpanded by remember { mutableStateOf(false) }
-    
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -84,29 +82,6 @@ fun MainScaffold(
                         }
                     )
                 }
-            },
-            floatingActionButton = {
-                if (currentRoute != Screen.Play.route && currentRoute != Screen.Perfil.route) {
-                    FloatingActionButton(
-                        onClick = {
-                            if (currentRoute == Screen.Home.route) {
-                                isFabExpanded = !isFabExpanded
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = Color.White,
-                        shape = CircleShape
-                    ) {
-                        val rotation by animateFloatAsState(
-                            targetValue = if (isFabExpanded && currentRoute == Screen.Home.route) 135f else 0f, label = "fabScale"
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "FAB",
-                            modifier = Modifier.rotate(rotation)
-                        )
-                    }
-                }
             }
         ) { innerPadding ->
             AppNavigation(
@@ -116,42 +91,6 @@ fun MainScaffold(
                     activeTabPageIndex = page
                 }
             )
-        }
-
-        // FAB Menu Overlay
-        if (isFabExpanded && currentRoute == Screen.Home.route) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable { isFabExpanded = false },
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Column(
-                    modifier = Modifier.padding(end = 24.dp, bottom = 100.dp),
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    FabMenuItem(
-                        text = "Sorpréndeme",
-                        icon = Icons.Default.Casino,
-                        onClick = { isFabExpanded = false }
-                    )
-                    FabMenuItem(
-                        text = "Conectar Dispositivos",
-                        icon = Icons.Default.Link,
-                        onClick = { 
-                            isFabExpanded = false
-                            navController.navigate(Screen.Strava.route) 
-                        }
-                    )
-                    FabMenuItem(
-                        text = "Agendar Partido",
-                        icon = Icons.Default.CalendarToday,
-                        onClick = { isFabExpanded = false }
-                    )
-                }
-            }
         }
     }
 }

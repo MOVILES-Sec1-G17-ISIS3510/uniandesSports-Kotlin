@@ -4,34 +4,83 @@ import androidx.lifecycle.ViewModel
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import android.util.Log
 
 class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
     private val db = FirebaseFirestore.getInstance()
 
+    // RAM memory cache to avoid even disk cache lookups when navigating
+    private var cachedProfesores: List<Profesor>? = null
+
     override fun fetchProfesores(
         onSuccess: (List<Profesor>) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        db.collection("profesores").get()
+        // 1. TACTIC: Immediate RAM memory cache return
+        cachedProfesores?.let {
+            Log.d("FirestoreProfesores", "Returned ${it.size} coaches from RAM Cache Tactic")
+            onSuccess(it)
+            return
+        }
+
+        // 2. TACTIC: Disk Cache explicit request
+        val docRef = db.collection("profesores")
+        docRef.get(Source.CACHE)
+            .addOnSuccessListener { result ->
+                if (!result.isEmpty) {
+                    val profesores = mutableListOf<Profesor>()
+                    for (document in result) {
+                        try {
+                            val profesor = document.toObject(Profesor::class.java)
+                            profesor.id = document.id
+                            profesores.add(profesor)
+                        } catch (e: Exception) {
+                            Log.e("FirestoreProfesores", "Error parsing cache ${document.id}", e)
+                        }
+                    }
+                    cachedProfesores = profesores // Save to RAM for next time
+                    Log.d("FirestoreProfesores", "Returned ${profesores.size} from DISK Cache Tactic")
+                    onSuccess(profesores)
+                }
+
+                // 3. TACTIC: Always verify with Server in the background to keep Cache fresh
+                fetchProfesoresFromServerBackground(onSuccess)
+            }
+            .addOnFailureListener {
+                // If cache completely fails or requires index, default to server
+                Log.d("FirestoreProfesores", "Cache empty/failed, fetching from Server Tactic")
+                fetchProfesoresFromServerBackground(onSuccess, onFailure)
+            }
+    }
+
+    private fun fetchProfesoresFromServerBackground(
+        onSuccess: (List<Profesor>) -> Unit,
+        onFailure: ((Exception) -> Unit)? = null
+    ) {
+        db.collection("profesores").get(Source.SERVER)
             .addOnSuccessListener { result ->
                 val profesores = mutableListOf<Profesor>()
                 for (document in result) {
                     try {
                         val profesor = document.toObject(Profesor::class.java)
-                        // Ensure the document ID is mapped to the object's ID field
                         profesor.id = document.id
                         profesores.add(profesor)
                     } catch (e: Exception) {
-                        Log.e("FirestoreProfesores", "Error parsing document ${document.id}", e)
+                        Log.e("FirestoreProfesores", "Error parsing server doc ${document.id}", e)
                     }
                 }
+                
+                // Only trigger re-render if memory changed size or content significantly 
+                // (for simplicity in this tactic, we update RAM and notify UI again so it reacts)
+                cachedProfesores = profesores
+                Log.d("FirestoreProfesores", "Updated ${profesores.size} coaches from SERVER")
                 onSuccess(profesores)
             }
             .addOnFailureListener { exception ->
-                Log.e("FirestoreProfesores", "Error getting documents.", exception)
-                onFailure(exception)
+                Log.e("FirestoreProfesores", "Error getting server documents.", exception)
+                onFailure?.invoke(exception)
             }
     }
 
@@ -76,6 +125,8 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
         documentRef.set(profToSave)
             .addOnSuccessListener {
+                // TACTIC: Invalidate cache so next fetch gets the new coach
+                cachedProfesores = null 
                 onSuccess()
             }
             .addOnFailureListener { exception ->

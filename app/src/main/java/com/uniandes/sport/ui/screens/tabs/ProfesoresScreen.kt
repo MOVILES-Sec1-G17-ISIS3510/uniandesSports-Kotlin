@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.uniandes.sport.models.Profesor
+import com.uniandes.sport.models.ProfesorBuilder
 import com.uniandes.sport.models.Review
 import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
@@ -33,6 +34,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.rotate
+import com.uniandes.sport.ui.components.FabMenuItem
 
 @Composable
 fun ProfesoresScreen(
@@ -47,8 +51,10 @@ fun ProfesoresScreen(
     var showReviewDialog by remember { mutableStateOf(false) }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var reviewsRefreshKey by remember { mutableStateOf(0) }
+    var isFabExpanded by remember { mutableStateOf(false) }
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
+
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -64,13 +70,30 @@ fun ProfesoresScreen(
         profesores.filter { it.deporte == selectedFilter }
     }
 
-    Scaffold { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color(0xFFF9FAFB)) // Light gray background
-        ) {
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { isFabExpanded = !isFabExpanded },
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Menu",
+                    modifier = Modifier.rotate(rotation)
+                )
+            }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(Color(0xFFF9FAFB)) // Light gray background
+            ) {
             // Sport Filter
             LazyRow(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -102,20 +125,6 @@ fun ProfesoresScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Top Header Join Button
-                item {
-                    Button(
-                        onClick = { showBecomeCoachDialog = true },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Add, "Become Coach", modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Become a Coach", fontWeight = FontWeight.Bold)
-                    }
-                }
-
                 if (filteredProfesores.isEmpty()) {
                     item {
                         Box(
@@ -132,6 +141,41 @@ fun ProfesoresScreen(
                         CoachCard(
                             profesor = prof,
                             onViewProfile = { selectedProfesor = prof }
+                        )
+                    }
+                }
+            }
+        }
+
+        // FAB Menu Overlay
+        if (isFabExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable { isFabExpanded = false },
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Column(
+                        modifier = Modifier.padding(end = 16.dp, bottom = 80.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        FabMenuItem(
+                            text = "Agendar Clase",
+                            icon = Icons.Default.CalendarToday,
+                            onClick = { 
+                                isFabExpanded = false
+                            }
+                        )
+                        FabMenuItem(
+                            text = "Become a Coach",
+                            icon = Icons.Default.PersonAdd,
+                            onClick = { 
+                                isFabExpanded = false
+                                showBecomeCoachDialog = true 
+                            }
                         )
                     }
                 }
@@ -210,23 +254,19 @@ fun ProfesoresScreen(
         BecomeCoachDialog(
             onDismiss = { showBecomeCoachDialog = false },
             onSubmit = { deporte, precio, experiencia, whatsapp, especialidad ->
-                val newCoach = Profesor(
-                    id = userUid, // Using user ID for uniqueness or blank for auto-generate
-                    nombre = userName.takeIf { it.isNotBlank() } ?: userEmail,
-                    deporte = deporte,
-                    precio = precio,
-                    experiencia = experiencia,
-                    whatsapp = whatsapp,
-                    especialidad = especialidad,
-                    disponibilidad = "A convenir",
-                    rating = 5.0, // starts with perfect score technically
-                    totalReviews = 0,
-                    verified = false, // Must be verified by admin
-                    sessionsDelivered = 0,
-                    tournamentWins = 0,
-                    rankInSport = 0,
-                    totalCoachesInSport = 0
-                )
+                val newCoach = ProfesorBuilder(id = userUid)
+                    .setBasicInfo(
+                        nombre = userName.takeIf { it.isNotBlank() } ?: userEmail,
+                        deporte = deporte
+                    )
+                    .setProfessionalProfile(
+                        precio = precio,
+                        experiencia = experiencia,
+                        especialidad = especialidad
+                    )
+                    .setContactInfo(whatsapp = whatsapp)
+                    .buildNewUnverifiedCoach()
+
                 profesoresViewModel.createProfesor(newCoach,
                     onSuccess = {
                         showBecomeCoachDialog = false
