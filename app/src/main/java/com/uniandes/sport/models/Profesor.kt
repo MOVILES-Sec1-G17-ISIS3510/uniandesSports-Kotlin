@@ -28,7 +28,7 @@ data class Review(
 
 class ProfesorBuilder(private val id: String) {
     private var nombre: String = ""
-    private var deporte: String = "Soccer" // Default sport just in case
+    private var deporte: String = ""
     private var precio: String = ""
     private var experiencia: String = ""
     private var whatsapp: String = ""
@@ -51,8 +51,14 @@ class ProfesorBuilder(private val id: String) {
 
     /**
      * Constructs the Coach explicitly applying the business rules for a newly registered, unverified coach.
+     * Throws an exception if required fields are missing.
      */
     fun buildNewUnverifiedCoach(): Profesor {
+        require(nombre.isNotBlank()) { "El nombre del coach es obligatorio" }
+        require(deporte.isNotBlank()) { "El deporte es obligatorio" }
+        require(precio.isNotBlank()) { "El precio es obligatorio" }
+        require(whatsapp.isNotBlank()) { "El teléfono de contacto (WhatsApp) es obligatorio" }
+
         return Profesor(
             id = this.id,
             nombre = this.nombre,

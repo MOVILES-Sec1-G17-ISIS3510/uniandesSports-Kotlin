@@ -2,18 +2,18 @@ package com.uniandes.sport.viewmodels.profesores
 
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
+import kotlinx.coroutines.flow.StateFlow
 
 interface ProfesoresViewModelInterface {
-    fun fetchProfesores(
-        onSuccess: (List<Profesor>) -> Unit,
-        onFailure: (Exception) -> Unit
-    )
+    val profesores: StateFlow<List<Profesor>>
+    val reviews: StateFlow<List<Review>>
 
-    fun fetchReviews(
-        profesorId: String,
-        onSuccess: (List<Review>) -> Unit,
-        onFailure: (Exception) -> Unit
+    fun fetchProfesores(
+        onSuccess: (List<Profesor>) -> Unit = {},
+        onFailure: (Exception) -> Unit = {}
     )
+    
+    fun fetchReviews(profesorId: String)
 
     fun createProfesor(
         profesor: Profesor,

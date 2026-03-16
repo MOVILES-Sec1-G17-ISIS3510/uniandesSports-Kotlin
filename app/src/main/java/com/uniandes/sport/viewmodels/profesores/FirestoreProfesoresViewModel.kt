@@ -4,109 +4,121 @@ import androidx.lifecycle.ViewModel
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.ListenerRegistration
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
     private val db = FirebaseFirestore.getInstance()
 
-    // RAM memory cache to avoid even disk cache lookups when navigating
+    private val _profesores = MutableStateFlow<List<Profesor>>(emptyList())
+    override val profesores: StateFlow<List<Profesor>> = _profesores.asStateFlow()
+
+    private val _reviews = MutableStateFlow<List<Review>>(emptyList())
+    override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
+
     private var cachedProfesores: List<Profesor>? = null
+    private var reviewsListener: ListenerRegistration? = null
 
     override fun fetchProfesores(
-        onSuccess: (List<Profesor>) -> Unit,
+        onSuccess: (List<Profesor>) -> Unit, 
         onFailure: (Exception) -> Unit
     ) {
-        // 1. TACTIC: Immediate RAM memory cache return
-        cachedProfesores?.let {
-            Log.d("FirestoreProfesores", "Returned ${it.size} coaches from RAM Cache Tactic")
-            onSuccess(it)
+        // 1. RAM (L1)
+        if (cachedProfesores != null && cachedProfesores!!.isNotEmpty()) {
+            Log.d("FirestoreProfesores", "Fetching from L1 Cache (RAM)")
+            _profesores.value = cachedProfesores!!
+            onSuccess(cachedProfesores!!)
             return
         }
 
-        // 2. TACTIC: Disk Cache explicit request
-        val docRef = db.collection("profesores")
-        docRef.get(Source.CACHE)
-            .addOnSuccessListener { result ->
-                if (!result.isEmpty) {
-                    val profesores = mutableListOf<Profesor>()
-                    for (document in result) {
+        // 2. Disco / Cache Local (L2)
+        db.collection("profesores")
+            .get(com.google.firebase.firestore.Source.CACHE)
+            .addOnSuccessListener { snapshot ->
+                if (!snapshot.isEmpty) {
+                    val list = snapshot.mapNotNull { doc ->
                         try {
-                            val profesor = document.toObject(Profesor::class.java)
-                            profesor.id = document.id
-                            profesores.add(profesor)
-                        } catch (e: Exception) {
-                            Log.e("FirestoreProfesores", "Error parsing cache ${document.id}", e)
-                        }
+                            doc.toObject(Profesor::class.java).apply { id = doc.id }
+                        } catch (e: Exception) { null }
                     }
-                    cachedProfesores = profesores // Save to RAM for next time
-                    Log.d("FirestoreProfesores", "Returned ${profesores.size} from DISK Cache Tactic")
-                    onSuccess(profesores)
+                    if (list.isNotEmpty()) {
+                        Log.d("FirestoreProfesores", "Fetching from L2 Cache (Disk)")
+                        cachedProfesores = list
+                        _profesores.value = list
+                        onSuccess(list)
+                        
+                        // L3 Background update to keep L1/L2 fresh without blocking UI
+                        fetchProfesoresFromServerBackground({}, {})
+                    } else {
+                        fetchProfesoresFromServerBackground(onSuccess, onFailure)
+                    }
+                } else {
+                    fetchProfesoresFromServerBackground(onSuccess, onFailure)
                 }
-
-                // 3. TACTIC: Always verify with Server in the background to keep Cache fresh
-                fetchProfesoresFromServerBackground(onSuccess)
             }
             .addOnFailureListener {
-                // If cache completely fails or requires index, default to server
-                Log.d("FirestoreProfesores", "Cache empty/failed, fetching from Server Tactic")
                 fetchProfesoresFromServerBackground(onSuccess, onFailure)
             }
     }
 
     private fun fetchProfesoresFromServerBackground(
-        onSuccess: (List<Profesor>) -> Unit,
-        onFailure: ((Exception) -> Unit)? = null
+        onSuccess: (List<Profesor>) -> Unit, 
+        onFailure: (Exception) -> Unit
     ) {
-        db.collection("profesores").get(Source.SERVER)
-            .addOnSuccessListener { result ->
-                val profesores = mutableListOf<Profesor>()
-                for (document in result) {
+        Log.d("FirestoreProfesores", "Fetching from L3 (Cloud Server)")
+        db.collection("profesores")
+            .get(com.google.firebase.firestore.Source.SERVER)
+            .addOnSuccessListener { snapshot ->
+                val list = snapshot.mapNotNull { doc ->
                     try {
-                        val profesor = document.toObject(Profesor::class.java)
-                        profesor.id = document.id
-                        profesores.add(profesor)
-                    } catch (e: Exception) {
-                        Log.e("FirestoreProfesores", "Error parsing server doc ${document.id}", e)
-                    }
+                        doc.toObject(Profesor::class.java).apply { id = doc.id }
+                    } catch (e: Exception) { null }
                 }
-                
-                // Only trigger re-render if memory changed size or content significantly 
-                // (for simplicity in this tactic, we update RAM and notify UI again so it reacts)
-                cachedProfesores = profesores
-                Log.d("FirestoreProfesores", "Updated ${profesores.size} coaches from SERVER")
-                onSuccess(profesores)
+                cachedProfesores = list
+                _profesores.value = list
+                onSuccess(list)
             }
             .addOnFailureListener { exception ->
-                Log.e("FirestoreProfesores", "Error getting server documents.", exception)
-                onFailure?.invoke(exception)
+                Log.e("FirestoreProfesores", "Error fetching from server", exception)
+                onFailure(exception)
             }
     }
 
-    override fun fetchReviews(
-        profesorId: String,
-        onSuccess: (List<Review>) -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        db.collection("profesores").document(profesorId).collection("reviews").get()
-            .addOnSuccessListener { result ->
-                val reviews = mutableListOf<Review>()
-                for (document in result) {
-                    try {
-                        val review = document.toObject(Review::class.java)
-                        review.id = document.id
-                        reviews.add(review)
-                    } catch (e: Exception) {
-                         Log.e("FirestoreProfesores", "Error parsing review ${document.id}", e)
-                    }
+    override fun fetchReviews(profesorId: String) {
+        // Remover el listener anterior si el usuario ve otro profesor
+        reviewsListener?.remove()
+
+        reviewsListener = db.collection("profesores").document(profesorId)
+            .collection("reviews")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.w("FirestoreProfesores", "Listen reviews failed.", e)
+                    return@addSnapshotListener
                 }
-                onSuccess(reviews)
+
+                if (snapshot != null) {
+                    val reviewsList = mutableListOf<Review>()
+                    for (doc in snapshot) {
+                        try {
+                            val review = doc.toObject(Review::class.java)
+                            review.id = doc.id
+                            reviewsList.add(review)
+                        } catch (parseError: Exception) {
+                            Log.e("FirestoreProfesores", "Error parsing review ${doc.id}", parseError)
+                        }
+                    }
+                    _reviews.value = reviewsList
+                }
             }
-            .addOnFailureListener { exception ->
-                Log.e("FirestoreProfesores", "Error getting reviews.", exception)
-                onFailure(exception)
-            }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        reviewsListener?.remove()
     }
 
     override fun createProfesor(
@@ -125,8 +137,6 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
         documentRef.set(profToSave)
             .addOnSuccessListener {
-                // TACTIC: Invalidate cache so next fetch gets the new coach
-                cachedProfesores = null 
                 onSuccess()
             }
             .addOnFailureListener { exception ->

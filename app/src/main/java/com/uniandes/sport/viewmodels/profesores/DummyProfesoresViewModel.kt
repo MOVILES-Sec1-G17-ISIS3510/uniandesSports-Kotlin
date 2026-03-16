@@ -3,26 +3,31 @@ package com.uniandes.sport.viewmodels.profesores
 import androidx.lifecycle.ViewModel
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
-    private val profesores = emptyList<Profesor>()
+    private val _profesoresList = emptyList<Profesor>()
+    private val _reviewsMap = emptyMap<String, List<Review>>()
 
-    private val reviews = emptyMap<String, List<Review>>()
+    private val _profesores = MutableStateFlow<List<Profesor>>(emptyList())
+    override val profesores: StateFlow<List<Profesor>> = _profesores.asStateFlow()
+
+    private val _reviews = MutableStateFlow<List<Review>>(emptyList())
+    override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
 
     override fun fetchProfesores(
         onSuccess: (List<Profesor>) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        onSuccess(profesores)
+        _profesores.value = _profesoresList
+        onSuccess(_profesoresList)
     }
 
-    override fun fetchReviews(
-        profesorId: String,
-        onSuccess: (List<Review>) -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        onSuccess(reviews[profesorId] ?: emptyList())
+    override fun fetchReviews(profesorId: String) {
+        _reviews.value = _reviewsMap[profesorId] ?: emptyList()
     }
 
     override fun createProfesor(

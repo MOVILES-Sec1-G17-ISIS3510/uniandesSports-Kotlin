@@ -12,7 +12,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import com.uniandes.sport.ui.navigation.Screen
 import androidx.compose.material.icons.filled.*
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +49,7 @@ fun ProfesoresScreen(
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
-    var profesores by remember { mutableStateOf<List<Profesor>>(emptyList()) }
+    val profesores by profesoresViewModel.profesores.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedProfesor by remember { mutableStateOf<Profesor?>(null) }
     var showReviewDialog by remember { mutableStateOf(false) }
@@ -55,14 +59,19 @@ fun ProfesoresScreen(
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
 
+    var userUid by remember { mutableStateOf<String?>(null) }
+
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        profesoresViewModel.fetchProfesores(
-            onSuccess = { profesores = it },
-            onFailure = { /* Handle error */ }
+        profesoresViewModel.fetchProfesores()
+        authViewModel.getUser(
+            onSuccess = { user -> userUid = user.uid },
+            onFailure = { /* Not logged in or error */ }
         )
     }
+
+    val isCurrentUserCoach = profesores.any { it.id == userUid }
 
     val filteredProfesores = if (selectedFilter == "All") {
         profesores
@@ -167,16 +176,38 @@ fun ProfesoresScreen(
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
+                                val firstProfId = profesores.firstOrNull()?.id
+                                if (firstProfId != null) {
+                                    onNavigate("book_class/$firstProfId")
+                                } else {
+                                    android.widget.Toast.makeText(context, "No hay profesores disponibles", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
-                        FabMenuItem(
-                            text = "Become a Coach",
-                            icon = Icons.Default.PersonAdd,
-                            onClick = { 
-                                isFabExpanded = false
-                                showBecomeCoachDialog = true 
-                            }
-                        )
+                        if (isCurrentUserCoach) {
+                            FabMenuItem(
+                                text = "Mi Panel de Profe",
+                                icon = Icons.Default.Dashboard,
+                                onClick = { 
+                                    isFabExpanded = false
+                                    val targetDash = Screen.CoachDashboard.route.replace("{profesorId}", userUid ?: "unknown")
+                                    try {
+                                        onNavigate(targetDash)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Error Nav: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+                        } else {
+                            FabMenuItem(
+                                text = "Become a Coach",
+                                icon = Icons.Default.PersonAdd,
+                                onClick = { 
+                                    isFabExpanded = false
+                                    showBecomeCoachDialog = true 
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -190,7 +221,11 @@ fun ProfesoresScreen(
             profesoresViewModel = profesoresViewModel,
             refreshKey = reviewsRefreshKey,
             onDismiss = { selectedProfesor = null },
-            onAddReview = { showReviewDialog = true }
+            onAddReview = { showReviewDialog = true },
+            onBookClass = { profId ->
+                selectedProfesor = null
+                onNavigate("book_class/$profId")
+            }
         )
     }
 
@@ -219,12 +254,6 @@ fun ProfesoresScreen(
                 profesoresViewModel.addReview(profId, newReview, 
                     onSuccess = {
                         showReviewDialog = false
-                        // Opcional: recargar profesores para mostrar el nuevo rating
-                        profesoresViewModel.fetchProfesores({ 
-                            profesores = it 
-                            selectedProfesor = it.find { p -> p.id == profId }
-                        }, {})
-                        reviewsRefreshKey++
                     },
                     onFailure = { e -> 
                         android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
@@ -270,7 +299,6 @@ fun ProfesoresScreen(
                 profesoresViewModel.createProfesor(newCoach,
                     onSuccess = {
                         showBecomeCoachDialog = false
-                        profesoresViewModel.fetchProfesores({ profesores = it }, {})
                     },
                     onFailure = { /* Handle failure */ }
                 )
@@ -427,15 +455,13 @@ fun CoachDetailDialog(
     profesoresViewModel: ProfesoresViewModelInterface,
     refreshKey: Int = 0,
     onDismiss: () -> Unit,
-    onAddReview: () -> Unit
+    onAddReview: () -> Unit,
+    onBookClass: (String) -> Unit
 ) {
-    var reviews by remember { mutableStateOf<List<Review>>(emptyList()) }
+    val reviews by profesoresViewModel.reviews.collectAsState()
 
-    LaunchedEffect(profesor.id, refreshKey) {
-        profesoresViewModel.fetchReviews(profesor.id,
-            onSuccess = { reviews = it },
-            onFailure = { /* Handle */ }
-        )
+    LaunchedEffect(profesor.id) {
+        profesoresViewModel.fetchReviews(profesor.id)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -563,7 +589,9 @@ fun CoachDetailDialog(
                             Text("Contact")
                         }
                         Button(
-                            onClick = { /* TODO Schedule */ },
+                            onClick = { 
+                                onBookClass(profesor.id)
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
