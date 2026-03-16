@@ -14,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -25,20 +24,12 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uniandes.sport.viewmodels.booking.BookClassViewModel
 
 // Opciones predefinidas
 val sports = listOf("Soccer", "Tennis", "Basketball", "Swimming", "Running")
 val skillLevels = listOf("Beginner", "Intermediate", "Advanced")
-
-// ViewModel simple para mantener el estado
-class BookClassViewModel : ViewModel() {
-    var selectedSport by mutableStateOf(sports[0])
-    var selectedSkillLevel by mutableStateOf(skillLevels[0])
-    var preferredSchedule by mutableStateOf("")
-    var notes by mutableStateOf("")
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -274,7 +265,11 @@ fun BookClassScreen(
                     Text("Cancel", fontWeight = FontWeight.Bold)
                 }
                 Button(
-                    onClick = { onNavigateBack() },
+                    onClick = { 
+                        viewModel.submitBooking(profesorId) {
+                            onNavigateBack()
+                        }
+                    },
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)

@@ -14,7 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.uniandes.sport.ui.screens.AuthScreen
-import com.uniandes.sport.ui.screens.WallScreen
+import com.uniandes.sport.ui.screens.wallscreen.WallScreen
 import com.uniandes.sport.viewmodels.auth.DummyAuthViewModel
 import com.uniandes.sport.viewmodels.log.DummyLogViewModel
 import com.uniandes.sport.viewmodels.log.FirebaseLogViewModel
