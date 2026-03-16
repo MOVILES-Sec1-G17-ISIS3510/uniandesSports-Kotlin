@@ -1,7 +1,6 @@
 package com.uniandes.sport.ui.screens.tabs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -31,7 +30,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.viewmodels.profesores.FirestoreProfesoresViewModel
 import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,8 +54,18 @@ fun CoachDashboardScreen(
             TopAppBar(
                 title = { 
                     Column {
-                        Text("Hola, ${profesor?.nombre ?: "Profesor"}", fontWeight = FontWeight.Black, fontSize = 20.sp)
-                        Text("Panel de ${profesor?.deporte ?: ""}", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            "HOLA, ${profesor?.nombre?.uppercase() ?: "COACH"}", 
+                            fontWeight = FontWeight.Black, 
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "PANEL DE ${profesor?.deporte?.uppercase() ?: "DEPORTE"}", 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            letterSpacing = 1.sp
+                        )
                     }
                 },
                 navigationIcon = {
@@ -66,20 +74,24 @@ fun CoachDashboardScreen(
                     }
                 },
                 actions = {
-                    // Botón Mock de Editar Perfil
                     IconButton(onClick = { 
                         android.widget.Toast.makeText(context, "¡Editar Perfil Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Editar Perfil", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.primary
+                )
             )
-        }
+        },
+        containerColor = Color(0xFFF9FAFB)
     ) { paddingValues ->
         if (profesor == null) {
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Scaffold
         }
@@ -87,10 +99,9 @@ fun CoachDashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF9FAFB))
+                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
-                .padding(top = paddingValues.calculateTopPadding() + 8.dp)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
 
@@ -100,41 +111,59 @@ fun CoachDashboardScreen(
             val formattedIngresos = if (ingresosEstimados > 0) "$$ingresosEstimados" else "$0"
 
             Card(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("INGRESOS ESTIMADOS", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(
+                        "INGRESOS ESTIMADOS", 
+                        color = Color.White.copy(alpha = 0.7f), 
+                        fontSize = 11.sp, 
+                        fontWeight = FontWeight.Black, 
+                        letterSpacing = 1.5.sp
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(formattedIngresos, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Black)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        formattedIngresos, 
+                        color = Color.White, 
+                        fontSize = 42.sp, 
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Clases", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-                            Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text("SESIONES", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
-                        Box(modifier = Modifier.height(40.dp).width(1.dp).background(Color.White.copy(alpha = 0.3f)))
+                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(Color.White.copy(alpha = 0.2f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Próximo Pago", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-                            Text("Fin de Mes", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text("PRÓXIMO PAGO", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("FIN DE MES", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
             }
 
             // Quick Stats
-            Text("RESUMEN", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Gray, letterSpacing = 1.sp)
+            Text(
+                "RESUMEN DE RENDIMIENTO", 
+                fontWeight = FontWeight.Black, 
+                fontSize = 13.sp, 
+                color = Color.Gray, 
+                letterSpacing = 1.sp
+            )
+            
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 DashboardStat(
-                    title = "Calificación",
+                    title = "Rating",
                     value = String.format(java.util.Locale.US, "%.1f", profesor.rating),
                     icon = Icons.Default.Star,
                     iconColor = Color(0xFFFBBF24),
@@ -167,31 +196,37 @@ fun CoachDashboardScreen(
 
             // Manage Schedule Action
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth().clickable { 
                     android.widget.Toast.makeText(context, "¡Gestor de Horarios Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
                 }
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFE0E7FF)),
+                            modifier = Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color(0xFF4F46E5))
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
-                            Text("Gestionar Horario", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("Configura tu disponibilidad para alumnos", fontSize = 12.sp, color = Color.Gray)
+                            Text("Gestionar Horario", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.Black)
+                            Text("Configura tu disponibilidad", fontSize = 12.sp, color = Color.Gray)
                         }
                     }
-                    Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.rotate(180f), tint = Color.Gray)
+                    Icon(
+                        Icons.Default.ArrowBack, 
+                        contentDescription = null, 
+                        modifier = Modifier.rotate(180f).size(20.dp), 
+                        tint = Color.LightGray
+                    )
                 }
             }
         }
@@ -201,12 +236,12 @@ fun CoachDashboardScreen(
 @Composable
 fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Color, modifier: Modifier = Modifier) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier.size(32.dp).clip(CircleShape).background(iconColor.copy(alpha=0.1f)),
@@ -214,11 +249,11 @@ fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Co
                 ) {
                     Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(16.dp))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(title, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(title.uppercase(), color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(value, fontSize = 24.sp, fontWeight = FontWeight.Black, color = Color.Black)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.Black)
         }
     }
 }
