@@ -79,5 +79,32 @@ fun AppNavigation(
         composable(Screen.Historial.route) {
             HistorialScreen(onNavigate = { route -> navController.navigate(route) })
         }
+        
+        composable(
+            route = Screen.CoachDashboard.route,
+            arguments = listOf(androidx.navigation.navArgument("profesorId") { 
+                type = androidx.navigation.NavType.StringType 
+            })
+        ) { backStackEntry ->
+            val profId = backStackEntry.arguments?.getString("profesorId") ?: ""
+            CoachDashboardScreen(
+                profesorId = profId,
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(
+            route = Screen.BookClass.route,
+            arguments = listOf(androidx.navigation.navArgument("profesorId") { 
+                type = androidx.navigation.NavType.StringType 
+            })
+        ) { backStackEntry ->
+            val profId = backStackEntry.arguments?.getString("profesorId") ?: ""
+            BookClassScreen(
+                profesorId = profId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
     }
 }
