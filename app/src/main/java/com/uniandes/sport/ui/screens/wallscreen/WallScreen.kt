@@ -1,84 +1,100 @@
-package com.uniandes.sport.ui.screens
+package com.uniandes.sport.ui.screens.wallscreen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uniandes.sport.Routes
 import com.uniandes.sport.models.Tweet
-import com.uniandes.sport.viewmodels.auth.DummyAuthViewModel
 import com.uniandes.sport.viewmodels.tweets.TweetsViewModelInterface
 import com.uniandes.sport.viewmodels.storage.StorageViewModelInterface
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
-import com.uniandes.sport.ui.screens.wallscreen.TweetForm
-import com.uniandes.sport.ui.screens.wallscreen.TweetList
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WallScreen(tweetsViewModel: TweetsViewModelInterface,
-               authViewModel: AuthViewModelInterface,
-               storageViewModel: StorageViewModelInterface,
-               navController: NavController,
-               logViewModel: LogViewModelInterface
+fun WallScreen(
+    tweetsViewModel: TweetsViewModelInterface,
+    authViewModel: AuthViewModelInterface,
+    storageViewModel: StorageViewModelInterface,
+    navController: NavController,
+    logViewModel: LogViewModelInterface
 ) {
-
     val screenName = "WallScreen"
-    val (showErrorDialog, setShowErrorDialog) = remember { mutableStateOf(false) }
-    val (errorMessage, setErrorMessage) = remember { mutableStateOf("") }
-    val tweets = fetchTweetsAsState(tweetsViewModel, setErrorMessage, setShowErrorDialog, logViewModel)
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    
+    // Simplificación para el estado de los tweets (MVVM)
+    val tweets = fetchTweetsAsState(tweetsViewModel, { errorMessage = it }, { showErrorDialog = it }, logViewModel)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "Home") },
+                title = { Text("COMUNIDAD", fontWeight = FontWeight.Black, fontSize = 18.sp) },
                 actions = {
                     TextButton(onClick = {
                         authViewModel.logout(onSuccess = {
-                            navController.navigate(Routes.AUTH_SCREEN)
+                            navController.navigate(Routes.AUTH_SCREEN) {
+                                popUpTo(0)
+                            }
                         }, onFailure = { exception ->
                             logViewModel.crash(screenName, exception)
                         })
                     }) {
-                        Text(
-                            text = "Logout",
-                            color = MaterialTheme.colors.onPrimary
-                        )
+                        Text(text = "Cerrar Sesión", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 },
-                backgroundColor = MaterialTheme.colors.primary
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
             )
         },
-        content = {
-            Box(modifier = Modifier
+        containerColor = Color(0xFFF9FAFB)
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
                 .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                TweetList(tweets, modifier = Modifier.fillMaxSize())
+            }
+            
+            Divider(color = Color(0xFFE5E7EB))
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(bottom = 8.dp)
             ) {
-                Column {
-                    TweetList(tweets, modifier = Modifier.weight(3f))
-                    TweetForm(
-                        tweetsViewModel,
-                        authViewModel,
-                        storageViewModel,
-                        logViewModel,
-                        setErrorMessage,
-                        setShowErrorDialog,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                TweetForm(
+                    tweetsViewModel,
+                    authViewModel,
+                    storageViewModel,
+                    logViewModel,
+                    { errorMessage = it },
+                    { showErrorDialog = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
-    )
+    }
 
     if (showErrorDialog) {
         AlertDialog(
-            onDismissRequest = { setShowErrorDialog(false) },
+            onDismissRequest = { showErrorDialog = false },
             title = { Text(text = "Error") },
             text = { Text(text = errorMessage) },
             confirmButton = {
-                TextButton(onClick = { setShowErrorDialog(false) }) {
+                TextButton(onClick = { showErrorDialog = false }) {
                     Text("OK")
                 }
             }
@@ -94,16 +110,18 @@ fun fetchTweetsAsState(
     logViewModel: LogViewModelInterface
 ): List<Tweet> {
     val screenName = "WallScreen"
-    val (tweets, setTweets) = remember { mutableStateOf(emptyList<Tweet>()) }
+    var tweets by remember { mutableStateOf(emptyList<Tweet>()) }
 
-    tweetsViewModel.fetchTweets(
-        onSuccess = { fetchedTweets -> setTweets(fetchedTweets) },
-        onFailure = { exception -> {
-            setErrorMessage(exception.message ?: "Unknown error")
-            setShowErrorDialog(true)
-            logViewModel.crash(screenName, exception)
-        } }
-    )
+    LaunchedEffect(Unit) {
+        tweetsViewModel.fetchTweets(
+            onSuccess = { fetchedTweets -> tweets = fetchedTweets },
+            onFailure = { exception -> 
+                setErrorMessage(exception.message ?: "Unknown error")
+                setShowErrorDialog(true)
+                logViewModel.crash(screenName, exception)
+            }
+        )
+    }
 
     return tweets
 }
