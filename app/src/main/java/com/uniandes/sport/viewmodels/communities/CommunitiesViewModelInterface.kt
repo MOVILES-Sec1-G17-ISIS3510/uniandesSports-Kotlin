@@ -13,6 +13,8 @@ interface CommunitiesViewModelInterface {
     val posts: StateFlow<List<Post>>
     val channels: StateFlow<List<Channel>>
     val channelMessages: StateFlow<List<ChannelMessage>>
+    val hasMoreOldChannelMessages: StateFlow<Boolean>
+    val isLoadingOlderChannelMessages: StateFlow<Boolean>
     val members: StateFlow<List<CommunityMember>>
     val postComments: StateFlow<List<PostComment>>
     val isLoading: StateFlow<Boolean>
@@ -64,6 +66,7 @@ interface CommunitiesViewModelInterface {
     )
 
     fun loadChannelMessages(communityId: String, channelId: String)
+    fun loadOlderChannelMessages()
 
     fun sendChannelMessage(
         communityId: String,

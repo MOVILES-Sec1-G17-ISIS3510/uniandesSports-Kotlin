@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,6 +123,8 @@ fun CommunityDetailModal(
     val channels by viewModel.channels.collectAsState()
     val members by viewModel.members.collectAsState()
     val channelMessages by viewModel.channelMessages.collectAsState()
+    val hasMoreOldChannelMessages by viewModel.hasMoreOldChannelMessages.collectAsState()
+    val isLoadingOlderChannelMessages by viewModel.isLoadingOlderChannelMessages.collectAsState()
     val postComments by viewModel.postComments.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
@@ -138,6 +142,7 @@ fun CommunityDetailModal(
             currentUserDisplayName = currentUserDisplayName,
             onBack = { selectedChannel = null },
             onLoadMessages = { viewModel.loadChannelMessages(community.id, channel.id) },
+            onLoadOlder = { viewModel.loadOlderChannelMessages() },
             onSend = { content ->
                 val uid = currentUserId
                 if (uid == null) {
@@ -171,7 +176,9 @@ fun CommunityDetailModal(
                         Toast.makeText(context, "Could not react", Toast.LENGTH_SHORT).show()
                     }
                 )
-            }
+            },
+            hasMoreOldMessages = hasMoreOldChannelMessages,
+            isLoadingOlderMessages = isLoadingOlderChannelMessages
         )
         return
     }
@@ -504,14 +511,27 @@ private fun ChannelRoomScreen(
     currentUserDisplayName: String,
     onBack: () -> Unit,
     onLoadMessages: () -> Unit,
+    onLoadOlder: () -> Unit,
     onSend: (String) -> Unit,
-    onReact: (ChannelMessage, String) -> Unit
+    onReact: (ChannelMessage, String) -> Unit,
+    hasMoreOldMessages: Boolean,
+    isLoadingOlderMessages: Boolean
 ) {
     var messageInput by remember { mutableStateOf("") }
     var reactionTarget by remember { mutableStateOf<ChannelMessage?>(null) }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(channel.id) {
         onLoadMessages()
+    }
+
+    LaunchedEffect(listState, hasMoreOldMessages, isLoadingOlderMessages) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { index ->
+                if (index <= 2 && hasMoreOldMessages && !isLoadingOlderMessages) {
+                    onLoadOlder()
+                }
+            }
     }
 
     Scaffold(
@@ -561,12 +581,24 @@ private fun ChannelRoomScreen(
         }
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (isLoadingOlderMessages) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                }
+            }
+
             if (messages.isEmpty()) {
                 item {
                     Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)

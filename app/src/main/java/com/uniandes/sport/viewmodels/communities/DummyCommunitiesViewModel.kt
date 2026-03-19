@@ -25,6 +25,12 @@ class DummyCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
     private val _channelMessages = MutableStateFlow<List<ChannelMessage>>(emptyList())
     override val channelMessages: StateFlow<List<ChannelMessage>> = _channelMessages.asStateFlow()
 
+    private val _hasMoreOldChannelMessages = MutableStateFlow(true)
+    override val hasMoreOldChannelMessages: StateFlow<Boolean> = _hasMoreOldChannelMessages.asStateFlow()
+
+    private val _isLoadingOlderChannelMessages = MutableStateFlow(false)
+    override val isLoadingOlderChannelMessages: StateFlow<Boolean> = _isLoadingOlderChannelMessages.asStateFlow()
+
     private val _members = MutableStateFlow<List<CommunityMember>>(emptyList())
     override val members: StateFlow<List<CommunityMember>> = _members.asStateFlow()
 
@@ -178,10 +184,45 @@ class DummyCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
     }
 
     override fun loadChannelMessages(communityId: String, channelId: String) {
-        _channelMessages.value = listOf(
-            ChannelMessage("1", "u1", "Daniel Torres", "Bienvenidos al canal #$channelId", System.currentTimeMillis() - 60000),
-            ChannelMessage("2", "u2", "Sofia Castañeda", "Gracias!", System.currentTimeMillis() - 30000)
-        )
+        val now = System.currentTimeMillis()
+        _channelMessages.value = (1..20).map { i ->
+            ChannelMessage(
+                id = i.toString(),
+                authorId = if (i % 2 == 0) "u1" else "u2",
+                authorName = if (i % 2 == 0) "Daniel Torres" else "Sofia Castañeda",
+                content = "Mensaje reciente #$i",
+                createdAt = now - (20 - i) * 60000L
+            )
+        }
+        _hasMoreOldChannelMessages.value = true
+    }
+
+    override fun loadOlderChannelMessages() {
+        if (!_hasMoreOldChannelMessages.value || _isLoadingOlderChannelMessages.value) return
+        _isLoadingOlderChannelMessages.value = true
+
+        val firstId = _channelMessages.value.firstOrNull()?.id?.toIntOrNull() ?: 1
+        val olderStart = firstId - 20
+        if (olderStart <= 0) {
+            _hasMoreOldChannelMessages.value = false
+            _isLoadingOlderChannelMessages.value = false
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val older = (olderStart until firstId).map { i ->
+            ChannelMessage(
+                id = i.toString(),
+                authorId = if (i % 2 == 0) "u1" else "u2",
+                authorName = if (i % 2 == 0) "Daniel Torres" else "Sofia Castañeda",
+                content = "Mensaje antiguo #$i",
+                createdAt = now - (200 - i) * 60000L
+            )
+        }
+
+        _channelMessages.value = older + _channelMessages.value
+        _hasMoreOldChannelMessages.value = olderStart > 1
+        _isLoadingOlderChannelMessages.value = false
     }
 
     override fun sendChannelMessage(

@@ -3,6 +3,7 @@ package com.uniandes.sport.viewmodels.communities
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.uniandes.sport.models.Channel
 import com.uniandes.sport.models.ChannelMessage
@@ -32,6 +33,12 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
     private val _channelMessages = MutableStateFlow<List<ChannelMessage>>(emptyList())
     override val channelMessages: StateFlow<List<ChannelMessage>> = _channelMessages.asStateFlow()
 
+    private val _hasMoreOldChannelMessages = MutableStateFlow(false)
+    override val hasMoreOldChannelMessages: StateFlow<Boolean> = _hasMoreOldChannelMessages.asStateFlow()
+
+    private val _isLoadingOlderChannelMessages = MutableStateFlow(false)
+    override val isLoadingOlderChannelMessages: StateFlow<Boolean> = _isLoadingOlderChannelMessages.asStateFlow()
+
     private val _members = MutableStateFlow<List<CommunityMember>>(emptyList())
     override val members: StateFlow<List<CommunityMember>> = _members.asStateFlow()
 
@@ -40,6 +47,10 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
 
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private var activeCommunityId: String? = null
+    private var activeChannelId: String? = null
+    private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
 
     override fun loadCommunities() {
         _isLoading.value = true
@@ -308,17 +319,69 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
     override fun loadChannelMessages(communityId: String, channelId: String) {
         viewModelScope.launch {
             try {
+                activeCommunityId = communityId
+                activeChannelId = channelId
                 val snapshot = db.collection("communities").document(communityId)
                     .collection("channels").document(channelId)
-                    .collection("messages").get().await()
+                    .collection("messages")
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(20)
+                    .get()
+                    .await()
+
+                oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
+                _hasMoreOldChannelMessages.value = snapshot.size() >= 20
 
                 _channelMessages.value = snapshot.documents.mapNotNull { doc ->
                     val m = doc.toObject(ChannelMessage::class.java)
                     m?.copy(id = doc.id)
-                }.sortedBy { it.createdAt }
+                }.reversed()
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error loading channel messages", e)
                 _channelMessages.value = emptyList()
+                _hasMoreOldChannelMessages.value = false
+                oldestLoadedMessageSnapshot = null
+            }
+        }
+    }
+
+    override fun loadOlderChannelMessages() {
+        val communityId = activeCommunityId
+        val channelId = activeChannelId
+        val cursor = oldestLoadedMessageSnapshot
+
+        if (communityId.isNullOrBlank() || channelId.isNullOrBlank() || cursor == null) return
+        if (_isLoadingOlderChannelMessages.value || !_hasMoreOldChannelMessages.value) return
+
+        _isLoadingOlderChannelMessages.value = true
+        viewModelScope.launch {
+            try {
+                val snapshot = db.collection("communities").document(communityId)
+                    .collection("channels").document(channelId)
+                    .collection("messages")
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(cursor)
+                    .limit(20)
+                    .get()
+                    .await()
+
+                val olderMessagesAsc = snapshot.documents.mapNotNull { doc ->
+                    val m = doc.toObject(ChannelMessage::class.java)
+                    m?.copy(id = doc.id)
+                }.reversed()
+
+                if (olderMessagesAsc.isNotEmpty()) {
+                    val merged = olderMessagesAsc + _channelMessages.value.filter { !olderMessagesAsc.any { old -> old.id == it.id } }
+                    _channelMessages.value = merged
+                    oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull() ?: oldestLoadedMessageSnapshot
+                    _hasMoreOldChannelMessages.value = snapshot.size() >= 20
+                } else {
+                    _hasMoreOldChannelMessages.value = false
+                }
+            } catch (e: Exception) {
+                Log.e("FirestoreCommunities", "Error loading older channel messages", e)
+            } finally {
+                _isLoadingOlderChannelMessages.value = false
             }
         }
     }
