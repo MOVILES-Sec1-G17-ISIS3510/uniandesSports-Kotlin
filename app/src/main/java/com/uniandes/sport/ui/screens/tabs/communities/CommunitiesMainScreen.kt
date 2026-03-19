@@ -31,6 +31,7 @@ import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 
 @Composable
 fun CommunitiesMainScreen(
@@ -76,6 +77,10 @@ fun CommunitiesMainScreen(
     }
     val trending = communities.take(2)
     val others = if (selectedFilter == "All") communities.drop(2) else filteredCommunities
+
+    BackHandler(enabled = selectedCommunityId != null) {
+        selectedCommunityId = null
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (isLoading && communities.isEmpty()) {

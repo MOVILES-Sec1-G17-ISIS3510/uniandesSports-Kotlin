@@ -1,6 +1,7 @@
 package com.uniandes.sport.ui.screens.tabs.communities
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -90,6 +91,10 @@ fun CommunityDetailModal(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+
+    BackHandler {
+        onDismiss()
+    }
 
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var currentUserDisplayName by remember { mutableStateOf("Usuario") }
@@ -520,6 +525,10 @@ private fun ChannelRoomScreen(
     var messageInput by remember { mutableStateOf("") }
     var reactionTarget by remember { mutableStateOf<ChannelMessage?>(null) }
     val listState = rememberLazyListState()
+
+    BackHandler {
+        onBack()
+    }
 
     LaunchedEffect(channel.id) {
         onLoadMessages()
