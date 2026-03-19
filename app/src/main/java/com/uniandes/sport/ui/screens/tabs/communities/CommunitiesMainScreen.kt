@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,27 +25,55 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.uniandes.sport.models.Community
+import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
+import androidx.lifecycle.viewmodel.compose.viewModel
+import android.widget.Toast
 
 @Composable
 fun CommunitiesMainScreen(
     viewModel: CommunitiesViewModelInterface,
+    authViewModel: FirebaseAuthViewModel = viewModel(),
     onNavigate: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     var selectedFilter by remember { mutableStateOf("All") }
+    var searchQuery by remember { mutableStateOf("") }
     var selectedCommunityId by remember { mutableStateOf<String?>(null) }
+    var showCreateCommunityDialog by remember { mutableStateOf(false) }
+
+    var currentUserId by remember { mutableStateOf<String?>(null) }
+    var currentUserDisplayName by remember { mutableStateOf("Usuario") }
 
     // Init load
     LaunchedEffect(Unit) {
         viewModel.loadCommunities()
+        authViewModel.getUser(
+            onSuccess = { user ->
+                currentUserId = user.uid
+                currentUserDisplayName = user.fullName.ifBlank { user.email }
+            },
+            onFailure = {
+                currentUserId = null
+            }
+        )
     }
 
     val filters = listOf("All", "Community", "Clan")
-    val filteredCommunities = if (selectedFilter == "All") communities else communities.filter { it.type == selectedFilter }
+    val filteredCommunities = communities.filter { community ->
+        val filterMatches = selectedFilter == "All" || community.type == selectedFilter
+        val query = searchQuery.trim().lowercase()
+        val queryMatches = query.isBlank() ||
+            community.name.lowercase().contains(query) ||
+            community.sport.lowercase().contains(query) ||
+            community.description.lowercase().contains(query)
+        filterMatches && queryMatches
+    }
     val trending = communities.take(2)
     val others = if (selectedFilter == "All") communities.drop(2) else filteredCommunities
 
@@ -57,6 +86,19 @@ fun CommunitiesMainScreen(
                 contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
             ) {
                 // Filters
+                item {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        placeholder = { Text("Search communities, sports, or keywords") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                }
+
                 item {
                     LazyRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
@@ -118,12 +160,40 @@ fun CommunitiesMainScreen(
                     )
                 }
 
-                items(others) { community ->
+                val listToRender = if (selectedFilter == "All" && searchQuery.isBlank()) others else filteredCommunities
+                if (listToRender.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No communities found",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                        )
+                    }
+                }
+
+                items(listToRender) { community ->
                     StandardCommunityCard(community, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         selectedCommunityId = it.id
                     }
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = {
+                if (currentUserId == null) {
+                    Toast.makeText(context, "Please log in to create a community", Toast.LENGTH_SHORT).show()
+                    return@FloatingActionButton
+                }
+                showCreateCommunityDialog = true
+            },
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Create community")
         }
         
         // Render Detail Modal if a community is selected
@@ -137,7 +207,75 @@ fun CommunitiesMainScreen(
                 )
             }
         }
+
+        if (showCreateCommunityDialog) {
+            CreateCommunityDialog(
+                onDismiss = { showCreateCommunityDialog = false },
+                onCreate = { name, type, sport, description ->
+                    val uid = currentUserId
+                    if (uid == null) {
+                        Toast.makeText(context, "Please log in to create a community", Toast.LENGTH_SHORT).show()
+                        return@CreateCommunityDialog
+                    }
+
+                    viewModel.createCommunity(
+                        name = name,
+                        type = type,
+                        sport = sport,
+                        description = description,
+                        ownerId = uid,
+                        ownerDisplayName = currentUserDisplayName,
+                        onSuccess = {
+                            showCreateCommunityDialog = false
+                            Toast.makeText(context, "Community created", Toast.LENGTH_SHORT).show()
+                        },
+                        onFailure = {
+                            Toast.makeText(context, "Could not create community", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            )
+        }
     }
+}
+
+@Composable
+fun CreateCommunityDialog(
+    onDismiss: () -> Unit,
+    onCreate: (name: String, type: String, sport: String, description: String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("Community") }
+    var sport by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create community") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(value = sport, onValueChange = { sport = it }, label = { Text("Sport") }, singleLine = true)
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, maxLines = 3)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterPill(text = "Community", isSelected = type == "Community") { type = "Community" }
+                    FilterPill(text = "Clan", isSelected = type == "Clan") { type = "Clan" }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onCreate(name, type, sport, description) },
+                enabled = name.isNotBlank() && sport.isNotBlank() && description.isNotBlank()
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
