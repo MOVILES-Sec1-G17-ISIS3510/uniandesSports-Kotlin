@@ -37,7 +37,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -131,7 +130,6 @@ fun CommunityDetailModal(
     val hasMoreOldChannelMessages by viewModel.hasMoreOldChannelMessages.collectAsState()
     val isLoadingOlderChannelMessages by viewModel.isLoadingOlderChannelMessages.collectAsState()
     val postComments by viewModel.postComments.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
 
     val userMembership = currentUserId?.let { uid -> members.find { it.userId == uid } }
     val userAlreadyMember = userMembership != null
@@ -234,15 +232,7 @@ fun CommunityDetailModal(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
                 ) {
-                    if (isJoining) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = MaterialTheme.colorScheme.onTertiary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Join Community", fontWeight = FontWeight.SemiBold)
-                    }
+                    Text(if (isJoining) "Joining..." else "Join Community", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -278,47 +268,41 @@ fun CommunityDetailModal(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (isLoading && posts.isEmpty() && channels.isEmpty() && members.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                when (selectedTabIndex) {
-                    0 -> FeedTab(
-                        posts = posts,
-                        canPost = userAlreadyMember,
-                        onCreatePost = { showAnnouncementDialog = true },
-                        onOpenComments = { post ->
-                            selectedPostForComments = post
-                            viewModel.loadPostComments(community.id, post.id)
-                        }
-                    )
+            when (selectedTabIndex) {
+                0 -> FeedTab(
+                    posts = posts,
+                    canPost = userAlreadyMember,
+                    onCreatePost = { showAnnouncementDialog = true },
+                    onOpenComments = { post ->
+                        selectedPostForComments = post
+                        viewModel.loadPostComments(community.id, post.id)
+                    }
+                )
 
-                    1 -> ChannelsTab(
-                        channels = channels,
-                        isMember = userAlreadyMember,
-                        isAdmin = isCurrentUserAdmin,
-                        onCreateChannel = { showCreateChannelDialog = true },
-                        onOpenChannel = { channel ->
-                            selectedChannel = channel
-                            viewModel.loadChannelMessages(community.id, channel.id)
-                        }
-                    )
+                1 -> ChannelsTab(
+                    channels = channels,
+                    isMember = userAlreadyMember,
+                    isAdmin = isCurrentUserAdmin,
+                    onCreateChannel = { showCreateChannelDialog = true },
+                    onOpenChannel = { channel ->
+                        selectedChannel = channel
+                        viewModel.loadChannelMessages(community.id, channel.id)
+                    }
+                )
 
-                    2 -> MembersTab(
-                        members = members,
-                        isAdmin = isCurrentUserAdmin,
-                        currentUserId = currentUserId,
-                        onRemove = { member ->
-                            viewModel.removeMember(
-                                communityId = community.id,
-                                memberId = member.userId.ifBlank { member.id },
-                                onSuccess = { Toast.makeText(context, "Member removed", Toast.LENGTH_SHORT).show() },
-                                onFailure = { Toast.makeText(context, "Could not remove member", Toast.LENGTH_SHORT).show() }
-                            )
-                        }
-                    )
-                }
+                2 -> MembersTab(
+                    members = members,
+                    isAdmin = isCurrentUserAdmin,
+                    currentUserId = currentUserId,
+                    onRemove = { member ->
+                        viewModel.removeMember(
+                            communityId = community.id,
+                            memberId = member.userId.ifBlank { member.id },
+                            onSuccess = { Toast.makeText(context, "Member removed", Toast.LENGTH_SHORT).show() },
+                            onFailure = { Toast.makeText(context, "Could not remove member", Toast.LENGTH_SHORT).show() }
+                        )
+                    }
+                )
             }
         }
     }
@@ -597,17 +581,6 @@ private fun ChannelRoomScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (isLoadingOlderMessages) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    }
-                }
-            }
-
             if (messages.isEmpty()) {
                 item {
                     Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,10 +1,14 @@
 package com.uniandes.sport.viewmodels.communities
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.uniandes.sport.data.local.CommunitiesCacheDatabase
+import com.uniandes.sport.data.local.toEntity
+import com.uniandes.sport.data.local.toModel
 import com.uniandes.sport.models.Channel
 import com.uniandes.sport.models.ChannelMessage
 import com.uniandes.sport.models.Community
@@ -17,9 +21,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
+class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel(application), CommunitiesViewModelInterface {
 
     private val db = FirebaseFirestore.getInstance()
+    private val cacheDao = CommunitiesCacheDatabase.getInstance(application).cacheDao()
 
     private val _communities = MutableStateFlow<List<Community>>(emptyList())
     override val communities: StateFlow<List<Community>> = _communities.asStateFlow()
@@ -52,16 +57,30 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
     private var activeChannelId: String? = null
     private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
 
+    init {
+        viewModelScope.launch {
+            val cached = cacheDao.getCachedCommunities().map { it.toModel() }
+            if (cached.isNotEmpty()) {
+                _communities.value = cached
+            }
+        }
+    }
+
     override fun loadCommunities() {
         _isLoading.value = true
         viewModelScope.launch {
             try {
+                if (_communities.value.isEmpty()) {
+                    val cached = cacheDao.getCachedCommunities().map { it.toModel() }
+                    if (cached.isNotEmpty()) _communities.value = cached
+                }
                 val snapshot = db.collection("communities").get().await()
                 val loadedCommunities = snapshot.documents.mapNotNull { doc ->
                     val c = doc.toObject(Community::class.java)
                     c?.copy(id = doc.id)
                 }
                 _communities.value = loadedCommunities
+                cacheCommunities(loadedCommunities)
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error fetching communities", e)
             } finally {
@@ -321,6 +340,12 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
             try {
                 activeCommunityId = communityId
                 activeChannelId = channelId
+
+                val cached = loadCachedRecentMessages(communityId, channelId)
+                if (cached.isNotEmpty()) {
+                    _channelMessages.value = cached
+                }
+
                 val snapshot = db.collection("communities").document(communityId)
                     .collection("channels").document(channelId)
                     .collection("messages")
@@ -336,9 +361,12 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
                     val m = doc.toObject(ChannelMessage::class.java)
                     m?.copy(id = doc.id)
                 }.reversed()
+                cacheRecentMessages(communityId, channelId, _channelMessages.value)
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error loading channel messages", e)
-                _channelMessages.value = emptyList()
+                if (_channelMessages.value.isEmpty()) {
+                    _channelMessages.value = loadCachedRecentMessages(communityId, channelId)
+                }
                 _hasMoreOldChannelMessages.value = false
                 oldestLoadedMessageSnapshot = null
             }
@@ -373,6 +401,7 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
                 if (olderMessagesAsc.isNotEmpty()) {
                     val merged = olderMessagesAsc + _channelMessages.value.filter { !olderMessagesAsc.any { old -> old.id == it.id } }
                     _channelMessages.value = merged
+                    cacheRecentMessages(communityId, channelId, _channelMessages.value)
                     oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull() ?: oldestLoadedMessageSnapshot
                     _hasMoreOldChannelMessages.value = snapshot.size() >= 20
                 } else {
@@ -549,6 +578,27 @@ class FirestoreCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface
                 Log.e("FirestoreCommunities", "Error adding post comment", e)
                 onFailure(e)
             }
+        }
+    }
+
+    private suspend fun cacheCommunities(list: List<Community>) {
+        cacheDao.clearCommunities()
+        cacheDao.upsertCommunities(list.map { it.toEntity() })
+    }
+
+    private suspend fun cacheRecentMessages(communityId: String, channelId: String, messages: List<ChannelMessage>) {
+        val recent = messages.takeLast(20)
+        cacheDao.clearChannelMessages(communityId, channelId)
+        cacheDao.upsertChannelMessages(recent.map { it.toEntity(communityId, channelId) })
+    }
+
+    private suspend fun loadCachedRecentMessages(communityId: String, channelId: String): List<ChannelMessage> {
+        return try {
+            cacheDao.getRecentChannelMessages(communityId, channelId, 20)
+                .map { it.toModel() }
+                .sortedBy { it.createdAt }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 }

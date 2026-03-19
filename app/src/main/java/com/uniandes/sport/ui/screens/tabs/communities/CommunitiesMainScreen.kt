@@ -41,7 +41,6 @@ fun CommunitiesMainScreen(
 ) {
     val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
 
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
@@ -83,13 +82,10 @@ fun CommunitiesMainScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (isLoading && communities.isEmpty()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
+        ) {
                 // Filters
                 item {
                     OutlinedTextField(
@@ -182,7 +178,6 @@ fun CommunitiesMainScreen(
                     }
                 }
             }
-        }
 
         FloatingActionButton(
             onClick = {

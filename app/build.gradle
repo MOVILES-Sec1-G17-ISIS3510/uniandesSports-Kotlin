@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.kapt'
     id 'com.google.gms.google-services'
     id 'com.google.firebase.crashlytics'
     id 'org.jetbrains.kotlin.plugin.compose'
@@ -68,6 +69,11 @@ dependencies {
 
     // Navigation
     implementation "androidx.navigation:navigation-compose:2.7.6"
+
+    // Room (local cache)
+    implementation "androidx.room:room-runtime:2.7.2"
+    implementation "androidx.room:room-ktx:2.7.2"
+    kapt "androidx.room:room-compiler:2.7.2"
 
     // Firebase BoM
     implementation platform('com.google.firebase:firebase-bom:32.7.1')
