@@ -38,6 +38,9 @@ import androidx.compose.runtime.remember
 class MainActivity : ComponentActivity() {
     private lateinit var  firebaseAnalytics: FirebaseAnalytics
 
+    private val themePrefsName = "app_prefs"
+    private val themePrefsKey = "theme_mode"
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { isGranted: Boolean ->
@@ -70,8 +73,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         firebaseAnalytics = Firebase.analytics
         askNotificationPermission()
+        val initialThemeMode = loadThemeMode()
         setContent {
-            val themeMode = remember { mutableStateOf(ThemeMode.SYSTEM) }
+            val themeMode = remember { mutableStateOf(initialThemeMode) }
             
             UniandesSportsKotlinTheme(themeMode = themeMode.value) {
                 val navController = rememberNavController()
@@ -96,7 +100,10 @@ class MainActivity : ComponentActivity() {
                     composable(Routes.MAIN_TABS) {
                         MainScaffold(
                             themeMode = themeMode.value,
-                            onThemeChange = { themeMode.value = it }
+                            onThemeChange = {
+                                themeMode.value = it
+                                saveThemeMode(it)
+                            }
                         )
                     }
                     // WallScreen logic unmodified
@@ -112,5 +119,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun loadThemeMode(): ThemeMode {
+        val prefs = getSharedPreferences(themePrefsName, MODE_PRIVATE)
+        val raw = prefs.getString(themePrefsKey, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
+        return try {
+            ThemeMode.valueOf(raw)
+        } catch (_: IllegalArgumentException) {
+            ThemeMode.SYSTEM
+        }
+    }
+
+    private fun saveThemeMode(themeMode: ThemeMode) {
+        val prefs = getSharedPreferences(themePrefsName, MODE_PRIVATE)
+        prefs.edit().putString(themePrefsKey, themeMode.name).apply()
     }
 }
