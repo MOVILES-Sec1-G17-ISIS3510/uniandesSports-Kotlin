@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -187,6 +188,7 @@ fun CommunityDetailModal(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -247,10 +249,10 @@ fun CommunityDetailModal(
                 text = community.description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(top = 4.dp)
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatBox("Type", community.type, Modifier.weight(1f))
@@ -258,7 +260,7 @@ fun CommunityDetailModal(
                 StatBox("Members", community.memberCount.toString(), Modifier.weight(1f))
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, tab ->
@@ -266,7 +268,7 @@ fun CommunityDetailModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(if (selectedTabIndex == 1) 2.dp else 8.dp))
 
             when (selectedTabIndex) {
                 0 -> FeedTab(
@@ -420,7 +422,10 @@ private fun ChannelsTab(
     onCreateChannel: () -> Unit,
     onOpenChannel: (Channel) -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         if (isAdmin) {
             item {
                 OutlinedButton(
@@ -528,6 +533,7 @@ private fun ChannelRoomScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -578,7 +584,7 @@ private fun ChannelRoomScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (messages.isEmpty()) {
