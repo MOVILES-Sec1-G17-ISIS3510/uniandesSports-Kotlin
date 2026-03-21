@@ -52,7 +52,13 @@ fun MainTabsScreen(
                     onNavigate = onNavigate
                 )
             }
-            Screen.Play -> PlayScreen(onNavigate = onNavigate)
+            Screen.Play -> {
+                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                com.uniandes.sport.ui.screens.tabs.play.PlayScreen(
+                    viewModel = playViewModel,
+                    onNavigate = onNavigate
+                )
+            }
             Screen.Comunidades -> {
                 val communitiesViewModel: FirestoreCommunitiesViewModel = viewModel()
                 CommunitiesMainScreen(
