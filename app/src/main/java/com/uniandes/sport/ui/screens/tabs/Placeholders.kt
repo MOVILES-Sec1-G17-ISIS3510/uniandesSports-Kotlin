@@ -55,8 +55,7 @@ fun HomeScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Home", o
 
 // Removed RetosScreen as it now has its own implementation file
 
-@Composable
-fun PlayScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Play", onNavigate)
+// Removed PlayScreen as it now has its own implementation file
 
 @Composable
 fun ComunidadesScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Comunidades", onNavigate)
