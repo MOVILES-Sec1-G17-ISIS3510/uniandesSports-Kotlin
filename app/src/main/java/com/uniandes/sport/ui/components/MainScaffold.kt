@@ -179,6 +179,13 @@ fun TopAppBarDynamic(
                         )
                     }
                 }
+            } else if (currentRoute == Screen.Retos.route) {
+                IconButton(onClick = { /* TODO */ }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search")
+                }
+                IconButton(onClick = { /* TODO: Histórico de retos */ }) {
+                    Icon(Icons.Default.EventNote, contentDescription = "Historial")
+                }
             } else {
                 IconButton(onClick = { /* TODO */ }) {
                     Icon(Icons.Default.Search, contentDescription = "Search")

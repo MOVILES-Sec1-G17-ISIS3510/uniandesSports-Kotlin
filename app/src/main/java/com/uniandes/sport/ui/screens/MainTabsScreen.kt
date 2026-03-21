@@ -43,7 +43,13 @@ fun MainTabsScreen(
     ) { page ->
         when (coreScreens[page]) {
             Screen.Home -> HomeScreen(onNavigate = onNavigate)
-            Screen.Retos -> RetosScreen(onNavigate = onNavigate)
+            Screen.Retos -> {
+                val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                RetosScreen(
+                    viewModel = retosViewModel,
+                    onNavigate = onNavigate
+                )
+            }
             Screen.Play -> PlayScreen(onNavigate = onNavigate)
             Screen.Comunidades -> {
                 val communitiesViewModel: FirestoreCommunitiesViewModel = viewModel()
