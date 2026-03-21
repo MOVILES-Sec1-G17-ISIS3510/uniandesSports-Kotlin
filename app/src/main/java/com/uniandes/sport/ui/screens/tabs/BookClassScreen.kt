@@ -36,6 +36,7 @@ val skillLevels = listOf("Beginner", "Intermediate", "Advanced")
 fun BookClassScreen(
     profesorId: String,
     viewModel: BookClassViewModel = viewModel(),
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigateBack: () -> Unit = {}
 ) {
     val selectedSport = viewModel.selectedSport
@@ -266,6 +267,18 @@ fun BookClassScreen(
                 }
                 Button(
                     onClick = { 
+                        // Analytics Engine: BQ3 (Most scheduled sport)
+                        logViewModel.log(
+                            screen = "BookClassScreen",
+                            action = "SESSION_SCHEDULED",
+                            params = mapOf(
+                                "sport_category" to selectedSport,
+                                "session_type" to "coaching"
+                            )
+                        )
+                        // Analytics Engine: BQ5 (Persist User Property for Time Elapsed query)
+                        logViewModel.setUserProperty("last_coaching_date", System.currentTimeMillis().toString())
+
                         viewModel.submitBooking(profesorId) {
                             onNavigateBack()
                         }

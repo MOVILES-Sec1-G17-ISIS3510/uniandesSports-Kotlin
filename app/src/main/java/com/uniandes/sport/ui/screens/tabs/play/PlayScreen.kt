@@ -27,6 +27,7 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
@@ -43,7 +44,19 @@ fun PlayScreen(
             onDismiss = { showCreateDialog = false },
             onCreate = { title, location, description, date, skillLevel ->
                 viewModel.createEvent(title, description, location, selectedSport!!, selectedMode!!, date, skillLevel,
-                    onSuccess = { showCreateDialog = false },
+                    onSuccess = { 
+                        // Analytics Engine: BQ4 (Registration / Funnel Conversion tracking)
+                        logViewModel.log(
+                            screen = "PlayScreen",
+                            action = "EVENT_REGISTERED",
+                            params = mapOf(
+                                "source" to "organic", // Or dynamic if pushed from Notification
+                                "challenge_type" to selectedMode!!,
+                                "sport_category" to selectedSport!!
+                            )
+                        )
+                        showCreateDialog = false 
+                    },
                     onError = { /* Optionally show error msg */ }
                 )
             }
@@ -158,7 +171,22 @@ fun PlayScreen(
                 } else {
                     items(events) { event ->
                         val uiModel = EventUIAdapter.toUIModel(event)
-                        MatchCard(uiModel)
+                        MatchCard(
+                            uiModel = uiModel,
+                            onMatchClick = {
+                                // Analytics Engine: BQ6 (Available Capacity of interacted sports)
+                                logViewModel.log(
+                                    screen = "PlayScreen",
+                                    action = "MATCH_VIEWED",
+                                    params = mapOf(
+                                        "sport_category" to event.sport,
+                                        "available_capacity" to (event.maxParticipants - event.participants.size).toString(),
+                                        "max_capacity" to event.maxParticipants.toString()
+                                    )
+                                )
+                                // TODO: Join / details navigation
+                            }
+                        )
                     }
                 }
             } else {
@@ -353,7 +381,7 @@ fun ModeButton(
 }
 
 @Composable
-fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel) {
+fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchClick: () -> Unit = {}) {
     val event = uiModel.rawEvent
     
     val (icon, color) = when (event.sport.lowercase()) {
@@ -368,7 +396,7 @@ fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO: Join */ },
+            .clickable { onMatchClick() },
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
         shadowElevation = 2.dp
