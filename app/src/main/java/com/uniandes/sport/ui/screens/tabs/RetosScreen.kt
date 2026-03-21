@@ -27,6 +27,17 @@ import java.text.SimpleDateFormat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
+/**
+ * RETOS FEATURE IMPLEMENTATION SUMMARY:
+ * 1. DESIGN PATTERNS: 
+ *    - Factory Method: Used for creating different challenge types (Individual/Team) via RetoFactory.
+ *    - Strategy Pattern: Used for calculating challenge progress through ProgressStrategy.
+ * 2. FIRESTORE INTEGRATION:
+ *    - Connected to 'challenges' collection using Map-based serialization to ensure data integrity.
+ *    - Integrated real-time authentication (Firebase Auth) for 'createdBy' and 'participants' fields.
+ *    - Handled PERMISSION_DENIED issues by aligning UI UID with Firestore security rules.
+ */
+
 // imPORTAANTE los retos para el usuario
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,16 +60,16 @@ fun RetosScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(creationStatus) {
-        if (creationStatus == "SUCCESS") {
-            android.widget.Toast.makeText(context, "reto creado con exito mi bro!", android.widget.Toast.LENGTH_SHORT).show()
-        } else if (creationStatus.startsWith("ERROR:")) {
+        if (creationStatus.startsWith("ERROR:")) {
             android.widget.Toast.makeText(context, "fallo: ${creationStatus.removePrefix("ERROR: ")}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
     val filteredRetos = retos.filter { reto ->
-        val typeMatch = if (selectedType == "All") true else reto.type.equals(selectedType, ignoreCase = true)
-        val sportMatch = if (selectedSport == "All Sports") true else reto.sport.equals(selectedSport, ignoreCase = true)
+        val typeMatch = if (selectedType.equals("All", ignoreCase = true)) true 
+                        else reto.type.trim().equals(selectedType.trim(), ignoreCase = true)
+        val sportMatch = if (selectedSport.equals("All Sports", ignoreCase = true)) true 
+                         else reto.sport.trim().equals(selectedSport.trim(), ignoreCase = true)
         typeMatch && sportMatch
     }
 
@@ -66,8 +77,8 @@ fun RetosScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true },
-                containerColor = Color(0xFF2E7D32),
-                contentColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "nuevo reto")
@@ -115,7 +126,7 @@ fun RetosScreen(
 
             // lista de retos
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -345,7 +356,10 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
                         },
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        )
                     ) { Text("Create") }
                 }
             }

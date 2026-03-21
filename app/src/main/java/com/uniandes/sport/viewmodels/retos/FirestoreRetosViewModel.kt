@@ -47,23 +47,35 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
 
     override fun fetchRetos() {
         _isLoading.value = true
+        // bamos a oir los cambios en tiempo real mejor
         db.collection("challenges")
-            .get()
-            .addOnSuccessListener { result ->
-                val list = result.mapNotNull { doc ->
-                    try {
-                        doc.toObject(Reto::class.java).apply { id = doc.id }
-                    } catch (e: Exception) {
-                        Log.e("RetosVM", "uy no pude leer el reto ${doc.id}: ${e.message}")
-                        null
-                    }
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("RetosVM", "fallo al oir los retos", e)
+                    _isLoading.value = false
+                    return@addSnapshotListener
                 }
-                Log.d("RetosVM", "traje ${list.size} retos de firestore!")
-                _retos.value = list
-                _isLoading.value = false
-            }
-            .addOnFailureListener { e ->
-                Log.e("RetosVM", "error fatal al traer retos de la nube", e)
+                
+                if (snapshot != null) {
+                    val rawCount = snapshot.size()
+                    val list = snapshot.mapNotNull { doc ->
+                        try {
+                            val r = doc.toObject(Reto::class.java)
+                            if (r != null) {
+                                Log.d("RetosVM", "leido ok: ${doc.id} - ${r.title}")
+                                r.apply { id = doc.id }
+                            } else {
+                                Log.e("RetosVM", "doc ${doc.id} dio null al parsear")
+                                null
+                            }
+                        } catch (ex: Exception) {
+                            Log.e("RetosVM", "error parseando ${doc.id}: ${ex.message}")
+                            null
+                        }
+                    }
+                    Log.d("RetosVM", "Firestore dio $rawCount docs, pudimos leer ${list.size}")
+                    _retos.value = list
+                }
                 _isLoading.value = false
             }
     }
