@@ -32,4 +32,7 @@ class FirebaseLogViewModel(): ViewModel(), LogViewModelInterface {
         firebaseCrashlytics.recordException(exception)
     }
 
+    override fun setUserProperty(key: String, value: String) {
+        firebaseAnalytics.setUserProperty(key, value)
+    }
 }

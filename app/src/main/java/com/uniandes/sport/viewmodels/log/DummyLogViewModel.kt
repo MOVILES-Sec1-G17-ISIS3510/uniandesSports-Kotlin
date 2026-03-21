@@ -8,6 +8,10 @@ class DummyLogViewModel : ViewModel(), LogViewModelInterface {
     }
 
     override fun crash(screen: String, exception: Exception) {
-        println("Crash - Screen: $screen, Exception: ${exception.message}")
+        println("Simulating Crash in -> $screen because of: \n $exception")
+    }
+
+    override fun setUserProperty(key: String, value: String) {
+        println("Simulating UserProperty in -> Key: $key, Value: $value")
     }
 }
