@@ -53,8 +53,7 @@ fun SimplePlaceholderScreen(title: String, onNavigate: (String) -> Unit) {
 @Composable
 fun HomeScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Home", onNavigate)
 
-@Composable
-fun RetosScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Retos", onNavigate)
+// Removed RetosScreen as it now has its own implementation file
 
 @Composable
 fun PlayScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Play", onNavigate)
