@@ -45,8 +45,10 @@ fun MainTabsScreen(
             Screen.Home -> HomeScreen(onNavigate = onNavigate)
             Screen.Retos -> {
                 val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 RetosScreen(
                     viewModel = retosViewModel,
+                    logViewModel = logViewModel,
                     onNavigate = onNavigate
                 )
             }
