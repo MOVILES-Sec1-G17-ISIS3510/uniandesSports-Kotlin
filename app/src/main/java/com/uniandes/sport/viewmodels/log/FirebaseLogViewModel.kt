@@ -7,14 +7,23 @@ import com.google.firebase.analytics.ktx.logEvent
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 
+/**
+ * Primera versión del Analytics Engine configurada para responder 
+ * a las Business Questions (BQ) Tipo 1:
+ * - Daily Active Users (DAU) by Sport
+ * - Daily Event Registration Volume
+ */
 class FirebaseLogViewModel(): ViewModel(), LogViewModelInterface {
 
     private val firebaseAnalytics = Firebase.analytics
     private val firebaseCrashlytics = Firebase.crashlytics
 
-    override fun log(screen: String, action: String) {
+    override fun log(screen: String, action: String, params: Map<String, String>) {
         firebaseAnalytics.logEvent(action){
             param(FirebaseAnalytics.Param.SCREEN_NAME, screen)
+            params.forEach { (key, value) ->
+                param(key, value)
+            }
         }
     }
 

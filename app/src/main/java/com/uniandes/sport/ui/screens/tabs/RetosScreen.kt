@@ -44,6 +44,7 @@ import com.google.firebase.ktx.Firebase
 @Composable
 fun RetosScreen(
     viewModel: RetosViewModelInterface,
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface,
     onNavigate: (String) -> Unit
 ) {
     val retos by viewModel.retos.collectAsState()
@@ -119,7 +120,14 @@ fun RetosScreen(
                     SportChip(
                         text = sport,
                         selected = selectedSport.equals(sport, ignoreCase = true),
-                        onClick = { viewModel.setSportFilter(sport) }
+                        onClick = { 
+                            viewModel.setSportFilter(sport) 
+                            logViewModel.log(
+                                screen = "RetosScreen",
+                                action = "SPORT_FILTER_APPLIED",
+                                params = mapOf("sport_category" to sport)
+                            )
+                        }
                     )
                 }
             }
@@ -145,6 +153,14 @@ fun RetosScreen(
             onDismiss = { showDialog = false },
             onCreate = { newReto ->
                 viewModel.addReto(newReto)
+                logViewModel.log(
+                    screen = "RetosScreen",
+                    action = "EVENT_REGISTERED",
+                    params = mapOf(
+                        "challenge_type" to newReto.type,
+                        "sport_category" to newReto.sport
+                    )
+                )
                 showDialog = false
             },
             currentUserId = currentUserId

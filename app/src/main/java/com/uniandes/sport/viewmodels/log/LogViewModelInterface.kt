@@ -3,6 +3,6 @@ package com.uniandes.sport.viewmodels.log
 import android.graphics.Bitmap
 
 interface LogViewModelInterface {
-    fun log(screen: String, action: String)
+    fun log(screen: String, action: String, params: Map<String, String> = emptyMap())
     fun crash(screen: String, exception: Exception)
 }
