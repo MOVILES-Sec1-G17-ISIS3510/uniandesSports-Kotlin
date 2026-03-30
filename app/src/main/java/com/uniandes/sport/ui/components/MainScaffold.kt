@@ -223,13 +223,12 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
                     if (screen == Screen.Play) {
                         Box(
                             modifier = Modifier
-                                .offset(y = (-8).dp)
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .size(50.dp)
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(icon, contentDescription = screen.route, tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(icon, contentDescription = screen.route, tint = Color.White, modifier = Modifier.size(28.dp))
                         }
                     } else {
                         Icon(icon, contentDescription = screen.route) 
@@ -240,8 +239,7 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
                         Text(
                             text = screen.route.replaceFirstChar { it.uppercase() }, 
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
-                            modifier = Modifier.offset(y = (-8).dp)
+                            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)
                         )
                     } else {
                         Text(
