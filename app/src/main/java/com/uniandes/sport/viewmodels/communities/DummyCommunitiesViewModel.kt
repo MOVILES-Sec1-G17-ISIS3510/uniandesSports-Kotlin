@@ -37,6 +37,9 @@ class DummyCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
     private val _postComments = MutableStateFlow<List<PostComment>>(emptyList())
     override val postComments: StateFlow<List<PostComment>> = _postComments.asStateFlow()
 
+    private val _myCommunityIds = MutableStateFlow<Set<String>>(emptySet())
+    override val myCommunityIds: StateFlow<Set<String>> = _myCommunityIds.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -50,6 +53,11 @@ class DummyCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
             Community("4", "Running UniAndes", "Community", "Running", "Runners group for all levels.", 67, 2)
         )
         _isLoading.value = false
+    }
+
+    override fun loadUserMemberships(userId: String) {
+        // Dummy implementation
+        _myCommunityIds.value = setOf("1", "3") // Just simulating dummy memberships
     }
 
     override fun loadCommunityDetails(communityId: String) {

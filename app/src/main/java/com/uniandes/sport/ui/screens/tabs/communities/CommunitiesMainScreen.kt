@@ -41,8 +41,9 @@ fun CommunitiesMainScreen(
 ) {
     val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
+    val myCommunityIds by viewModel.myCommunityIds.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf("Todas") }
+    var selectedFilter by remember { mutableStateOf("My Communities") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCommunityId by remember { mutableStateOf<String?>(null) }
     var showCreateCommunityDialog by remember { mutableStateOf(false) }
@@ -57,6 +58,7 @@ fun CommunitiesMainScreen(
             onSuccess = { user ->
                 currentUserId = user.uid
                 currentUserDisplayName = user.fullName.ifBlank { user.email }
+                viewModel.loadUserMemberships(user.uid)
             },
             onFailure = {
                 currentUserId = null
@@ -64,12 +66,11 @@ fun CommunitiesMainScreen(
         )
     }
 
-    val filters = listOf("Todas", "Mis Comunidades", "Otras")
+    val filters = listOf("My Communities", "Other Communities")
     val filteredCommunities = communities.filter { community ->
         val filterMatches = when (selectedFilter) {
-            "Todas" -> true
-            "Mis Comunidades" -> currentUserId != null && community.ownerId == currentUserId
-            "Otras" -> currentUserId == null || community.ownerId != currentUserId
+            "My Communities" -> currentUserId != null && (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
+            "Other Communities" -> currentUserId == null || (community.ownerId != currentUserId && !myCommunityIds.contains(community.id))
             else -> true
         }
         val query = searchQuery.trim().lowercase()
@@ -122,16 +123,15 @@ fun CommunitiesMainScreen(
                 item {
                     Text(
                         text = when (selectedFilter) {
-                            "Todas" -> "EXPLORA COMUNIDADES"
-                            "Mis Comunidades" -> "MIS COMUNIDADES"
-                            else -> "OTRAS COMUNIDADES"
+                            "My Communities" -> "MY COMMUNITIES"
+                            else -> "OTHER COMMUNITIES"
                         },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
                         modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 12.dp)
                     )
                 }
 
-                val listToRender = if (selectedFilter == "Todas" && searchQuery.isBlank()) communities else filteredCommunities
+                val listToRender = filteredCommunities
                 if (listToRender.isEmpty()) {
                     item {
                         Text(

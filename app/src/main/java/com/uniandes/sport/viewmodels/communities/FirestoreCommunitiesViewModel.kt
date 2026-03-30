@@ -50,6 +50,9 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private val _postComments = MutableStateFlow<List<PostComment>>(emptyList())
     override val postComments: StateFlow<List<PostComment>> = _postComments.asStateFlow()
 
+    private val _myCommunityIds = MutableStateFlow<Set<String>>(emptySet())
+    override val myCommunityIds: StateFlow<Set<String>> = _myCommunityIds.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -62,6 +65,25 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
             val cached = cacheDao.getCachedCommunities().map { it.toModel() }
             if (cached.isNotEmpty()) {
                 _communities.value = cached
+            }
+        }
+    }
+
+    override fun loadUserMemberships(userId: String) {
+        viewModelScope.launch {
+            try {
+                val snapshot = db.collectionGroup("members")
+                    .whereEqualTo("userId", userId)
+                    .get()
+                    .await()
+                
+                val ids = snapshot.documents.mapNotNull { doc ->
+                    doc.reference.parent.parent?.id
+                }.toSet()
+                
+                _myCommunityIds.value = ids
+            } catch (e: Exception) {
+                Log.e("FirestoreCommunities", "Error fetching user memberships", e)
             }
         }
     }
