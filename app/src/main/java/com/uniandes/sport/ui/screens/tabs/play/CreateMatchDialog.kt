@@ -38,6 +38,7 @@ fun CreateMatchDialog(
     var skillLevel by remember { mutableStateOf("Open (any level)") }
     var maxParticipants by remember { mutableStateOf("10") }
     var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
     // --- Picker States ---
     val datePickerState = rememberDatePickerState()
@@ -424,17 +425,41 @@ fun CreateMatchDialog(
                     )
                 )
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 
                 Button(
                     onClick = {
-                        isLoading = true
+                        if (dateString.isEmpty() || timeString.isEmpty()) {
+                            errorMessage = "Please set a valid date and time."
+                            return@Button
+                        }
+                        
                         val date = try {
                             val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
                             sdf.parse("$dateString $timeString") ?: Date()
                         } catch (e: Exception) {
                             Date()
                         }
+                        
+                        if (date.before(Date())) {
+                            errorMessage = "The match cannot be scheduled in the past."
+                            return@Button
+                        }
+                        
+                        errorMessage = null
+                        isLoading = true
                         
                         onCreate(
                             title, 
