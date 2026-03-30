@@ -306,6 +306,7 @@ fun FilterPill(text: String, isSelected: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick: (Community) -> Unit) {
+    val isOwner = currentUserId != null && community.ownerId == currentUserId
     Box(
         modifier = Modifier
             .width(240.dp)
@@ -360,13 +361,26 @@ fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick:
             
             Spacer(modifier = Modifier.weight(1f))
             
-            Text(
-                text = if (currentUserId != null && community.ownerId == currentUserId) "${community.name} \uD83D\uDC51" else community.name, 
-                color = Color.White, 
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = community.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isOwner) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = com.uniandes.sport.ui.theme.CrownIcon,
+                            contentDescription = "Owner",
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             Text(
                 text = community.sport, 
                 color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f), 
@@ -413,6 +427,7 @@ private fun Row(background: Color, padding: androidx.compose.ui.unit.Dp, shape: 
 
 @Composable
 fun StandardCommunityCard(community: Community, currentUserId: String?, modifier: Modifier = Modifier, onClick: (Community) -> Unit) {
+    val isOwner = currentUserId != null && community.ownerId == currentUserId
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -444,13 +459,25 @@ fun StandardCommunityCard(community: Community, currentUserId: String?, modifier
                 Spacer(modifier = Modifier.width(16.dp))
                 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (currentUserId != null && community.ownerId == currentUserId) "${community.name} \uD83D\uDC51" else community.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = community.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isOwner) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = com.uniandes.sport.ui.theme.CrownIcon,
+                                contentDescription = "Owner",
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = community.description,

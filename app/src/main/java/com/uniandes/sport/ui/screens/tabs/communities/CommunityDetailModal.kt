@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
@@ -45,6 +48,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -60,14 +64,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Channel
 import com.uniandes.sport.models.ChannelMessage
@@ -187,23 +199,29 @@ fun CommunityDetailModal(
         return
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(community.name, fontWeight = FontWeight.Bold)
-                        Text("Social", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val windowInsets = WindowInsets.systemBars
+        Scaffold(
+            contentWindowInsets = windowInsets,
+            modifier = Modifier.imePadding(),
+            topBar = {
+                androidx.compose.material3.TopAppBar(
+                    title = {
+                        Column {
+                            Text(community.name, fontWeight = FontWeight.Bold)
+                            Text("Social", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Back to communities")
+                        }
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back to communities")
-                    }
-                }
-            )
-        },
+                )
+            },
         bottomBar = {
             if (!userAlreadyMember) {
                 Button(
@@ -255,7 +273,6 @@ fun CommunityDetailModal(
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatBox("Type", community.type, Modifier.weight(1f))
                 StatBox("Sport", community.sport, Modifier.weight(1f))
                 StatBox("Members", community.memberCount.toString(), Modifier.weight(1f))
             }
@@ -274,10 +291,47 @@ fun CommunityDetailModal(
                 0 -> FeedTab(
                     posts = posts,
                     canPost = userAlreadyMember,
-                    onCreatePost = { showAnnouncementDialog = true },
+                    isAdmin = isCurrentUserAdmin,
+                    currentUserDisplayName = currentUserDisplayName.ifBlank { "Usuario" },
+                    communityOwnerId = community.ownerId,
+                    selectedPostForComments = selectedPostForComments,
+                    postComments = postComments,
+                    onPublishPost = { content, pinned ->
+                        viewModel.createAnnouncement(
+                            communityId = community.id,
+                            author = currentUserDisplayName.ifBlank { "Usuario" },
+                            role = if (isCurrentUserAdmin) "Admin" else "Member",
+                            content = content,
+                            pinned = pinned,
+                            onSuccess = { Toast.makeText(context, "Post published", Toast.LENGTH_SHORT).show() },
+                            onFailure = { Toast.makeText(context, "Could not publish post", Toast.LENGTH_SHORT).show() }
+                        )
+                    },
                     onOpenComments = { post ->
                         selectedPostForComments = post
                         viewModel.loadPostComments(community.id, post.id)
+                    },
+                    onCloseComments = { selectedPostForComments = null },
+                    onSendComment = { text ->
+                        if (selectedPostForComments != null) {
+                            val uid = currentUserId
+                            if (uid == null) {
+                                Toast.makeText(context, "Please log in to comment", Toast.LENGTH_SHORT).show()
+                                return@FeedTab
+                            }
+                            viewModel.addPostComment(
+                                communityId = community.id,
+                                postId = selectedPostForComments!!.id,
+                                authorId = uid,
+                                content = text,
+                                authorName = currentUserDisplayName.ifBlank { "Usuario" },
+                                onSuccess = {
+                                    Toast.makeText(context, "Comment sent", Toast.LENGTH_SHORT).show()
+                                    viewModel.loadPostComments(community.id, selectedPostForComments!!.id)
+                                },
+                                onFailure = { Toast.makeText(context, "Could not send comment", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
                     }
                 )
 
@@ -308,28 +362,9 @@ fun CommunityDetailModal(
             }
         }
     }
-
-    if (showAnnouncementDialog) {
-        NewAnnouncementDialog(
-            onDismiss = { showAnnouncementDialog = false },
-            onPublish = { content, pinned ->
-                viewModel.createAnnouncement(
-                    communityId = community.id,
-                    author = currentUserDisplayName.ifBlank { "Usuario" },
-                    role = if (isCurrentUserAdmin) "Admin" else "Member",
-                    content = content,
-                    pinned = pinned,
-                    onSuccess = {
-                        showAnnouncementDialog = false
-                        Toast.makeText(context, "Post published", Toast.LENGTH_SHORT).show()
-                    },
-                    onFailure = {
-                        Toast.makeText(context, "Could not publish post", Toast.LENGTH_SHORT).show()
-                    }
-                )
-            }
-        )
     }
+
+
 
     if (showCreateChannelDialog) {
         CreateChannelDialog(
@@ -350,66 +385,75 @@ fun CommunityDetailModal(
             }
         )
     }
-
-    if (selectedPostForComments != null) {
-        val post = selectedPostForComments!!
-        PostCommentsDialog(
-            post = post,
-            comments = postComments,
-            canComment = userAlreadyMember,
-            onDismiss = { selectedPostForComments = null },
-            onSendComment = { text ->
-                val uid = currentUserId
-                if (uid == null) {
-                    Toast.makeText(context, "Please log in to comment", Toast.LENGTH_SHORT).show()
-                    return@PostCommentsDialog
-                }
-
-                viewModel.addPostComment(
-                    communityId = community.id,
-                    postId = post.id,
-                    authorId = uid,
-                    authorName = currentUserDisplayName.ifBlank { "Usuario" },
-                    content = text,
-                    onFailure = {
-                        Toast.makeText(context, "Could not send comment", Toast.LENGTH_SHORT).show()
-                    }
-                )
-            }
-        )
-    }
 }
 
 @Composable
 private fun FeedTab(
     posts: List<Post>,
     canPost: Boolean,
-    onCreatePost: () -> Unit,
-    onOpenComments: (Post) -> Unit
+    isAdmin: Boolean,
+    currentUserDisplayName: String,
+    communityOwnerId: String,
+    selectedPostForComments: Post?,
+    postComments: List<PostComment>,
+    onPublishPost: (String, Boolean) -> Unit,
+    onOpenComments: (Post) -> Unit,
+    onCloseComments: () -> Unit,
+    onSendComment: (String) -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (canPost) {
-            item {
-                OutlinedButton(
-                    onClick = onCreatePost,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Create Post")
+    var isComposing by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (isComposing && canPost) {
+                item {
+                    InlinePostComposer(
+                        currentUserDisplayName = currentUserDisplayName,
+                        isAdmin = isAdmin,
+                        onPublish = { content, pinned ->
+                            onPublishPost(content, pinned)
+                            isComposing = false
+                        },
+                        onCancel = { isComposing = false }
+                    )
                 }
             }
-        }
 
-        if (posts.isEmpty()) {
-            item {
-                Text("No posts yet", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            if (posts.isEmpty()) {
+                item {
+                    Text("No posts yet", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+
+            items(posts) { post ->
+                val authorIsAdmin = post.role.equals("Admin", ignoreCase = true)
+                val isExpanded = post.id == selectedPostForComments?.id
+                FeedPostItem(
+                    post = post, 
+                    isAdminPost = authorIsAdmin,
+                    isExpanded = isExpanded,
+                    comments = if (isExpanded) postComments else emptyList(),
+                    canComment = canPost,
+                    communityOwnerId = communityOwnerId,
+                    onToggleComments = {
+                        if (isExpanded) onCloseComments() else onOpenComments(post)
+                    },
+                    onSendComment = onSendComment
+                )
             }
         }
 
-        items(posts) { post ->
-            FeedPostItem(post = post, onOpenComments = { onOpenComments(post) })
+        if (canPost && !isComposing) {
+            Button(
+                onClick = { isComposing = true },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Create Post", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -743,11 +787,31 @@ private fun StatBox(label: String, value: String, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun FeedPostItem(post: Post, onOpenComments: () -> Unit) {
+private fun FeedPostItem(
+    post: Post, 
+    isAdminPost: Boolean, 
+    isExpanded: Boolean,
+    comments: List<PostComment>,
+    canComment: Boolean,
+    communityOwnerId: String,
+    onToggleComments: () -> Unit,
+    onSendComment: (String) -> Unit
+) {
     val bgColor = if (post.pinned) MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
+    var input by remember { mutableStateOf("") }
+    
+    val focusRequester = remember { FocusRequester() }
+    var shouldFocus by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isExpanded, shouldFocus) {
+        if (isExpanded && shouldFocus) {
+            focusRequester.requestFocus()
+            shouldFocus = false
+        }
+    }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
         shape = RoundedCornerShape(12.dp),
         color = bgColor,
         tonalElevation = 1.dp
@@ -755,6 +819,10 @@ private fun FeedPostItem(post: Post, onOpenComments: () -> Unit) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(post.author, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (isAdminPost) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+                }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(post.role, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val postTime = formatSmartTimestamp(post.createdAt, post.time)
@@ -767,7 +835,7 @@ private fun FeedPostItem(post: Post, onOpenComments: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 if (post.pinned) {
-                    Icon(Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+                    Icon(androidx.compose.material.icons.Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
@@ -777,115 +845,150 @@ private fun FeedPostItem(post: Post, onOpenComments: () -> Unit) {
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = onOpenComments).padding(vertical = 2.dp)
+                modifier = Modifier.padding(vertical = 2.dp)
             ) {
-                Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Open comments", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(
+                    modifier = Modifier.clickable(onClick = onToggleComments).padding(end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(androidx.compose.material.icons.Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    val commentText = if (isExpanded) "Hide comments" else "View comments"
+                    Text(commentText, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                if (canComment) {
+                    Row(
+                        modifier = Modifier.clickable {
+                            if (!isExpanded) onToggleComments()
+                            shouldFocus = true
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Reply", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (comments.isEmpty()) {
+                        Text("No comments yet", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+                    } else {
+                        comments.forEach { c ->
+                            val isCommentAdmin = c.authorId == communityOwnerId
+                            Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f), shape = RoundedCornerShape(8.dp)) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(c.authorName, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                        if (isCommentAdmin) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(12.dp))
+                                        }
+                                    }
+                                    Text(c.content, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            placeholder = { Text("Write a comment") },
+                            enabled = canComment,
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { 
+                                onSendComment(input.trim())
+                                input = ""
+                            },
+                            enabled = canComment && input.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Send")
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PostCommentsDialog(
-    post: Post,
-    comments: List<PostComment>,
-    canComment: Boolean,
-    onDismiss: () -> Unit,
-    onSendComment: (String) -> Unit
-) {
-    var input by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Comments") },
-        text = {
-            Column {
-                Text(post.content, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().height(180.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (comments.isEmpty()) {
-                        item { Text("No comments yet", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    } else {
-                        items(comments) { c ->
-                            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp)) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                                    Text(c.authorName, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-                                    Text(c.content, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = { Text("Write a comment") },
-                    enabled = canComment,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSendComment(input.trim())
-                    input = ""
-                },
-                enabled = canComment && input.isNotBlank()
-            ) {
-                Text("Send")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
-    )
-}
-
-@Composable
-private fun NewAnnouncementDialog(
-    onDismiss: () -> Unit,
-    onPublish: (content: String, pinned: Boolean) -> Unit
+private fun InlinePostComposer(
+    currentUserDisplayName: String,
+    isAdmin: Boolean,
+    onPublish: (String, Boolean) -> Unit,
+    onCancel: () -> Unit
 ) {
     var content by remember { mutableStateOf("") }
     var pinned by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New post") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("Write your post") },
-                    maxLines = 4
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(currentUserDisplayName, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (isAdmin) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (isAdmin) "Admin" else "Member", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                placeholder = { Text("What's on your mind?") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 5,
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = pinned, onCheckedChange = { pinned = it })
-                    Text("Pin this post", fontSize = 13.sp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                if (isAdmin) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { pinned = !pinned }) {
+                        Checkbox(checked = pinned, onCheckedChange = { pinned = it })
+                        Text("Pin post", fontSize = 12.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onCancel) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = { onPublish(content, pinned) },
+                    enabled = content.isNotBlank()
+                ) {
+                    Text("Post", fontWeight = FontWeight.Bold)
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onPublish(content.trim(), pinned) }, enabled = content.isNotBlank()) {
-                Text("Publish")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @Composable
