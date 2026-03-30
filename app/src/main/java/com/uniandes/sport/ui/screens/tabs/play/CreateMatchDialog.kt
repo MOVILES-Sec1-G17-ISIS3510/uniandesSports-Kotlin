@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,18 +31,161 @@ fun CreateMatchDialog(
     onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var dateString by remember { mutableStateOf("") } // format dd/mm/yyyy
-    var timeString by remember { mutableStateOf("") } // format hh:mm
+    var dateString by remember { mutableStateOf("") }
+    var timeString by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var skillLevel by remember { mutableStateOf("Open (any level)") }
     var maxParticipants by remember { mutableStateOf("10") }
-    
     var isLoading by remember { mutableStateOf(false) }
+    
+    // --- Picker States ---
+    val datePickerState = rememberDatePickerState()
+    var showDatePicker by remember { mutableStateOf(false) }
+    
+    val timePickerState = rememberTimePickerState(
+        initialHour = 12,
+        initialMinute = 0,
+        is24Hour = false
+    )
+    var showTimePicker by remember { mutableStateOf(false) }
+    
+    var isSkillLevelExpanded by remember { mutableStateOf(false) }
+    val skillLevels = listOf("Open (any level)", "Beginner", "Amateur", "Advanced", "Professional")
+    
+    var showExitConfirmation by remember { mutableStateOf(false) }
+    
+    val hasUnsavedData = title.isNotEmpty() || location.isNotEmpty() || description.isNotEmpty()
+    
+    fun handleDismiss() {
+        if (hasUnsavedData) {
+            showExitConfirmation = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    // --- Date Picker Dialog ---
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val cal = Calendar.getInstance().apply { 
+                            timeZone = TimeZone.getTimeZone("UTC")
+                            timeInMillis = millis 
+                        }
+                        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                        }
+                        dateString = sdf.format(cal.time)
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                headlineContentColor = MaterialTheme.colorScheme.onSurface,
+                weekdayContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                subheadContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                dayContentColor = MaterialTheme.colorScheme.onSurface,
+                selectedDayContainerColor = MaterialTheme.colorScheme.primary,
+                selectedDayContentColor = MaterialTheme.colorScheme.onPrimary,
+                todayContentColor = MaterialTheme.colorScheme.primary,
+                todayDateBorderColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // --- Time Picker Dialog ---
+    if (showTimePicker) {
+        Dialog(onDismissRequest = { showTimePicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier.width(IntrinsicSize.Min)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "SET TIME",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Start).padding(bottom = 20.dp)
+                    )
+                    TimePicker(
+                        state = timePickerState,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = MaterialTheme.colorScheme.surfaceVariant,
+                            clockDialSelectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                            clockDialUnselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            selectorColor = MaterialTheme.colorScheme.primary,
+                            periodSelectorBorderColor = MaterialTheme.colorScheme.outline,
+                            periodSelectorSelectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            periodSelectorUnselectedContainerColor = MaterialTheme.colorScheme.surface,
+                            periodSelectorSelectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            periodSelectorUnselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            timeSelectorSelectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            timeSelectorUnselectedContainerColor = MaterialTheme.colorScheme.surface,
+                            timeSelectorSelectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            timeSelectorUnselectedContentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                        TextButton(onClick = {
+                            val hour = String.format("%02d", timePickerState.hour)
+                            val minute = String.format("%02d", timePickerState.minute)
+                            timeString = "$hour:$minute"
+                            showTimePicker = false
+                        }) { Text("OK") }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Exit Confirmation Dialog ---
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Discard Match?") },
+            text = { Text("You have unsaved changes. Are you sure you want to discard this match?") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    showExitConfirmation = false
+                    onDismiss() 
+                }) { Text("Discard", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirmation = false }) { Text("Keep Editing") }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 
     Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        onDismissRequest = { /* Controlled by explicit button */ },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
     ) {
         Surface(
             modifier = Modifier
@@ -64,9 +208,9 @@ fun CreateMatchDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onDismiss() }
+                        modifier = Modifier.clickable { handleDismiss() }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Back", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
                     }
@@ -76,7 +220,7 @@ fun CreateMatchDialog(
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onDismiss() },
+                            .clickable { handleDismiss() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -112,37 +256,45 @@ fun CreateMatchDialog(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
                         FormLabel("Date")
-                        OutlinedTextField(
-                            value = dateString,
-                            onValueChange = { dateString = it },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            placeholder = { Text("dd/mm/aaaa", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                            trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }) {
+                            OutlinedTextField(
+                                value = dateString,
+                                onValueChange = { },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                readOnly = true,
+                                enabled = false,
+                                placeholder = { Text("dd/mm/aaaa", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
                             )
-                        )
+                        }
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         FormLabel("Time")
-                        OutlinedTextField(
-                            value = timeString,
-                            onValueChange = { timeString = it },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            placeholder = { Text("--:-- -----", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                            trailingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showTimePicker = true }) {
+                            OutlinedTextField(
+                                value = timeString,
+                                onValueChange = { },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                readOnly = true,
+                                enabled = false,
+                                placeholder = { Text("--:--", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                trailingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
                             )
-                        )
+                        }
                     }
                 }
                 
@@ -166,40 +318,92 @@ fun CreateMatchDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+                    Column(modifier = Modifier.weight(1.8f)) {
                         FormLabel("Skill Level")
-                        OutlinedTextField(
-                            value = skillLevel,
-                            onValueChange = { },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            readOnly = true,
-                            trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        ExposedDropdownMenuBox(
+                            expanded = isSkillLevelExpanded,
+                            onExpandedChange = { isSkillLevelExpanded = !isSkillLevelExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = skillLevel,
+                                onValueChange = { },
+                                modifier = Modifier.fillMaxWidth().height(56.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                                readOnly = true,
+                                trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface
+                                )
                             )
-                        )
+                            ExposedDropdownMenu(
+                                expanded = isSkillLevelExpanded,
+                                onDismissRequest = { isSkillLevelExpanded = false },
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surface).width(IntrinsicSize.Max)
+                            ) {
+                                skillLevels.forEach { level ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(
+                                                text = level,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) 
+                                        },
+                                        onClick = {
+                                            skillLevel = level
+                                            isSkillLevelExpanded = false
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.weight(1.2f)) {
                         FormLabel("Max Players")
-                        OutlinedTextField(
-                            value = maxParticipants,
-                            onValueChange = { if (it.all { char -> char.isDigit() }) maxParticipants = it },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            placeholder = { Text("10", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                            trailingIcon = { Icon(Icons.Default.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                        Surface(
                             shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(
+                                    onClick = { 
+                                        val current = maxParticipants.toIntOrNull() ?: 10
+                                        if (current > 1) maxParticipants = (current - 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                                
+                                Text(
+                                    text = maxParticipants,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                
+                                IconButton(
+                                    onClick = { 
+                                        val current = maxParticipants.toIntOrNull() ?: 10
+                                        if (current < 99) maxParticipants = (current + 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -225,12 +429,11 @@ fun CreateMatchDialog(
                 Button(
                     onClick = {
                         isLoading = true
-                        // Basic format parse attempt for safety
                         val date = try {
                             val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
                             sdf.parse("$dateString $timeString") ?: Date()
                         } catch (e: Exception) {
-                            Date() // Fallback to current date
+                            Date()
                         }
                         
                         onCreate(title, location, description, date, skillLevel, maxParticipants.toLongOrNull() ?: 10L)
