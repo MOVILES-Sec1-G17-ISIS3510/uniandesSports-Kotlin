@@ -69,11 +69,16 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     }
 
     override fun fetchMembers(eventId: String) {
+        Log.d("PlayVM", "Fetching members for event: $eventId")
         db.collection("events").document(eventId).collection("members")
             .orderBy("joinedAt")
             .addSnapshotListener { snapshot, e ->
-                if (e != null) return@addSnapshotListener
+                if (e != null) {
+                    Log.e("PlayVM", "Error listening to members: ${e.message}")
+                    return@addSnapshotListener
+                }
                 val membersList = snapshot?.toObjects(com.uniandes.sport.models.MatchMember::class.java) ?: emptyList()
+                Log.d("PlayVM", "Fetched ${membersList.size} members for $eventId")
                 _members.value = membersList
             }
     }
@@ -89,7 +94,14 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
             val max = snapshot.getLong("maxParticipants") ?: 0L
             
-            if (participants.size < max && !participants.contains(userId)) {
+            Log.d("PlayVM", "Transaction start for $eventId. Current participants: ${participants.size}/$max")
+
+            if (participants.contains(userId)) {
+                Log.d("PlayVM", "User $userId already joined. returning success.")
+                return@runTransaction
+            }
+
+            if (participants.size < max) {
                 participants.add(userId)
                 transaction.update(docRef, "participants", participants)
                 
@@ -100,16 +112,18 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                     role = "member"
                 )
                 transaction.set(memberRef, newMember)
+                Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'")
             } else {
-                throw Exception("Cannot join: Either match is full or you are already a participant")
+                Log.w("PlayVM", "Transaction: Match is full ($max)")
+                throw Exception("Match is full")
             }
         }.addOnSuccessListener {
-            Log.d("PlayVM", "User $userId joined event $eventId")
+            Log.d("PlayVM", "User $userId successfully JOINED event $eventId")
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
         }.addOnFailureListener { e ->
-            Log.e("PlayVM", "Failed to join event: ${e.message}")
+            Log.e("PlayVM", "Transaction FAILED for joinEvent: ${e.message}")
             onError(e as? Exception ?: Exception(e.message))
         }
     }
@@ -144,19 +158,28 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         
         db.collection("events").add(event)
             .addOnSuccessListener { doc ->
+                Log.d("PlayVM", "Event created with ID: ${doc.id}. Adding organizer to subcollection...")
                 val member = com.uniandes.sport.models.MatchMember(
                     userId = uid,
                     displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
                     joinedAt = System.currentTimeMillis(),
                     role = "organizer"
                 )
-                doc.collection("members").document(uid).set(member)
-                
-                com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
-                com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
-                onSuccess() 
+                doc.collection("members").document(uid).set(member).addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.d("PlayVM", "Organizer successfully added to 'members' subcollection of ${doc.id}")
+                    } else {
+                        Log.e("PlayVM", "FAILED to add organizer to subcollection: ${task.exception?.message}")
+                    }
+                    com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+                    com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+                    onSuccess() 
+                }
             }
-            .addOnFailureListener { onError(it) }
+            .addOnFailureListener { 
+                Log.e("PlayVM", "FAILED to create event: ${it.message}")
+                onError(it) 
+            }
     }
 
     override fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
