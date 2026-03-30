@@ -42,7 +42,7 @@ fun CommunitiesMainScreen(
     val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember { mutableStateOf("Todas") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCommunityId by remember { mutableStateOf<String?>(null) }
     var showCreateCommunityDialog by remember { mutableStateOf(false) }
@@ -64,9 +64,14 @@ fun CommunitiesMainScreen(
         )
     }
 
-    val filters = listOf("All", "Community", "Clan")
+    val filters = listOf("Todas", "Mis Comunidades", "Otras")
     val filteredCommunities = communities.filter { community ->
-        val filterMatches = selectedFilter == "All" || community.type == selectedFilter
+        val filterMatches = when (selectedFilter) {
+            "Todas" -> true
+            "Mis Comunidades" -> currentUserId != null && community.ownerId == currentUserId
+            "Otras" -> currentUserId == null || community.ownerId != currentUserId
+            else -> true
+        }
         val query = searchQuery.trim().lowercase()
         val queryMatches = query.isBlank() ||
             community.name.lowercase().contains(query) ||
@@ -74,8 +79,6 @@ fun CommunitiesMainScreen(
             community.description.lowercase().contains(query)
         filterMatches && queryMatches
     }
-    val trending = communities.take(2)
-    val others = if (selectedFilter == "All") communities.drop(2) else filteredCommunities
 
     BackHandler(enabled = selectedCommunityId != null) {
         selectedCommunityId = null
@@ -107,7 +110,7 @@ fun CommunitiesMainScreen(
                     ) {
                         items(filters) { filter ->
                             FilterPill(
-                                text = if (filter == "All") "All" else if (filter == "Clan") "Clans" else "Communities",
+                                text = filter,
                                 isSelected = selectedFilter == filter,
                                 onClick = { selectedFilter = filter }
                             )
@@ -115,53 +118,20 @@ fun CommunitiesMainScreen(
                     }
                 }
 
-                // Trending Now
-                if (selectedFilter == "All" && trending.isNotEmpty()) {
-                    item {
-                        Column(modifier = Modifier.padding(top = 16.dp)) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocalFireDepartment, 
-                                    contentDescription = "Trending",
-                                    tint = Color(0xFFF97316),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "TRENDING NOW", 
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(trending) { community ->
-                                    TrendingCommunityCard(community, currentUserId) {
-                                        selectedCommunityId = it.id
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Standard List
                 item {
                     Text(
-                        text = if (selectedFilter == "All") "DISCOVER MORE" else "FILTERED ${if (selectedFilter == "Clan") "CLANS" else "COMMUNITIES"}",
+                        text = when (selectedFilter) {
+                            "Todas" -> "EXPLORA COMUNIDADES"
+                            "Mis Comunidades" -> "MIS COMUNIDADES"
+                            else -> "OTRAS COMUNIDADES"
+                        },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
                         modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 12.dp)
                     )
                 }
 
-                val listToRender = if (selectedFilter == "All" && searchQuery.isBlank()) others else filteredCommunities
+                val listToRender = if (selectedFilter == "Todas" && searchQuery.isBlank()) communities else filteredCommunities
                 if (listToRender.isEmpty()) {
                     item {
                         Text(
