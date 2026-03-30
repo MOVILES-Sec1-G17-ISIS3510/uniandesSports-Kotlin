@@ -30,10 +30,15 @@ fun MatchDetailModal(
 ) {
     val event = uiModel.rawEvent
     val currentUserId = viewModel.currentUserId
-    val isAlreadyJoined = currentUserId != null && event.participants.contains(currentUserId)
-    val isFull = uiModel.isFull
+    val members by viewModel.members.collectAsState()
+    val isAlreadyJoined = currentUserId != null && members.any { it.userId == currentUserId }
+    val isFull = members.size >= event.maxParticipants
     
     var isLoading by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(event.id) {
+        viewModel.fetchMembers(event.id)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -110,7 +115,7 @@ fun MatchDetailModal(
                 Spacer(modifier = Modifier.height(16.dp))
                 DetailRow(Icons.Default.LocationOn, "Where", event.location)
                 Spacer(modifier = Modifier.height(16.dp))
-                DetailRow(Icons.Default.Groups, "Participants", "${event.participants.size} / ${event.maxParticipants}")
+                DetailRow(Icons.Default.Groups, "Participants", "${members.size} / ${event.maxParticipants}")
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
@@ -132,26 +137,50 @@ fun MatchDetailModal(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Creator Info
-                Text("ORGANIZED BY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(32.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "UID: ${event.createdBy.take(8)}...",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        val semester = event.metadata["creatorSemester"]?.toString()
-                        if (semester != null) {
-                            Text(text = "Semester: $semester", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Members List
+                Text("MEMBERS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    members.forEach { member ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Surface(shape = CircleShape, color = if (member.role == "organizer") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(32.dp)) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(if (member.role == "organizer") Icons.Default.Stars else Icons.Default.Person, contentDescription = null, tint = if (member.role == "organizer") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (member.userId == currentUserId) "You" else member.displayName.take(15) + (if (member.displayName.length > 15) "..." else ""),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (member.role == "organizer") {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text("Admin", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Kick button for organizers
+                            if (currentUserId == event.createdBy && member.userId != currentUserId) {
+                                IconButton(onClick = {
+                                    viewModel.kickMember(event.id, member.userId)
+                                }) {
+                                    Icon(Icons.Default.PersonRemove, contentDescription = "Kick", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                }
+                            }
                         }
                     }
                 }

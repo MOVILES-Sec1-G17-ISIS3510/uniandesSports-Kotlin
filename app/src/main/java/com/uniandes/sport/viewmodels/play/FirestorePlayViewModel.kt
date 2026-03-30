@@ -20,6 +20,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     override val events: StateFlow<List<Event>> = _events.asStateFlow()
 
+    private val _members = MutableStateFlow<List<com.uniandes.sport.models.MatchMember>>(emptyList())
+    override val members: StateFlow<List<com.uniandes.sport.models.MatchMember>> = _members.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -65,8 +68,22 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         _events.value = currentFilterStrategy.filter(_rawEvents.value)
     }
 
+    override fun fetchMembers(eventId: String) {
+        db.collection("events").document(eventId).collection("members")
+            .orderBy("joinedAt")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                val membersList = snapshot?.toObjects(com.uniandes.sport.models.MatchMember::class.java) ?: emptyList()
+                _members.value = membersList
+            }
+    }
+
     override fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val docRef = db.collection("events").document(eventId)
+        val memberRef = docRef.collection("members").document(userId)
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        val displayName = currentUser?.email ?: "User ${userId.take(5)}"
+
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
@@ -75,6 +92,14 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             if (participants.size < max && !participants.contains(userId)) {
                 participants.add(userId)
                 transaction.update(docRef, "participants", participants)
+                
+                val newMember = com.uniandes.sport.models.MatchMember(
+                    userId = userId,
+                    displayName = displayName,
+                    joinedAt = System.currentTimeMillis(),
+                    role = "member"
+                )
+                transaction.set(memberRef, newMember)
             } else {
                 throw Exception("Cannot join: Either match is full or you are already a participant")
             }
@@ -113,14 +138,44 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             maxParticipants = maxParticipants,
             scheduledAt = scheduledAt,
             metadata = mapOf("skillLevel" to skillLevel)
-        )
+        ).apply {
+            participants = listOf(uid)
+        }
         
         db.collection("events").add(event)
-            .addOnSuccessListener { 
+            .addOnSuccessListener { doc ->
+                val member = com.uniandes.sport.models.MatchMember(
+                    userId = uid,
+                    displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
+                    joinedAt = System.currentTimeMillis(),
+                    role = "organizer"
+                )
+                doc.collection("members").document(uid).set(member)
+                
                 com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
                 com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
                 onSuccess() 
             }
             .addOnFailureListener { onError(it) }
+    }
+
+    override fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        val docRef = db.collection("events").document(eventId)
+        val memberRef = docRef.collection("members").document(userId)
+
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(docRef)
+            val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
+            
+            if (participants.contains(userId)) {
+                participants.remove(userId)
+                transaction.update(docRef, "participants", participants)
+                transaction.delete(memberRef)
+            }
+        }.addOnSuccessListener {
+            com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+            com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+            onSuccess()
+        }.addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
     }
 }
