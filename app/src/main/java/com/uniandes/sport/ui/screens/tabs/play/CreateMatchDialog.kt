@@ -27,7 +27,7 @@ fun CreateMatchDialog(
     sport: String,
     modality: String,
     onDismiss: () -> Unit,
-    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String) -> Unit
+    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var dateString by remember { mutableStateOf("") } // format dd/mm/yyyy
@@ -35,6 +35,7 @@ fun CreateMatchDialog(
     var location by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var skillLevel by remember { mutableStateOf("Open (any level)") }
+    var maxParticipants by remember { mutableStateOf("10") }
     
     var isLoading by remember { mutableStateOf(false) }
 
@@ -165,21 +166,42 @@ fun CreateMatchDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                FormLabel("Skill Level")
-                OutlinedTextField(
-                    value = skillLevel,
-                    onValueChange = { },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    readOnly = true,
-                    trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        FormLabel("Skill Level")
+                        OutlinedTextField(
+                            value = skillLevel,
+                            onValueChange = { },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            readOnly = true,
+                            trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        FormLabel("Max Players")
+                        OutlinedTextField(
+                            value = maxParticipants,
+                            onValueChange = { if (it.all { char -> char.isDigit() }) maxParticipants = it },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            placeholder = { Text("10", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                            trailingIcon = { Icon(Icons.Default.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -211,7 +233,7 @@ fun CreateMatchDialog(
                             Date() // Fallback to current date
                         }
                         
-                        onCreate(title, location, description, date, skillLevel)
+                        onCreate(title, location, description, date, skillLevel, maxParticipants.toLongOrNull() ?: 10L)
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),

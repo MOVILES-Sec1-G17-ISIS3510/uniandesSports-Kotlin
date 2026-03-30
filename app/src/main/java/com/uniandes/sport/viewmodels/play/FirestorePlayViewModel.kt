@@ -26,6 +26,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _selectedSport = MutableStateFlow<String?>(null)
     override val selectedSport: StateFlow<String?> = _selectedSport.asStateFlow()
 
+    override val currentUserId: String?
+        get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
     private var currentFilterStrategy: EventFilterStrategy = AllActiveEventsStrategy()
 
     init {
@@ -62,7 +65,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         _events.value = currentFilterStrategy.filter(_rawEvents.value)
     }
 
-    override fun joinEvent(eventId: String, userId: String) {
+    override fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val docRef = db.collection("events").document(eventId)
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
@@ -72,11 +75,17 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             if (participants.size < max && !participants.contains(userId)) {
                 participants.add(userId)
                 transaction.update(docRef, "participants", participants)
+            } else {
+                throw Exception("Cannot join: Either match is full or you are already a participant")
             }
         }.addOnSuccessListener {
             Log.d("PlayVM", "User $userId joined event $eventId")
+            com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+            com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+            onSuccess()
         }.addOnFailureListener { e ->
             Log.e("PlayVM", "Failed to join event: ${e.message}")
+            onError(e as? Exception ?: Exception(e.message))
         }
     }
 
@@ -88,6 +97,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         modality: String,
         scheduledAt: java.util.Date,
         skillLevel: String,
+        maxParticipants: Long,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
@@ -100,7 +110,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             createdBy = uid,
             sport = sport,
             modality = modality,
-            maxParticipants = 10L, // Default for now
+            maxParticipants = maxParticipants,
             scheduledAt = scheduledAt,
             metadata = mapOf("skillLevel" to skillLevel)
         )

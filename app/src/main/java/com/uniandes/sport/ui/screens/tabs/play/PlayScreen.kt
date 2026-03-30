@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.patterns.event.EventUIAdapter
+import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
 @Composable
@@ -36,21 +37,38 @@ fun PlayScreen(
     
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+
+    if (selectedEventUIModel != null) {
+        MatchDetailModal(
+            uiModel = selectedEventUIModel!!,
+            viewModel = viewModel,
+            onDismiss = { selectedEventUIModel = null }
+        )
+    }
 
     if (showCreateDialog && selectedSport != null && selectedMode != null) {
         CreateMatchDialog(
             sport = selectedSport!!,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel ->
-                viewModel.createEvent(title, description, location, selectedSport!!, selectedMode!!, date, skillLevel,
+            onCreate = { title, location, description, date, skillLevel, maxParticipants ->
+                viewModel.createEvent(
+                    title = title,
+                    description = description,
+                    location = location,
+                    sport = selectedSport!!,
+                    modality = selectedMode!!,
+                    scheduledAt = date,
+                    skillLevel = skillLevel,
+                    maxParticipants = maxParticipants,
                     onSuccess = { 
                         // Analytics Engine: BQ4 (Registration / Funnel Conversion tracking)
                         logViewModel.log(
                             screen = "PlayScreen",
                             action = "EVENT_REGISTERED",
                             params = mapOf(
-                                "source" to "organic", // Or dynamic if pushed from Notification
+                                "source" to "organic",
                                 "challenge_type" to selectedMode!!,
                                 "sport_category" to selectedSport!!
                             )
@@ -163,7 +181,7 @@ fun PlayScreen(
                 } else if (events.isEmpty()) {
                     item {
                         Text(
-                            "No matches found. Create one!",
+                            "Not recent matches found. Create one!",
                             modifier = Modifier.padding(16.dp),
                             color = Color.Gray
                         )
@@ -184,7 +202,7 @@ fun PlayScreen(
                                         "max_capacity" to event.maxParticipants.toString()
                                     )
                                 )
-                                // TODO: Join / details navigation
+                                selectedEventUIModel = uiModel
                             }
                         )
                     }
