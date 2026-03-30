@@ -43,7 +43,7 @@ fun CommunitiesMainScreen(
     val communities by viewModel.communities.collectAsState()
     val myCommunityIds by viewModel.myCommunityIds.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf("My Communities") }
+    var selectedFilter by remember { mutableStateOf("Mine") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCommunityId by remember { mutableStateOf<String?>(null) }
     var showCreateCommunityDialog by remember { mutableStateOf(false) }
@@ -66,11 +66,11 @@ fun CommunitiesMainScreen(
         )
     }
 
-    val filters = listOf("My Communities", "Other Communities")
+    val filters = listOf("Mine", "Others")
     val filteredCommunities = communities.filter { community ->
         val filterMatches = when (selectedFilter) {
-            "My Communities" -> currentUserId != null && (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
-            "Other Communities" -> currentUserId == null || (community.ownerId != currentUserId && !myCommunityIds.contains(community.id))
+            "Mine" -> currentUserId != null && (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
+            "Others" -> currentUserId == null || (community.ownerId != currentUserId && !myCommunityIds.contains(community.id))
             else -> true
         }
         val query = searchQuery.trim().lowercase()
@@ -123,7 +123,7 @@ fun CommunitiesMainScreen(
                 item {
                     Text(
                         text = when (selectedFilter) {
-                            "My Communities" -> "MY COMMUNITIES"
+                            "Mine" -> "MY COMMUNITIES"
                             else -> "OTHER COMMUNITIES"
                         },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
@@ -209,35 +209,75 @@ fun CommunitiesMainScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateCommunityDialog(
     onDismiss: () -> Unit,
     onCreate: (name: String, type: String, sport: String, description: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("Community") }
+    val type = "Community"
     var sport by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var customSport by remember { mutableStateOf("") }
+    
+    var expanded by remember { mutableStateOf(false) }
+    val sportsList = listOf("Soccer", "Basketball", "Tennis", "Volleyball", "Running", "Cycling", "Swimming", "Other")
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create community") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
-                OutlinedTextField(value = sport, onValueChange = { sport = it }, label = { Text("Sport") }, singleLine = true)
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, maxLines = 3)
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterPill(text = "Community", isSelected = type == "Community") { type = "Community" }
-                    FilterPill(text = "Clan", isSelected = type == "Clan") { type = "Clan" }
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = sport,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sport") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        sportsList.forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption) },
+                                onClick = {
+                                    sport = selectionOption
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
                 }
+                
+                if (sport == "Other") {
+                    OutlinedTextField(
+                        value = customSport,
+                        onValueChange = { customSport = it },
+                        label = { Text("Specify sport") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
+            val finalSport = if (sport == "Other") customSport else sport
             TextButton(
-                onClick = { onCreate(name, type, sport, description) },
-                enabled = name.isNotBlank() && sport.isNotBlank() && description.isNotBlank()
+                onClick = { onCreate(name, type, finalSport, description) },
+                enabled = name.isNotBlank() && finalSport.isNotBlank() && description.isNotBlank()
             ) {
                 Text("Create")
             }
