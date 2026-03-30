@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -150,6 +152,10 @@ fun CommunityDetailModal(
 
     if (selectedChannel != null) {
         val channel = selectedChannel!!
+        Dialog(
+            onDismissRequest = { selectedChannel = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
         ChannelRoomScreen(
             community = community,
             channel = channel,
@@ -196,8 +202,10 @@ fun CommunityDetailModal(
             hasMoreOldMessages = hasMoreOldChannelMessages,
             isLoadingOlderMessages = isLoadingOlderChannelMessages
         )
+        }
         return
     }
+
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -466,53 +474,57 @@ private fun ChannelsTab(
     onCreateChannel: () -> Unit,
     onOpenChannel: (Channel) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        if (isAdmin) {
-            item {
-                OutlinedButton(
-                    onClick = onCreateChannel,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Create Channel")
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
+        ) {
+            if (!isMember) {
+                item {
+                    Text("Join this community to access channels", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else if (channels.isEmpty()) {
+                item {
+                    Text("No channels available", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                items(channels) { channel ->
+                    androidx.compose.material3.Card(
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth().clickable { onOpenChannel(channel) }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (channel.type == "privado") androidx.compose.material.icons.Icons.Default.Lock else androidx.compose.material.icons.Icons.Default.Tag,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("#${channel.name}", fontWeight = FontWeight.SemiBold)
+                            }
+                            Text("${channel.mensajes} msgs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
         }
 
-        if (!isMember) {
-            item {
-                Text("Join this community to access channels", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else if (channels.isEmpty()) {
-            item {
-                Text("No channels available", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            items(channels) { channel ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenChannel(channel) }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (channel.type == "privado") Icons.Default.Lock else Icons.Default.Tag,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("#${channel.name}", fontWeight = FontWeight.SemiBold)
-                        }
-                        Text("${channel.mensajes} msgs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+        if (isAdmin) {
+            androidx.compose.material3.Button(
+                onClick = onCreateChannel,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Create Channel", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -577,7 +589,8 @@ private fun ChannelRoomScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.imePadding(),
+        contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
                 title = {
@@ -594,31 +607,50 @@ private fun ChannelRoomScreen(
             )
         },
         bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                tonalElevation = 3.dp,
+                shadowElevation = 8.dp
             ) {
-                OutlinedTextField(
-                    value = messageInput,
-                    onValueChange = { messageInput = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Write a message") },
-                    singleLine = true,
-                    enabled = currentUserId != null
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (messageInput.isNotBlank()) {
-                            onSend(messageInput.trim())
-                            messageInput = ""
-                        }
-                    },
-                    enabled = currentUserId != null && messageInput.isNotBlank()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .navigationBarsPadding(),
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send")
+                    OutlinedTextField(
+                        value = messageInput,
+                        onValueChange = { messageInput = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Write a message...") },
+                        maxLines = 5,
+                        enabled = currentUserId != null,
+                        shape = RoundedCornerShape(28.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        ),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (messageInput.isNotBlank()) {
+                                        onSend(messageInput.trim())
+                                        messageInput = ""
+                                    }
+                                },
+                                enabled = currentUserId != null && messageInput.isNotBlank()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Send,
+                                    contentDescription = "Send",
+                                    tint = if (messageInput.isNotBlank()) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -895,32 +927,39 @@ private fun FeedPostItem(
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        OutlinedTextField(
-                            value = input,
-                            onValueChange = { input = it },
-                            placeholder = { Text("Write a comment") },
-                            enabled = canComment,
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedContainerColor = MaterialTheme.colorScheme.surface
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = { 
-                                onSendComment(input.trim())
-                                input = ""
-                            },
-                            enabled = canComment && input.isNotBlank(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Send")
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        placeholder = { Text("Write a comment...") },
+                        enabled = canComment,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).padding(top = 6.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        ),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (input.isNotBlank()) {
+                                        onSendComment(input.trim())
+                                        input = ""
+                                    }
+                                },
+                                enabled = canComment && input.isNotBlank()
+                            ) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.Send,
+                                    contentDescription = "Send",
+                                    tint = if (input.isNotBlank()) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                )
+                            }
                         }
-                    }
+                    )
                 }
             }
         }
@@ -960,13 +999,28 @@ private fun InlinePostComposer(
                 placeholder = { Text("What's on your mind?") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
-                maxLines = 5,
+                maxLines = 6,
+                shape = RoundedCornerShape(20.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface
-                )
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                ),
+                trailingIcon = {
+                    if (content.isNotBlank()) {
+                        IconButton(
+                            onClick = { onPublish(content, pinned) },
+                            enabled = content.isNotBlank()
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Send,
+                                contentDescription = "Publish post",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -979,12 +1033,6 @@ private fun InlinePostComposer(
                 Spacer(modifier = Modifier.weight(1f))
                 TextButton(onClick = onCancel) {
                     Text("Cancel")
-                }
-                Button(
-                    onClick = { onPublish(content, pinned) },
-                    enabled = content.isNotBlank()
-                ) {
-                    Text("Post", fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -98,9 +98,15 @@ fun CommunitiesMainScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
-                        placeholder = { Text("Search communities, sports, or keywords") },
+                        placeholder = { Text("Search communities") },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(28.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
                     )
                 }
 
@@ -159,6 +165,7 @@ fun CommunitiesMainScreen(
             },
             containerColor = MaterialTheme.colorScheme.tertiary,
             contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp)
@@ -224,13 +231,26 @@ fun CreateCommunityDialog(
     var expanded by remember { mutableStateOf(false) }
     val sportsList = listOf("Soccer", "Basketball", "Tennis", "Volleyball", "Running", "Cycling", "Swimming", "Other")
 
+    val pillColors = @Composable { OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+        focusedBorderColor = MaterialTheme.colorScheme.primary
+    ) }
+    val pillShape = RoundedCornerShape(28.dp)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create community") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Name") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = pillShape, colors = pillColors()
+                )
+
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
@@ -241,7 +261,8 @@ fun CreateCommunityDialog(
                         readOnly = true,
                         label = { Text("Sport") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        colors = pillColors(),
+                        shape = pillShape,
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
                     ExposedDropdownMenu(
@@ -259,18 +280,24 @@ fun CreateCommunityDialog(
                         }
                     }
                 }
-                
+
                 if (sport == "Other") {
                     OutlinedTextField(
                         value = customSport,
                         onValueChange = { customSport = it },
                         label = { Text("Specify sport") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = pillShape, colors = pillColors()
                     )
                 }
-                
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
+
+                OutlinedTextField(
+                    value = description, onValueChange = { description = it },
+                    label = { Text("Description") }, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = pillShape, colors = pillColors()
+                )
             }
         },
         confirmButton = {
