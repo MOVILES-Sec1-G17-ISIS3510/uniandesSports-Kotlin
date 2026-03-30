@@ -197,6 +197,27 @@ fun TopAppBarDynamic(
 
 @Composable
 fun BottomNavigationBar(navController: NavHostController, currentRoute: String?, onTabClick: (Int) -> Unit = {}) {
+    var playIconIndex by remember { mutableIntStateOf(0) }
+    val playIconsList = remember { 
+        listOf(
+            Icons.Default.DirectionsRun,
+            Icons.Default.SportsSoccer,
+            Icons.Default.SportsBasketball,
+            Icons.Default.Handshake,
+            Icons.Default.SportsTennis,
+            Icons.Default.TrackChanges,
+            Icons.Default.FitnessCenter,
+            Icons.Default.SportsEsports
+        ) 
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(12000L)
+            playIconIndex = (playIconIndex + 1) % playIconsList.size
+        }
+    }
+
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -204,7 +225,7 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
         val items = listOf(
             Screen.Home to Icons.Default.Home,
             Screen.Retos to Icons.Default.EmojiEvents,
-            Screen.Play to Icons.Default.PlayCircle,
+            Screen.Play to playIconsList[playIconIndex],
             Screen.Comunidades to Icons.Default.Group,
             Screen.Profesores to Icons.Default.School
         )
@@ -228,7 +249,13 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
                                 .background(if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(icon, contentDescription = screen.route, tint = Color.White, modifier = Modifier.size(28.dp))
+                            androidx.compose.animation.Crossfade(
+                                targetState = icon,
+                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 600),
+                                label = "PlayIconFade"
+                            ) { currentIcon ->
+                                Icon(currentIcon, contentDescription = screen.route, tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
                         }
                     } else {
                         Icon(icon, contentDescription = screen.route) 
