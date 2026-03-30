@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [CachedCommunityEntity::class, CachedChannelMessageEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class CommunitiesCacheDatabase : RoomDatabase() {
@@ -23,7 +23,7 @@ abstract class CommunitiesCacheDatabase : RoomDatabase() {
                     context.applicationContext,
                     CommunitiesCacheDatabase::class.java,
                     "communities_cache.db"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }

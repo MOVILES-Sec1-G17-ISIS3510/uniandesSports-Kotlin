@@ -15,6 +15,7 @@ data class CachedCommunityEntity(
     val description: String,
     val memberCount: Int,
     val channelCount: Int,
+    val ownerId: String,
     val cachedAt: Long
 )
 
@@ -27,6 +28,7 @@ fun Community.toEntity(now: Long = System.currentTimeMillis()): CachedCommunityE
         description = description,
         memberCount = memberCount,
         channelCount = channelCount,
+        ownerId = ownerId,
         cachedAt = now
     )
 }
@@ -39,7 +41,8 @@ fun CachedCommunityEntity.toModel(): Community {
         sport = sport,
         description = description,
         memberCount = memberCount,
-        channelCount = channelCount
+        channelCount = channelCount,
+        ownerId = ownerId
     )
 }
 

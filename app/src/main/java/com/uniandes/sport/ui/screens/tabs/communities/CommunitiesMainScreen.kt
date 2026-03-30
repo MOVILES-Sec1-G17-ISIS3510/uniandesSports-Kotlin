@@ -143,7 +143,7 @@ fun CommunitiesMainScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 items(trending) { community ->
-                                    TrendingCommunityCard(community) {
+                                    TrendingCommunityCard(community, currentUserId) {
                                         selectedCommunityId = it.id
                                     }
                                 }
@@ -173,7 +173,7 @@ fun CommunitiesMainScreen(
                 }
 
                 items(listToRender) { community ->
-                    StandardCommunityCard(community, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                    StandardCommunityCard(community, currentUserId, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         selectedCommunityId = it.id
                     }
                 }
@@ -295,7 +295,7 @@ fun FilterPill(text: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun TrendingCommunityCard(community: Community, onClick: (Community) -> Unit) {
+fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick: (Community) -> Unit) {
     Box(
         modifier = Modifier
             .width(240.dp)
@@ -351,7 +351,7 @@ fun TrendingCommunityCard(community: Community, onClick: (Community) -> Unit) {
             Spacer(modifier = Modifier.weight(1f))
             
             Text(
-                text = community.name, 
+                text = if (currentUserId != null && community.ownerId == currentUserId) "${community.name} \uD83D\uDC51" else community.name, 
                 color = Color.White, 
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
                 maxLines = 1,
@@ -402,7 +402,7 @@ private fun Row(background: Color, padding: androidx.compose.ui.unit.Dp, shape: 
 }
 
 @Composable
-fun StandardCommunityCard(community: Community, modifier: Modifier = Modifier, onClick: (Community) -> Unit) {
+fun StandardCommunityCard(community: Community, currentUserId: String?, modifier: Modifier = Modifier, onClick: (Community) -> Unit) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -435,7 +435,7 @@ fun StandardCommunityCard(community: Community, modifier: Modifier = Modifier, o
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = community.name,
+                        text = if (currentUserId != null && community.ownerId == currentUserId) "${community.name} \uD83D\uDC51" else community.name,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,

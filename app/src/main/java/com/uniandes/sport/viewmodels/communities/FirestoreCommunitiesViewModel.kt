@@ -200,7 +200,8 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     "sport" to sport.trim(),
                     "description" to description.trim(),
                     "memberCount" to 1,
-                    "channelCount" to 1
+                    "channelCount" to 1,
+                    "ownerId" to ownerId
                 )
 
                 val ownerPayload = hashMapOf(
