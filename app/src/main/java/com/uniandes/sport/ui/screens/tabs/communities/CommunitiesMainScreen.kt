@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,8 +42,9 @@ fun CommunitiesMainScreen(
 ) {
     val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
+    val myCommunityIds by viewModel.myCommunityIds.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember { mutableStateOf("Mine") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCommunityId by remember { mutableStateOf<String?>(null) }
     var showCreateCommunityDialog by remember { mutableStateOf(false) }
@@ -57,6 +59,7 @@ fun CommunitiesMainScreen(
             onSuccess = { user ->
                 currentUserId = user.uid
                 currentUserDisplayName = user.fullName.ifBlank { user.email }
+                viewModel.loadUserMemberships(user.uid)
             },
             onFailure = {
                 currentUserId = null
@@ -64,9 +67,13 @@ fun CommunitiesMainScreen(
         )
     }
 
-    val filters = listOf("All", "Community", "Clan")
+    val filters = listOf("Mine", "Others")
     val filteredCommunities = communities.filter { community ->
-        val filterMatches = selectedFilter == "All" || community.type == selectedFilter
+        val filterMatches = when (selectedFilter) {
+            "Mine" -> currentUserId != null && (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
+            "Others" -> currentUserId == null || (community.ownerId != currentUserId && !myCommunityIds.contains(community.id))
+            else -> true
+        }
         val query = searchQuery.trim().lowercase()
         val queryMatches = query.isBlank() ||
             community.name.lowercase().contains(query) ||
@@ -74,8 +81,6 @@ fun CommunitiesMainScreen(
             community.description.lowercase().contains(query)
         filterMatches && queryMatches
     }
-    val trending = communities.take(2)
-    val others = if (selectedFilter == "All") communities.drop(2) else filteredCommunities
 
     BackHandler(enabled = selectedCommunityId != null) {
         selectedCommunityId = null
@@ -93,10 +98,21 @@ fun CommunitiesMainScreen(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
-                        placeholder = { Text("Search communities, sports, or keywords") },
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        placeholder = { Text("Search communities...") },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(28.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        ),
+                        leadingIcon = {
+                            Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
                     )
                 }
 
@@ -107,7 +123,7 @@ fun CommunitiesMainScreen(
                     ) {
                         items(filters) { filter ->
                             FilterPill(
-                                text = if (filter == "All") "All" else if (filter == "Clan") "Clans" else "Communities",
+                                text = filter,
                                 isSelected = selectedFilter == filter,
                                 onClick = { selectedFilter = filter }
                             )
@@ -115,53 +131,19 @@ fun CommunitiesMainScreen(
                     }
                 }
 
-                // Trending Now
-                if (selectedFilter == "All" && trending.isNotEmpty()) {
-                    item {
-                        Column(modifier = Modifier.padding(top = 16.dp)) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocalFireDepartment, 
-                                    contentDescription = "Trending",
-                                    tint = Color(0xFFF97316),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "TRENDING NOW", 
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(trending) { community ->
-                                    TrendingCommunityCard(community) {
-                                        selectedCommunityId = it.id
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Standard List
                 item {
                     Text(
-                        text = if (selectedFilter == "All") "DISCOVER MORE" else "FILTERED ${if (selectedFilter == "Clan") "CLANS" else "COMMUNITIES"}",
+                        text = when (selectedFilter) {
+                            "Mine" -> "MY COMMUNITIES"
+                            else -> "OTHER COMMUNITIES"
+                        },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
                         modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 12.dp)
                     )
                 }
 
-                val listToRender = if (selectedFilter == "All" && searchQuery.isBlank()) others else filteredCommunities
+                val listToRender = filteredCommunities
                 if (listToRender.isEmpty()) {
                     item {
                         Text(
@@ -173,7 +155,7 @@ fun CommunitiesMainScreen(
                 }
 
                 items(listToRender) { community ->
-                    StandardCommunityCard(community, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+                    StandardCommunityCard(community, currentUserId, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         selectedCommunityId = it.id
                     }
                 }
@@ -189,6 +171,7 @@ fun CommunitiesMainScreen(
             },
             containerColor = MaterialTheme.colorScheme.tertiary,
             contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp)
@@ -239,35 +222,95 @@ fun CommunitiesMainScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateCommunityDialog(
     onDismiss: () -> Unit,
     onCreate: (name: String, type: String, sport: String, description: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("Community") }
+    val type = "Community"
     var sport by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var customSport by remember { mutableStateOf("") }
+    
+    var expanded by remember { mutableStateOf(false) }
+    val sportsList = listOf("Soccer", "Basketball", "Tennis", "Volleyball", "Running", "Cycling", "Swimming", "Other")
+
+    val pillColors = @Composable { OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+        focusedBorderColor = MaterialTheme.colorScheme.primary
+    ) }
+    val pillShape = RoundedCornerShape(28.dp)
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create community") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
-                OutlinedTextField(value = sport, onValueChange = { sport = it }, label = { Text("Sport") }, singleLine = true)
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, maxLines = 3)
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Name") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = pillShape, colors = pillColors()
+                )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterPill(text = "Community", isSelected = type == "Community") { type = "Community" }
-                    FilterPill(text = "Clan", isSelected = type == "Clan") { type = "Clan" }
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = sport,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sport") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        colors = pillColors(),
+                        shape = pillShape,
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        sportsList.forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption) },
+                                onClick = {
+                                    sport = selectionOption
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
                 }
+
+                if (sport == "Other") {
+                    OutlinedTextField(
+                        value = customSport,
+                        onValueChange = { customSport = it },
+                        label = { Text("Specify sport") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = pillShape, colors = pillColors()
+                    )
+                }
+
+                OutlinedTextField(
+                    value = description, onValueChange = { description = it },
+                    label = { Text("Description") }, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = pillShape, colors = pillColors()
+                )
             }
         },
         confirmButton = {
+            val finalSport = if (sport == "Other") customSport else sport
             TextButton(
-                onClick = { onCreate(name, type, sport, description) },
-                enabled = name.isNotBlank() && sport.isNotBlank() && description.isNotBlank()
+                onClick = { onCreate(name, type, finalSport, description) },
+                enabled = name.isNotBlank() && finalSport.isNotBlank() && description.isNotBlank()
             ) {
                 Text("Create")
             }
@@ -282,8 +325,8 @@ fun CreateCommunityDialog(
 fun FilterPill(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         shape = CircleShape,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Text(
@@ -295,7 +338,8 @@ fun FilterPill(text: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun TrendingCommunityCard(community: Community, onClick: (Community) -> Unit) {
+fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick: (Community) -> Unit) {
+    val isOwner = currentUserId != null && community.ownerId == currentUserId
     Box(
         modifier = Modifier
             .width(240.dp)
@@ -305,19 +349,19 @@ fun TrendingCommunityCard(community: Community, onClick: (Community) -> Unit) {
                 Brush.linearGradient(
                     colors = listOf(
                         MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                     )
                 )
             )
             .clickable { onClick(community) }
     ) {
-        // Background Watermark Letter
-        Text(
-            text = community.name.take(1),
-            color = Color.White.copy(alpha = 0.05f),
-            fontSize = 100.sp,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 16.dp)
+        // Decorative background shape
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 30.dp, y = 30.dp)
+                .background(Color.White.copy(alpha = 0.1f), CircleShape)
         )
 
         Column(modifier = Modifier.padding(20.dp).fillMaxSize()) {
@@ -350,17 +394,30 @@ fun TrendingCommunityCard(community: Community, onClick: (Community) -> Unit) {
             
             Spacer(modifier = Modifier.weight(1f))
             
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = community.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isOwner) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = com.uniandes.sport.ui.theme.CrownIcon,
+                            contentDescription = "Owner",
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             Text(
-                text = community.name, 
-                color = Color.White, 
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = community.sport, 
-                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f), 
-                fontSize = 12.sp, 
+                text = community.sport,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
             
@@ -402,7 +459,8 @@ private fun Row(background: Color, padding: androidx.compose.ui.unit.Dp, shape: 
 }
 
 @Composable
-fun StandardCommunityCard(community: Community, modifier: Modifier = Modifier, onClick: (Community) -> Unit) {
+fun StandardCommunityCard(community: Community, currentUserId: String?, modifier: Modifier = Modifier, onClick: (Community) -> Unit) {
+    val isOwner = currentUserId != null && community.ownerId == currentUserId
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -418,29 +476,44 @@ fun StandardCommunityCard(community: Community, modifier: Modifier = Modifier, o
                         .clip(RoundedCornerShape(16.dp))
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f))
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = community.name.take(1),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
+                        text = community.name.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
                 
                 Spacer(modifier = Modifier.width(16.dp))
                 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = community.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = community.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isOwner) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = com.uniandes.sport.ui.theme.CrownIcon,
+                                contentDescription = "Owner",
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = community.description,
@@ -452,14 +525,15 @@ fun StandardCommunityCard(community: Community, modifier: Modifier = Modifier, o
                 }
             }
             
-            Divider(modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 0.5.dp)
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f), shape = RoundedCornerShape(6.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(6.dp)) {
                         Text(
                             text = community.type.uppercase(),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
