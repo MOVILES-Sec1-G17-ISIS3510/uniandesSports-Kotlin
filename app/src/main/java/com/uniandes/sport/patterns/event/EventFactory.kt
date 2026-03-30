@@ -32,7 +32,7 @@ object EventFactory {
             maxParticipants = maxParticipants,
             metadata = metadata,
             modality = modality,
-            participants = listOf(createdBy), // Creator is always the first participant
+            membersCount = 1,
             scheduledAt = Timestamp(scheduledAt),
             sport = sport.lowercase(),
             status = "active",
