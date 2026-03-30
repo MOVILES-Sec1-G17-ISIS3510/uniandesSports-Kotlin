@@ -358,6 +358,7 @@ fun CommunityDetailModal(
                     members = members,
                     isAdmin = isCurrentUserAdmin,
                     currentUserId = currentUserId,
+                    ownerId = community.ownerId,
                     onRemove = { member ->
                         viewModel.removeMember(
                             communityId = community.id,
@@ -367,10 +368,11 @@ fun CommunityDetailModal(
                         )
                     }
                 )
+
             }
         }
     }
-    }
+}
 
 
 
@@ -535,6 +537,7 @@ private fun MembersTab(
     members: List<CommunityMember>,
     isAdmin: Boolean,
     currentUserId: String?,
+    ownerId: String,
     onRemove: (CommunityMember) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -545,7 +548,13 @@ private fun MembersTab(
         } else {
             items(members) { member ->
                 val canRemove = isAdmin && member.userId != currentUserId && !member.role.equals("admin", ignoreCase = true)
-                MemberRow(member = member, canRemove = canRemove, onRemove = { onRemove(member) })
+                MemberRow(
+                    member = member,
+                    isOwner = member.userId == ownerId,
+                    isMe = member.userId == currentUserId,
+                    canRemove = canRemove,
+                    onRemove = { onRemove(member) }
+                )
             }
         }
     }
@@ -601,22 +610,29 @@ private fun ChannelRoomScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 0.5.dp)
         },
         bottomBar = {
             Surface(
-                tonalElevation = 3.dp,
-                shadowElevation = 8.dp
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 12.dp,
+                shadowElevation = 4.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .navigationBarsPadding(),
+                shape = RoundedCornerShape(28.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .navigationBarsPadding(),
-                    verticalAlignment = Alignment.Bottom
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
                         value = messageInput,
@@ -625,32 +641,29 @@ private fun ChannelRoomScreen(
                         placeholder = { Text("Write a message...") },
                         maxLines = 5,
                         enabled = currentUserId != null,
-                        shape = RoundedCornerShape(28.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        ),
-                        trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (messageInput.isNotBlank()) {
-                                        onSend(messageInput.trim())
-                                        messageInput = ""
-                                    }
-                                },
-                                enabled = currentUserId != null && messageInput.isNotBlank()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Send,
-                                    contentDescription = "Send",
-                                    tint = if (messageInput.isNotBlank()) MaterialTheme.colorScheme.primary
-                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                )
-                            }
-                        }
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent
+                        )
                     )
+                    IconButton(
+                        onClick = {
+                            if (messageInput.isNotBlank()) {
+                                onSend(messageInput.trim())
+                                messageInput = ""
+                            }
+                        },
+                        enabled = currentUserId != null && messageInput.isNotBlank()
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = if (messageInput.isNotBlank()) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
                 }
             }
         }
@@ -686,14 +699,14 @@ private fun ChannelRoomScreen(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondary),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = msg.authorName.ifBlank { currentUserDisplayName }.take(1).uppercase(),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
 
@@ -707,6 +720,15 @@ private fun ChannelRoomScreen(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                if (msg.authorId == community.ownerId) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        com.uniandes.sport.ui.theme.CrownIcon,
+                                        contentDescription = "Admin",
+                                        tint = Color(0xFFFFB300),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
                                 val ts = formatSmartTimestamp(msg.createdAt)
                                 if (ts.isNotBlank()) {
                                     Text(
@@ -768,7 +790,13 @@ private fun ChannelRoomScreen(
 }
 
 @Composable
-private fun MemberRow(member: CommunityMember, canRemove: Boolean, onRemove: () -> Unit) {
+private fun MemberRow(
+    member: CommunityMember,
+    isOwner: Boolean,
+    isMe: Boolean,
+    canRemove: Boolean,
+    onRemove: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -777,23 +805,49 @@ private fun MemberRow(member: CommunityMember, canRemove: Boolean, onRemove: () 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             Box(
                 modifier = Modifier
                     .size(30.dp)
-                    .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(8.dp)),
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = member.displayName.take(1).uppercase(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column {
-                Text(member.displayName, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(member.displayName, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    if (isOwner) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            com.uniandes.sport.ui.theme.CrownIcon,
+                            contentDescription = "Admin",
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    if (isMe) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "Me",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 Text(member.role, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -829,7 +883,7 @@ private fun FeedPostItem(
     onToggleComments: () -> Unit,
     onSendComment: (String) -> Unit
 ) {
-    val bgColor = if (post.pinned) MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
+    val bgColor = if (post.pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     var input by remember { mutableStateOf("") }
     
     val focusRequester = remember { FocusRequester() }
@@ -844,9 +898,10 @@ private fun FeedPostItem(
 
     Surface(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         color = bgColor,
-        tonalElevation = 1.dp
+        tonalElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

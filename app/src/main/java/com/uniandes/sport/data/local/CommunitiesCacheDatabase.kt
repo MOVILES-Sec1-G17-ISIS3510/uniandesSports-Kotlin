@@ -6,8 +6,16 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [CachedCommunityEntity::class, CachedChannelMessageEntity::class],
-    version = 2,
+    entities = [
+        CachedCommunityEntity::class,
+        CachedPostEntity::class,
+        CachedChannelEntity::class,
+        CachedMemberEntity::class,
+        CachedPostCommentEntity::class,
+        CachedMembershipEntity::class,
+        CachedChannelMessageEntity::class
+    ],
+    version = 3,
     exportSchema = false
 )
 abstract class CommunitiesCacheDatabase : RoomDatabase() {

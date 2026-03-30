@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -97,16 +98,21 @@ fun CommunitiesMainScreen(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
-                        placeholder = { Text("Search communities") },
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        placeholder = { Text("Search communities...") },
                         singleLine = true,
                         shape = RoundedCornerShape(28.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        ),
+                        leadingIcon = {
+                            Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
                     )
                 }
 
@@ -319,8 +325,8 @@ fun CreateCommunityDialog(
 fun FilterPill(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         shape = CircleShape,
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Text(
@@ -343,19 +349,19 @@ fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick:
                 Brush.linearGradient(
                     colors = listOf(
                         MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                     )
                 )
             )
             .clickable { onClick(community) }
     ) {
-        // Background Watermark Letter
-        Text(
-            text = community.name.take(1),
-            color = Color.White.copy(alpha = 0.05f),
-            fontSize = 100.sp,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 16.dp)
+        // Decorative background shape
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 30.dp, y = 30.dp)
+                .background(Color.White.copy(alpha = 0.1f), CircleShape)
         )
 
         Column(modifier = Modifier.padding(20.dp).fillMaxSize()) {
@@ -409,9 +415,9 @@ fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick:
                 }
             }
             Text(
-                text = community.sport, 
-                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f), 
-                fontSize = 12.sp, 
+                text = community.sport,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
             
@@ -470,16 +476,19 @@ fun StandardCommunityCard(community: Community, currentUserId: String?, modifier
                         .clip(RoundedCornerShape(16.dp))
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f))
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = community.name.take(1),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
+                        text = community.name.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
                 
@@ -516,14 +525,15 @@ fun StandardCommunityCard(community: Community, currentUserId: String?, modifier
                 }
             }
             
-            Divider(modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 0.5.dp)
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f), shape = RoundedCornerShape(6.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(6.dp)) {
                         Text(
                             text = community.type.uppercase(),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
