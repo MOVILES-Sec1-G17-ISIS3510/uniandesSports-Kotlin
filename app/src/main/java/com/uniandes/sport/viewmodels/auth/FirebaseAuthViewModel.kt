@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.uniandes.sport.models.User
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -116,6 +117,60 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                 } else {
                     onFailure(task.exception ?: Exception("Unknown exception."))
                 }
+            }
+    }
+
+    override fun loginWithGoogleIdToken(
+        idToken: String,
+        onSuccess: (result: User) -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    onFailure(task.exception ?: Exception("Unknown exception."))
+                    return@addOnCompleteListener
+                }
+
+                val firebaseUser = auth.currentUser
+                if (firebaseUser == null) {
+                    onFailure(Exception("No se pudo obtener el usuario autenticado."))
+                    return@addOnCompleteListener
+                }
+
+                val uid = firebaseUser.uid
+                db.collection("users").document(uid).get()
+                    .addOnSuccessListener { document ->
+                        if (document != null && document.exists()) {
+                            val userProfile = document.toObject(User::class.java)
+                            if (userProfile != null) {
+                                onSuccess(userProfile)
+                                return@addOnSuccessListener
+                            }
+                        }
+
+                        val newProfile = User(
+                            uid = uid,
+                            email = firebaseUser.email ?: "",
+                            fullName = firebaseUser.displayName ?: "",
+                            photoUrl = firebaseUser.photoUrl?.toString()
+                        )
+
+                        db.collection("users").document(uid).set(newProfile)
+                            .addOnSuccessListener { onSuccess(newProfile) }
+                            .addOnFailureListener { e -> onFailure(e) }
+                    }
+                    .addOnFailureListener {
+                        onSuccess(
+                            User(
+                                uid = uid,
+                                email = firebaseUser.email ?: "",
+                                fullName = firebaseUser.displayName ?: "",
+                                photoUrl = firebaseUser.photoUrl?.toString()
+                            )
+                        )
+                    }
             }
     }
 

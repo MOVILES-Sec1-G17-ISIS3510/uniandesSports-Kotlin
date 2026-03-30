@@ -72,6 +72,27 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
         register(onSuccess, onFailure)
     }
 
+    override fun loginWithGoogleIdToken(
+        idToken: String,
+        onSuccess: (result: User) -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (idToken.isBlank()) {
+                onFailure(Exception("Google ID token is empty."))
+                return@launch
+            }
+
+            onSuccess(
+                User(
+                    uid = "google-123",
+                    email = if (email.isNotBlank()) email else "google.user@example.com",
+                    fullName = if (fullName.isNotBlank()) fullName else "Google User"
+                )
+            )
+        }
+    }
+
     override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
         onSuccess(false)
     }

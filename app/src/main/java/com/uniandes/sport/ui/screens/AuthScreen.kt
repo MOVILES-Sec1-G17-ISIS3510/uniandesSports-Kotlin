@@ -1,5 +1,7 @@
 package com.uniandes.sport.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -21,6 +25,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.uniandes.sport.R
 import com.uniandes.sport.Routes
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
@@ -34,10 +42,63 @@ fun AuthScreen(
     onLoginSuccess: () -> Unit = { navController.navigate(Routes.MAIN_TABS) }
 ) {
     val screenName = "AuthScreen"
+    val context = LocalContext.current
+    val googleWebClientId = stringResource(id = R.string.google_web_client_id).trim()
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoginMode by remember { mutableStateOf(true) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
+
+    val googleSignInClient = remember(googleWebClientId) {
+        if (googleWebClientId.isBlank()) {
+            null
+        } else {
+            val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(googleWebClientId)
+                .requestEmail()
+                .build()
+            GoogleSignIn.getClient(context, options)
+        }
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account.idToken
+
+            if (idToken.isNullOrBlank()) {
+                isGoogleLoading = false
+                dialogMessage = "No se pudo obtener un token válido de Google."
+                showDialog = true
+                return@rememberLauncherForActivityResult
+            }
+
+            authViewModel.loginWithGoogleIdToken(
+                idToken = idToken,
+                onSuccess = {
+                    isGoogleLoading = false
+                    logViewModel.log(screenName, "USER_GOOGLE_LOGGED_IN")
+                    onLoginSuccess()
+                },
+                onFailure = { exception ->
+                    isGoogleLoading = false
+                    dialogMessage = exception.message.toString()
+                    showDialog = true
+                    logViewModel.crash(screenName, exception)
+                }
+            )
+        } catch (exception: Exception) {
+            isGoogleLoading = false
+            dialogMessage = exception.message ?: "No se pudo iniciar sesión con Google."
+            showDialog = true
+            logViewModel.crash(screenName, exception)
+        }
+    }
 
     LaunchedEffect(Unit) {
         authViewModel.isUserLoggedIn(
@@ -217,6 +278,42 @@ fun AuthScreen(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    if (isLoginMode) {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isGoogleLoading) return@OutlinedButton
+
+                                if (googleSignInClient == null) {
+                                    dialogMessage = "Falta configurar google_web_client_id en strings.xml con el Web client ID de Firebase."
+                                    showDialog = true
+                                    return@OutlinedButton
+                                }
+
+                                isGoogleLoading = true
+                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isGoogleLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
+                        ) {
+                            if (isGoogleLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text(
+                                    text = "Continuar con Google",
+                                    color = Color(0xFF1F2937),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
