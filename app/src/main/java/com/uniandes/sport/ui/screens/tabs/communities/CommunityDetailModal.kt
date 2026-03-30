@@ -55,9 +55,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,13 +74,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -271,12 +272,18 @@ fun CommunityDetailModal(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
-            Text(
-                text = community.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = community.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -287,9 +294,38 @@ fun CommunityDetailModal(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            TabRow(selectedTabIndex = selectedTabIndex) {
-                tabs.forEachIndexed { index, tab ->
-                    Tab(selected = selectedTabIndex == index, onClick = { selectedTabIndex = index }, text = { Text(tab) })
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = CircleShape
+            ) {
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    divider = {},
+                    indicator = { tabPositions ->
+                        if (selectedTabIndex < tabPositions.size) {
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                color = MaterialTheme.colorScheme.primary,
+                                height = 2.dp
+                            )
+                        }
+                    }
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = { selectedTabIndex = index },
+                            text = { 
+                                Text(
+                                    tab, 
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium)
+                                ) 
+                            },
+                        )
+                    }
                 }
             }
 
@@ -610,7 +646,7 @@ private fun ChannelRoomScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -658,7 +694,7 @@ private fun ChannelRoomScreen(
                         enabled = currentUserId != null && messageInput.isNotBlank()
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                            imageVector = Icons.Default.Send,
                             contentDescription = "Send",
                             tint = if (messageInput.isNotBlank()) MaterialTheme.colorScheme.primary
                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
