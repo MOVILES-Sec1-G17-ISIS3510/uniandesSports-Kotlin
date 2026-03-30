@@ -140,6 +140,13 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                 }
 
                 val uid = firebaseUser.uid
+                val fallbackUser = User(
+                    uid = uid,
+                    email = firebaseUser.email ?: "",
+                    fullName = firebaseUser.displayName ?: "",
+                    photoUrl = firebaseUser.photoUrl?.toString()
+                )
+
                 db.collection("users").document(uid).get()
                     .addOnSuccessListener { document ->
                         if (document != null && document.exists()) {
@@ -150,26 +157,15 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                             }
                         }
 
-                        val newProfile = User(
-                            uid = uid,
-                            email = firebaseUser.email ?: "",
-                            fullName = firebaseUser.displayName ?: "",
-                            photoUrl = firebaseUser.photoUrl?.toString()
-                        )
+                        val newProfile = fallbackUser
 
                         db.collection("users").document(uid).set(newProfile)
                             .addOnSuccessListener { onSuccess(newProfile) }
-                            .addOnFailureListener { e -> onFailure(e) }
+                            // Do not block login on profile write issues.
+                            .addOnFailureListener { onSuccess(fallbackUser) }
                     }
                     .addOnFailureListener {
-                        onSuccess(
-                            User(
-                                uid = uid,
-                                email = firebaseUser.email ?: "",
-                                fullName = firebaseUser.displayName ?: "",
-                                photoUrl = firebaseUser.photoUrl?.toString()
-                            )
-                        )
+                        onSuccess(fallbackUser)
                     }
             }
     }

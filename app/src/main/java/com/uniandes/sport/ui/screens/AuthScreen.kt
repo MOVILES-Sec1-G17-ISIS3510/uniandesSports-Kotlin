@@ -27,11 +27,24 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.uniandes.sport.R
 import com.uniandes.sport.Routes
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
+
+private fun googleErrorMessage(statusCode: Int): String {
+    return when (statusCode) {
+        GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Inicio de sesión cancelado."
+        GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS -> "Ya hay un inicio de sesión en curso. Inténtalo de nuevo en unos segundos."
+        CommonStatusCodes.NETWORK_ERROR -> "Error de red al iniciar sesión con Google. Revisa tu conexión."
+        CommonStatusCodes.DEVELOPER_ERROR -> "Configuración inválida de Google Sign-In (error 10). Verifica SHA-1/SHA-256 en Firebase, el Web client ID y vuelve a descargar google-services.json."
+        CommonStatusCodes.INTERNAL_ERROR -> "Error interno de Google Sign-In. Intenta de nuevo."
+        else -> "No se pudo iniciar sesión con Google (código $statusCode)."
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +105,16 @@ fun AuthScreen(
                     logViewModel.crash(screenName, exception)
                 }
             )
+        } catch (exception: ApiException) {
+            isGoogleLoading = false
+
+            if (exception.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
+                return@rememberLauncherForActivityResult
+            }
+
+            dialogMessage = googleErrorMessage(exception.statusCode)
+            showDialog = true
+            logViewModel.crash(screenName, exception)
         } catch (exception: Exception) {
             isGoogleLoading = false
             dialogMessage = exception.message ?: "No se pudo iniciar sesión con Google."
