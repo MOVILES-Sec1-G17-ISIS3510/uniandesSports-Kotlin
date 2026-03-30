@@ -123,6 +123,7 @@ fun TopAppBarDynamic(
         Screen.Home.route -> "UNIANDES SPORTS"
         Screen.Retos.route -> "COMPITE Y MEJORA"
         Screen.Play.route -> "ENCUENTRA PARTIDO"
+        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
         Screen.Profesores.route -> "APRENDE CON EXPERTOS"
         Screen.Torneos.route -> "COMPETICIONES"
         Screen.Perfil.route -> "MI CUENTA"

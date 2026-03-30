@@ -84,7 +84,7 @@ fun CommunitiesMainScreen(
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
                 // Filters
                 item {
@@ -93,7 +93,7 @@ fun CommunitiesMainScreen(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
                         placeholder = { Text("Search communities, sports, or keywords") },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp)
