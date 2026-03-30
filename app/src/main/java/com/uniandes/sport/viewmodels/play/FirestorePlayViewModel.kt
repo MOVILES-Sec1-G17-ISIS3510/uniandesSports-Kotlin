@@ -91,20 +91,17 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
-            val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
+            val membersCount = snapshot.getLong("membersCount") ?: 0L
             val max = snapshot.getLong("maxParticipants") ?: 0L
             
-            Log.d("PlayVM", "Transaction start for $eventId. Current participants: ${participants.size}/$max")
-
-            if (participants.contains(userId)) {
-                Log.d("PlayVM", "User $userId already joined. returning success.")
+            // Check if member already exists in subcollection
+            val memberSnapshot = transaction.get(memberRef)
+            if (memberSnapshot.exists()) {
+                Log.d("PlayVM", "User $userId already joined subcollection. returning success.")
                 return@runTransaction
             }
 
-            if (participants.size < max) {
-                participants.add(userId)
-                transaction.update(docRef, "participants", participants)
-                
+            if (membersCount < max) {
                 val newMember = com.uniandes.sport.models.MatchMember(
                     userId = userId,
                     displayName = displayName,
@@ -112,7 +109,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                     role = "member"
                 )
                 transaction.set(memberRef, newMember)
-                Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'")
+                transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(1))
+                Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
             } else {
                 Log.w("PlayVM", "Transaction: Match is full ($max)")
                 throw Exception("Match is full")
@@ -140,46 +138,57 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return onError(Exception("User not authenticated"))
-        
-        val event = com.uniandes.sport.patterns.event.EventFactory.createEvent(
-            title = title,
-            description = description,
-            location = location,
-            createdBy = uid,
-            sport = sport,
-            modality = modality,
-            maxParticipants = maxParticipants,
-            scheduledAt = scheduledAt,
-            metadata = mapOf("skillLevel" to skillLevel)
-        ).apply {
-            participants = listOf(uid)
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            onError(Exception("User not authenticated"))
+            return
         }
-        
-        db.collection("events").add(event)
-            .addOnSuccessListener { doc ->
-                Log.d("PlayVM", "Event created with ID: ${doc.id}. Adding organizer to subcollection...")
-                val member = com.uniandes.sport.models.MatchMember(
-                    userId = uid,
-                    displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
-                    joinedAt = System.currentTimeMillis(),
-                    role = "organizer"
-                )
-                doc.collection("members").document(uid).set(member).addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d("PlayVM", "Organizer successfully added to 'members' subcollection of ${doc.id}")
-                    } else {
-                        Log.e("PlayVM", "FAILED to add organizer to subcollection: ${task.exception?.message}")
-                    }
+
+        try {
+            Log.d("PlayVM", "Starting createEvent for $title...")
+            val event = com.uniandes.sport.patterns.event.EventFactory.createEvent(
+                title = title,
+                description = description,
+                location = location,
+                createdBy = uid,
+                sport = sport,
+                modality = modality,
+                maxParticipants = maxParticipants,
+                scheduledAt = scheduledAt,
+                metadata = mapOf("skillLevel" to skillLevel)
+            )
+            
+            // Atómicamente crear el evento y el primer miembro usando un Batch
+            val eventDoc = db.collection("events").document()
+            event.id = eventDoc.id
+            val memberDoc = eventDoc.collection("members").document(uid)
+            val batch = db.batch()
+            
+            batch.set(eventDoc, event)
+            val organizer = com.uniandes.sport.models.MatchMember(
+                userId = uid,
+                displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
+                joinedAt = System.currentTimeMillis(),
+                role = "organizer"
+            )
+            batch.set(memberDoc, organizer)
+            
+            Log.d("PlayVM", "Committing batch for event creation...")
+            batch.commit()
+                .addOnSuccessListener { 
+                    Log.d("PlayVM", "Batch commit SUCCESS: Event and Organizer created.")
                     com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
                     com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
                     onSuccess() 
                 }
-            }
-            .addOnFailureListener { 
-                Log.e("PlayVM", "FAILED to create event: ${it.message}")
-                onError(it) 
-            }
+                .addOnFailureListener { e ->
+                    Log.e("PlayVM", "Batch commit FAILED: ${e.message}")
+                    onError(e) 
+                }
+        } catch (e: Exception) {
+            Log.e("PlayVM", "EXCEPTION in createEvent: ${e.message}")
+            onError(e)
+        }
     }
 
     override fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
@@ -187,14 +196,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         val memberRef = docRef.collection("members").document(userId)
 
         db.runTransaction { transaction ->
-            val snapshot = transaction.get(docRef)
-            val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
-            
-            if (participants.contains(userId)) {
-                participants.remove(userId)
-                transaction.update(docRef, "participants", participants)
-                transaction.delete(memberRef)
-            }
+            transaction.delete(memberRef)
+            transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(-1))
+            Log.d("PlayVM", "Transaction: Member $userId removed and counter decremented.")
         }.addOnSuccessListener {
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)

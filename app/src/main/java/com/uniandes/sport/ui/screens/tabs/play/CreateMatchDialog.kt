@@ -28,7 +28,7 @@ fun CreateMatchDialog(
     sport: String,
     modality: String,
     onDismiss: () -> Unit,
-    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long) -> Unit
+    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var dateString by remember { mutableStateOf("") }
@@ -436,7 +436,16 @@ fun CreateMatchDialog(
                             Date()
                         }
                         
-                        onCreate(title, location, description, date, skillLevel, maxParticipants.toLongOrNull() ?: 10L)
+                        onCreate(
+                            title, 
+                            location, 
+                            description, 
+                            date, 
+                            skillLevel, 
+                            maxParticipants.toLongOrNull() ?: 10L,
+                            { isLoading = false },
+                            { isLoading = false }
+                        )
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),

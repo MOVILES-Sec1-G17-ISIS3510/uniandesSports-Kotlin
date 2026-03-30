@@ -31,8 +31,8 @@ fun MatchDetailModal(
     val event = uiModel.rawEvent
     val currentUserId = viewModel.currentUserId
     val members by viewModel.members.collectAsState()
-    val isAlreadyJoined = currentUserId != null && (event.participants.contains(currentUserId) || members.any { it.userId == currentUserId })
-    val isFull = members.size >= event.maxParticipants || event.participants.size >= event.maxParticipants
+    val isAlreadyJoined = currentUserId != null && members.any { it.userId == currentUserId }
+    val isFull = event.membersCount >= event.maxParticipants
     
     LaunchedEffect(members) {
         android.util.Log.d("MatchModal", "Members updated: ${members.size} members found. isAlreadyJoined: $isAlreadyJoined")

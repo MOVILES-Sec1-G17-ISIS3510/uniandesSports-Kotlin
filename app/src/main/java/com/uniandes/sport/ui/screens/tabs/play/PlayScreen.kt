@@ -38,6 +38,7 @@ fun PlayScreen(
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     if (selectedEventUIModel != null) {
         MatchDetailModal(
@@ -52,7 +53,7 @@ fun PlayScreen(
             sport = selectedSport!!,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel, maxParticipants ->
+            onCreate = { title, location, description, date, skillLevel, maxParticipants, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
                     description = description,
@@ -73,9 +74,17 @@ fun PlayScreen(
                                 "sport_category" to selectedSport!!
                             )
                         )
+                        dialogOnSuccess()
                         showCreateDialog = false 
                     },
-                    onError = { /* Optionally show error msg */ }
+                    onError = { e ->
+                        dialogOnError(e)
+                        android.widget.Toast.makeText(
+                            context, 
+                            "Error creating match: ${e.message}", 
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 )
             }
         )
@@ -198,7 +207,7 @@ fun PlayScreen(
                                     action = "MATCH_VIEWED",
                                     params = mapOf(
                                         "sport_category" to event.sport,
-                                        "available_capacity" to (event.maxParticipants - event.participants.size).toString(),
+                                        "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
                                         "max_capacity" to event.maxParticipants.toString()
                                     )
                                 )
