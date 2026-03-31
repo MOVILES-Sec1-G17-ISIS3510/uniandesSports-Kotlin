@@ -35,6 +35,7 @@ fun MainScaffold(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
+    val isMainTabsRoute = fullRoute.startsWith("main_tabs")
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
     
@@ -58,7 +59,7 @@ fun MainScaffold(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                if (currentRoute != Screen.Perfil.route) {
+                if (isMainTabsRoute && currentRoute != Screen.Perfil.route) {
                     TopAppBarDynamic(
                         currentRoute = currentRoute, 
                         onProfileClick = { navController.navigate(Screen.Perfil.route) },
@@ -68,7 +69,7 @@ fun MainScaffold(
                 }
             },
             bottomBar = {
-                if (currentRoute != Screen.Perfil.route) {
+                if (isMainTabsRoute && currentRoute != Screen.Perfil.route) {
                     BottomNavigationBar(
                         navController = navController, 
                         currentRoute = currentRoute, 
@@ -213,6 +214,9 @@ fun TopAppBarDynamic(
                 IconButton(onClick = { /* TODO: Challenge history */ }) {
                     Icon(Icons.Default.EventNote, contentDescription = "History")
                 }
+            }
+            IconButton(onClick = onProfileClick) {
+                Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
             }
         }
     )

@@ -2,6 +2,8 @@ package com.uniandes.sport.ui.screens.tabs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,7 +39,14 @@ fun SimplePlaceholderScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                ),
+                actions = {
+                    if (title != "Profile") {
+                        IconButton(onClick = { onNavigate(com.uniandes.sport.ui.navigation.Screen.Perfil.route) }) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
+                        }
+                    }
+                }
             )
         },
         containerColor = Color(0xFFF9FAFB)
