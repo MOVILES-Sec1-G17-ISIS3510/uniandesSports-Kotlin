@@ -59,7 +59,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         createNotificationChannelIfNeeded()
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (notificationType.isNotBlank()) {
                 putExtra(MainActivity.EXTRA_NOTIFICATION_TYPE, notificationType)
             }

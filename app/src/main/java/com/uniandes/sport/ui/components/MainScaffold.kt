@@ -38,6 +38,7 @@ fun MainScaffold(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
+    val playTabIndex = 2
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
     
@@ -49,6 +50,17 @@ fun MainScaffold(
         if (fullRoute.startsWith("main_tabs")) {
             val page = navBackStackEntry?.arguments?.getInt("initialPage") ?: 0
             activeTabPageIndex = page
+        }
+    }
+
+    // React to notification deep-links even when the app is already running.
+    LaunchedEffect(pendingOpenMatchEventId) {
+        if (!pendingOpenMatchEventId.isNullOrBlank()) {
+            navController.navigate("main_tabs/$playTabIndex") {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
         }
     }
 
