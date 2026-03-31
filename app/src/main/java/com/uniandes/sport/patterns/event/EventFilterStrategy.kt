@@ -13,16 +13,21 @@ interface EventFilterStrategy {
 
 class AllActiveEventsStrategy : EventFilterStrategy {
     override fun filter(events: List<Event>): List<Event> {
-        return events.filter { it.status == "active" }
-            .sortedBy { it.scheduledAt }
+        val now = com.google.firebase.Timestamp.now()
+        return events.filter { 
+            it.status == "active" && 
+            (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) > now 
+        }.sortedBy { it.scheduledAt }
     }
 }
 
 class SportFilterStrategy(private val targetSport: String) : EventFilterStrategy {
     override fun filter(events: List<Event>): List<Event> {
+        val now = com.google.firebase.Timestamp.now()
         return events.filter { 
             it.status == "active" && 
-            it.sport.lowercase() == targetSport.lowercase() 
+            it.sport.lowercase() == targetSport.lowercase() &&
+            (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) > now
         }.sortedBy { it.scheduledAt }
     }
 }

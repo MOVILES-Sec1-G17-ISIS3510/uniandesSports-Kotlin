@@ -29,7 +29,7 @@ object EventUIAdapter {
 
     fun toUIModel(event: Event): EventUIModel {
         // Hashing key basado en el estado atómico del evento (ID + Versionamiento)
-        val cacheKey = "${event.id}_${event.updatedAt?.seconds}_${event.participants.size}"
+        val cacheKey = "${event.id}_${event.updatedAt?.seconds}_${event.membersCount}"
         
         memoryCache[cacheKey]?.let { return it }
 
@@ -50,7 +50,7 @@ object EventUIAdapter {
             }
         } ?: "Sin fecha"
 
-        val count = event.participants.size
+        val count = event.membersCount.toInt()
         val max = event.maxParticipants
         
         val newModel = EventUIModel(

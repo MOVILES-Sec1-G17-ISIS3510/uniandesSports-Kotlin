@@ -7,7 +7,8 @@ data class Community(
     val sport: String = "",
     val description: String = "",
     val memberCount: Int = 0,
-    val channelCount: Int = 0
+    val channelCount: Int = 0,
+    val ownerId: String = ""
 )
 
 data class Post(

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.patterns.event.EventUIAdapter
+import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
 @Composable
@@ -36,34 +37,60 @@ fun PlayScreen(
     
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    if (selectedEventUIModel != null) {
+        MatchDetailModal(
+            uiModel = selectedEventUIModel!!,
+            viewModel = viewModel,
+            onDismiss = { selectedEventUIModel = null }
+        )
+    }
 
     if (showCreateDialog && selectedSport != null && selectedMode != null) {
         CreateMatchDialog(
             sport = selectedSport!!,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel ->
-                viewModel.createEvent(title, description, location, selectedSport!!, selectedMode!!, date, skillLevel,
+            onCreate = { title, location, description, date, skillLevel, maxParticipants, dialogOnSuccess, dialogOnError ->
+                viewModel.createEvent(
+                    title = title,
+                    description = description,
+                    location = location,
+                    sport = selectedSport!!,
+                    modality = selectedMode!!,
+                    scheduledAt = date,
+                    skillLevel = skillLevel,
+                    maxParticipants = maxParticipants,
                     onSuccess = { 
                         // Analytics Engine: BQ4 (Registration / Funnel Conversion tracking)
                         logViewModel.log(
                             screen = "PlayScreen",
                             action = "EVENT_REGISTERED",
                             params = mapOf(
-                                "source" to "organic", // Or dynamic if pushed from Notification
+                                "source" to "organic",
                                 "challenge_type" to selectedMode!!,
                                 "sport_category" to selectedSport!!
                             )
                         )
+                        dialogOnSuccess()
                         showCreateDialog = false 
                     },
-                    onError = { /* Optionally show error msg */ }
+                    onError = { e ->
+                        dialogOnError(e)
+                        android.widget.Toast.makeText(
+                            context, 
+                            "Error creating match: ${e.message}", 
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 )
             }
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF9FAFB))) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
@@ -96,9 +123,9 @@ fun PlayScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (selectedSport != null) "1. SPORT ✓" else "1. CHOOSE YOUR SPORT",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B263B)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
                 
@@ -134,19 +161,19 @@ fun PlayScreen(
                     ) {
                         Text(
                             text = "OPEN MATCHES",
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1B263B)
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                         
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFFE8F8F5)
+                            color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             Text(
                                 text = "${events.size} available",
                                 fontSize = 11.sp,
-                                color = Color(0xFF117A65),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
@@ -163,7 +190,7 @@ fun PlayScreen(
                 } else if (events.isEmpty()) {
                     item {
                         Text(
-                            "No matches found. Create one!",
+                            "Not recent matches found. Create one!",
                             modifier = Modifier.padding(16.dp),
                             color = Color.Gray
                         )
@@ -180,11 +207,11 @@ fun PlayScreen(
                                     action = "MATCH_VIEWED",
                                     params = mapOf(
                                         "sport_category" to event.sport,
-                                        "available_capacity" to (event.maxParticipants - event.participants.size).toString(),
+                                        "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
                                         "max_capacity" to event.maxParticipants.toString()
                                     )
                                 )
-                                // TODO: Join / details navigation
+                                selectedEventUIModel = uiModel
                             }
                         )
                     }
@@ -194,9 +221,9 @@ fun PlayScreen(
                 item {
                     Text(
                         text = if (selectedMode != null) "2. MODE ✓" else "2. CHOOSE MODE",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B263B)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -220,8 +247,9 @@ fun PlayScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter),
-                color = Color.White,
-                shadowElevation = 8.dp
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                shadowElevation = 16.dp
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -235,22 +263,25 @@ fun PlayScreen(
                         },
                         modifier = Modifier.weight(2f).height(56.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF45B39D))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
+                        Icon(Icons.Default.Search, contentDescription = "Search")
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Search", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Search", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                     
                     OutlinedButton(
                         onClick = { showCreateDialog = true },
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF45B39D))
+                        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Create", tint = Color(0xFF45B39D))
+                        Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Create", color = Color(0xFF45B39D), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Create", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
@@ -269,8 +300,9 @@ fun SummaryCard(
     Surface(
         modifier = modifier.height(90.dp),
         shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        shadowElevation = 2.dp
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -281,16 +313,16 @@ fun SummaryCard(
                     modifier = Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.1f)),
+                        .background(iconTint.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(14.dp))
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(title, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF1B263B))
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -304,8 +336,8 @@ fun SportButton(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val containerColor = if (selected) Color(0xFF0D1B3E) else Color.White
-    val contentColor = if (selected) Color.White else Color(0xFF1B263B)
+    val containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     
     Surface(
         modifier = modifier
@@ -313,8 +345,9 @@ fun SportButton(
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         color = containerColor,
-        border = if (!selected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0)) else null,
-        shadowElevation = if (selected) 6.dp else 1.dp
+        border = if (!selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+        tonalElevation = if (selected) 4.dp else 0.dp,
+        shadowElevation = if (selected) 4.dp else 0.dp
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -345,9 +378,10 @@ fun ModeButton(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val containerColor = if (selected) Color(0xFF45B39D) else Color.White
-    val contentColor = if (selected) Color.White else Color(0xFF1B263B)
-    val iconTint = if (selected) Color.White else Color(0xFF45B39D)
+    val containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val iconContainerColor = if (selected) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primaryContainer
+    val iconTint = if (selected) Color.White else MaterialTheme.colorScheme.primary
     
     Surface(
         modifier = modifier
@@ -355,8 +389,8 @@ fun ModeButton(
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         color = containerColor,
-        border = if (!selected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0)) else null,
-        shadowElevation = if (selected) 4.dp else 1.dp
+        border = if (!selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+        tonalElevation = if (selected) 4.dp else 1.dp
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -366,15 +400,15 @@ fun ModeButton(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (selected) Color.White.copy(alpha = 0.2f) else Color(0xFFE8F8F5)),
+                    .background(iconContainerColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = name, tint = iconTint, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column {
-                Text(name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = contentColor)
-                Text(subtitle, fontSize = 10.sp, color = if (selected) Color.White.copy(alpha=0.9f) else Color.Gray, lineHeight = 12.sp)
+                Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = contentColor)
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = if (selected) contentColor.copy(alpha=0.8f) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -398,8 +432,9 @@ fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchCl
             .fillMaxWidth()
             .clickable { onMatchClick() },
         shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        shadowElevation = 2.dp
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -420,19 +455,19 @@ fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchCl
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = event.title,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = Color(0xFF1B263B)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}",
-                    fontSize = 12.sp,
-                    color = Color.Gray,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
             
-            Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = Color.LightGray)
+            Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = MaterialTheme.colorScheme.outline)
         }
     }
 }

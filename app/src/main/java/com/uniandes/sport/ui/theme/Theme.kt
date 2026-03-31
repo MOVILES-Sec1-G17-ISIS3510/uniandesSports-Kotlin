@@ -18,23 +18,34 @@ import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryDark,
-    onPrimary = Color.White,
-    secondary = SecondaryUniandes,
-    onSecondary = PrimaryUniandes,
-    tertiary = TertiaryUniandes,
+    onPrimary = BackgroundDark, // Dark background on vibrant primary looks good
+    primaryContainer = Color(0xFF1E1B4B), // Indigo 950
+    onPrimaryContainer = Color(0xFFC7D2FE), // Indigo 200
+    secondary = SecondaryDark,
+    onSecondary = BackgroundDark,
+    secondaryContainer = Color(0xFF0C4A6E), // Sky 950
+    onSecondaryContainer = Color(0xFFBAE6FD), // Sky 200
+    tertiary = TertiaryDark,
+    onTertiary = BackgroundDark,
+    tertiaryContainer = Color(0xFF134E4A), // Teal 950
+    onTertiaryContainer = Color(0xFF99F6E4), // Teal 200
     background = BackgroundDark,
     surface = SurfaceDark,
-    surfaceVariant = Color(0xFF374151),
-    onBackground = Color.White,
-    onSurface = Color.White,
-    onSurfaceVariant = Color(0xFF9CA3AF)
+    surfaceVariant = SurfaceVariantDark,
+    onBackground = Color(0xFFF1F5F9), // Slate 100
+    onSurface = Color(0xFFF1F5F9), // Slate 100
+    onSurfaceVariant = Color(0xFF94A3B8) // Slate 400
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryUniandes,
     onPrimary = Color.White,
-    secondary = SecondaryUniandes,
-    onSecondary = PrimaryUniandes,
+    primaryContainer = SecondaryUniandes,
+    onPrimaryContainer = PrimaryUniandes,
+    secondary = TertiaryUniandes,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFF1F5F9),
+    onSecondaryContainer = Color(0xFF64748B),
     tertiary = TertiaryUniandes,
     background = BackgroundLight,
     surface = BackgroundLight,
@@ -78,8 +89,8 @@ fun UniandesSportsKotlinTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            window.statusBarColor = colorScheme.background.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 

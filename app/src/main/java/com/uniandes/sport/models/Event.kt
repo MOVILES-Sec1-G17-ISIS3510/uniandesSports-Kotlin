@@ -11,7 +11,7 @@ data class Event(
     var maxParticipants: Long = 0,
     var metadata: Map<String, Any> = emptyMap(),
     var modality: String = "",
-    var participants: List<String> = emptyList(),
+    var membersCount: Long = 0,
     var scheduledAt: Timestamp? = null,
     var sport: String = "",
     var status: String = "",
