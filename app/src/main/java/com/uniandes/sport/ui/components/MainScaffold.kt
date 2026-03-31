@@ -29,6 +29,9 @@ import com.uniandes.sport.ui.theme.ThemeMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
+    initialTabIndex: Int = 0,
+    pendingOpenMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {}
 ) {
@@ -86,6 +89,9 @@ fun MainScaffold(
         ) { innerPadding ->
             AppNavigation(
                 navController = navController, 
+                startTabIndex = initialTabIndex,
+                pendingOpenMatchEventId = pendingOpenMatchEventId,
+                onOpenMatchConsumed = onOpenMatchConsumed,
                 modifier = Modifier.padding(innerPadding),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page
