@@ -9,6 +9,9 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -39,6 +42,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d("FCM", "New FCM token: $token")
         Firebase.messaging.subscribeToTopic("all")
             .addOnFailureListener { e -> Log.e("FCM", "Failed to subscribe to all topic", e) }
+
+        persistTokenForCurrentUser(token)
     }
 
     private fun showLocalNotification(title: String, body: String) {
@@ -81,5 +86,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
+    }
+
+    private fun persistTokenForCurrentUser(token: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .set(
+                mapOf(
+                    "fcmToken" to token,
+                    "fcmTokens" to FieldValue.arrayUnion(token)
+                ),
+                com.google.firebase.firestore.SetOptions.merge()
+            )
+            .addOnFailureListener { e ->
+                Log.e("FCM", "Failed to persist FCM token for user", e)
+            }
     }
 }

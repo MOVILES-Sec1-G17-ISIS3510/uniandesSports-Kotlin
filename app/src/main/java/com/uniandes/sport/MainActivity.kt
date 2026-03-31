@@ -22,6 +22,9 @@ import com.uniandes.sport.viewmodels.storage.DummyStorageViewModel
 import com.uniandes.sport.viewmodels.tweets.DummyTweetsViewModel
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.ktx.analytics
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessaging
 import android.util.Log
@@ -73,6 +76,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         firebaseAnalytics = Firebase.analytics
         askNotificationPermission()
+        syncCurrentUserFcmToken()
         val initialThemeMode = loadThemeMode()
         setContent {
             val themeMode = remember { mutableStateOf(initialThemeMode) }
@@ -134,5 +138,26 @@ class MainActivity : ComponentActivity() {
     private fun saveThemeMode(themeMode: ThemeMode) {
         val prefs = getSharedPreferences(themePrefsName, MODE_PRIVATE)
         prefs.edit().putString(themePrefsKey, themeMode.name).apply()
+    }
+
+    private fun syncCurrentUserFcmToken() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        Firebase.messaging.token
+            .addOnSuccessListener { token ->
+                if (token.isBlank()) return@addOnSuccessListener
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(uid)
+                    .set(
+                        mapOf(
+                            "fcmToken" to token,
+                            "fcmTokens" to FieldValue.arrayUnion(token)
+                        ),
+                        com.google.firebase.firestore.SetOptions.merge()
+                    )
+            }
+            .addOnFailureListener { e ->
+                Log.e("FCM", "Failed to sync current user token", e)
+            }
     }
 }
