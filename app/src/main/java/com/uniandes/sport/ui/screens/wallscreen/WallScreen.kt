@@ -36,7 +36,17 @@ fun WallScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("COMUNIDAD", fontWeight = FontWeight.Black, fontSize = 18.sp) },
+                title = {
+                    Column {
+                        Text("COMMUNITY FEED", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text(
+                            text = "POSTS AND UPDATES",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 actions = {
                     TextButton(onClick = {
                         authViewModel.logout(onSuccess = {
@@ -47,12 +57,12 @@ fun WallScreen(
                             logViewModel.crash(screenName, exception)
                         })
                     }) {
-                        Text(text = "Cerrar Sesión", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text(text = "Sign Out", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },

@@ -55,12 +55,12 @@ fun CoachDashboardScreen(
                 title = { 
                     Column {
                         Text(
-                            "HOLA, ${profesor?.nombre?.uppercase() ?: "COACH"}", 
+                            "Welcome, ${profesor?.nombre ?: "Coach"}",
                             fontWeight = FontWeight.Black, 
                             fontSize = 18.sp
                         )
                         Text(
-                            "PANEL DE ${profesor?.deporte?.uppercase() ?: "DEPORTE"}", 
+                            "${(profesor?.deporte ?: "Sport").uppercase()} DASHBOARD",
                             fontSize = 11.sp, 
                             fontWeight = FontWeight.Bold,
                             color = Color.Gray,
@@ -70,20 +70,20 @@ fun CoachDashboardScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Atrás")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     IconButton(onClick = { 
                         android.widget.Toast.makeText(context, "¡Editar Perfil Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
                     }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Editar Perfil", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Edit, contentDescription = "Edit profile", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },

@@ -106,27 +106,30 @@ fun TopAppBarDynamic(
     var showThemeMenu by remember { mutableStateOf(false) }
 
     val title = when (currentRoute) {
-        Screen.Home.route -> "Buenos días \uD83D\uDC4B"
-        Screen.Retos.route -> "Retos"
+        Screen.Home.route -> "Welcome"
+        Screen.Retos.route -> "Challenges"
         Screen.Play.route -> "Play"
-        Screen.Comunidades.route -> "Social"
-        Screen.Profesores.route -> "Profesores"
-        Screen.Torneos.route -> "Torneos"
+        Screen.Comunidades.route -> "Communities"
+        Screen.Profesores.route -> "Coaches"
+        Screen.Torneos.route -> "Tournaments"
         Screen.Clima.route -> "Weather"
         Screen.Strava.route -> "Strava"
         Screen.Historial.route -> "History"
-        Screen.Perfil.route -> "Perfil de Usuario"
+        Screen.Perfil.route -> "Profile"
         else -> ""
     }
     
     val subtitle = when (currentRoute) {
         Screen.Home.route -> "UNIANDES SPORTS"
-        Screen.Retos.route -> "COMPITE Y MEJORA"
-        Screen.Play.route -> "ENCUENTRA PARTIDO"
+        Screen.Retos.route -> "COMPETE AND IMPROVE"
+        Screen.Play.route -> "FIND YOUR NEXT MATCH"
         Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
-        Screen.Profesores.route -> "APRENDE CON EXPERTOS"
-        Screen.Torneos.route -> "COMPETICIONES"
-        Screen.Perfil.route -> "MI CUENTA"
+        Screen.Profesores.route -> "LEARN FROM EXPERTS"
+        Screen.Torneos.route -> "COMPETITIVE EVENTS"
+        Screen.Clima.route -> "TRAIN SMARTER"
+        Screen.Strava.route -> "PERFORMANCE INSIGHTS"
+        Screen.Historial.route -> "RECENT ACTIVITY"
+        Screen.Perfil.route -> "ACCOUNT SETTINGS"
         else -> ""
     }
 
@@ -183,8 +186,8 @@ fun TopAppBarDynamic(
                 IconButton(onClick = { /* TODO */ }) {
                     Icon(Icons.Default.Search, contentDescription = "Search")
                 }
-                IconButton(onClick = { /* TODO: Histórico de retos */ }) {
-                    Icon(Icons.Default.EventNote, contentDescription = "Historial")
+                IconButton(onClick = { /* TODO: Challenge history */ }) {
+                    Icon(Icons.Default.EventNote, contentDescription = "History")
                 }
             }
         }

@@ -54,11 +54,19 @@ fun BookClassScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Text(
-                        "BOOK A CLASS", 
-                        fontWeight = FontWeight.Black,
-                        fontSize = 18.sp
-                    ) 
+                    Column {
+                        Text(
+                            "Book a Class",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "PERSONAL COACHING REQUEST",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -66,9 +74,9 @@ fun BookClassScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },

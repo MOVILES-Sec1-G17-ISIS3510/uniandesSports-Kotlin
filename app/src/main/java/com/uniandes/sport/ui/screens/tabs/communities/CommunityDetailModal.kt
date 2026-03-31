@@ -218,10 +218,15 @@ fun CommunityDetailModal(
             modifier = Modifier.imePadding(),
             topBar = {
                 androidx.compose.material3.TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     title = {
                         Column {
                             Text(community.name, fontWeight = FontWeight.Bold)
-                            Text("Social", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Community Space", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     },
                     navigationIcon = {
@@ -638,10 +643,15 @@ private fun ChannelRoomScreen(
         contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 title = {
                     Column {
                         Text("#${channel.name}", fontWeight = FontWeight.Bold)
-                        Text(community.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${community.name} Channel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {

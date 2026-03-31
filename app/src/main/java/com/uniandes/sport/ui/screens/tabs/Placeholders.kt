@@ -23,10 +23,20 @@ fun SimplePlaceholderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title.uppercase(), fontWeight = FontWeight.Black, fontSize = 18.sp) },
+                title = {
+                    Column {
+                        Text(title, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text(
+                            "FEATURE PREVIEW",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -40,13 +50,13 @@ fun SimplePlaceholderScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "PRÓXIMAMENTE", 
+                    "COMING SOON", 
                     fontWeight = FontWeight.Black, 
                     fontSize = 24.sp, 
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                 )
                 Text(
-                    "Esta sección de $title está en desarrollo", 
+                    "$title is currently under development",
                     fontSize = 14.sp, 
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
@@ -65,7 +75,7 @@ fun HomeScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Home", o
 // Removed PlayScreen as it now has its own implementation file
 
 @Composable
-fun ComunidadesScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Comunidades", onNavigate)
+fun ComunidadesScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Communities", onNavigate)
 
 @Composable
 fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
@@ -73,7 +83,7 @@ fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
     val authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var isLoggingOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    SimplePlaceholderScreen("Perfil", onNavigate) {
+    SimplePlaceholderScreen("Profile", onNavigate) {
         Button(
             onClick = {
                 isLoggingOut = true
@@ -103,13 +113,13 @@ fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
 }
 
 @Composable
-fun TorneosScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Torneos", onNavigate)
+fun TorneosScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Tournaments", onNavigate)
 
 @Composable
-fun ClimaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Clima", onNavigate)
+fun ClimaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Weather", onNavigate)
 
 @Composable
 fun StravaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Strava", onNavigate)
 
 @Composable
-fun HistorialScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Historial", onNavigate)
+fun HistorialScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("History", onNavigate)
