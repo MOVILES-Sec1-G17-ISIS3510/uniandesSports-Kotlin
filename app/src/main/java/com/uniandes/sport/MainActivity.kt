@@ -95,6 +95,8 @@ class MainActivity : ComponentActivity() {
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
                             onLoginSuccess = {
+                                // Ensure token is saved for the authenticated user immediately after login/register.
+                                syncCurrentUserFcmToken()
                                 navController.navigate(Routes.MAIN_TABS) {
                                     popUpTo(Routes.AUTH_SCREEN) { inclusive = true }
                                 }
