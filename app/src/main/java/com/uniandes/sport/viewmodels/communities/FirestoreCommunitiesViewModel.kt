@@ -1,12 +1,15 @@
 package com.uniandes.sport.viewmodels.communities
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.ktx.messaging
 import com.uniandes.sport.data.local.CachedMemberEntity
 import com.uniandes.sport.data.local.CachedMembershipEntity
 import com.uniandes.sport.data.local.CommunitiesCacheDatabase
@@ -28,6 +31,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
 
     private val db = FirebaseFirestore.getInstance()
     private val cacheDao = CommunitiesCacheDatabase.getInstance(application).cacheDao()
+    private val topicPrefs = application.getSharedPreferences("fcm_topics", Context.MODE_PRIVATE)
 
     private val _communities = MutableStateFlow<List<Community>>(emptyList())
     override val communities: StateFlow<List<Community>> = _communities.asStateFlow()
@@ -78,7 +82,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
             try {
                 // 1. Emit cached memberships first
                 val cachedIds = cacheDao.getMembershipIds(userId).toSet()
-                if (cachedIds.isNotEmpty()) _myCommunityIds.value = cachedIds
+                if (cachedIds.isNotEmpty()) {
+                    _myCommunityIds.value = cachedIds
+                    syncCommunityTopics(cachedIds)
+                }
 
                 // 2. Fetch from Firebase
                 val snapshot = db.collectionGroup("members")
@@ -91,6 +98,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 }.toSet()
 
                 _myCommunityIds.value = ids
+                syncCommunityTopics(ids)
 
                 // 3. Write back to Room
                 cacheDao.clearMemberships(userId)
@@ -234,6 +242,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 val newMember = CommunityMember(id = userId, userId = userId, displayName = displayName, role = "member", joinedAt = now)
                 cacheDao.upsertMembers(listOf(newMember.toEntity(communityId, now)))
 
+                val updatedMemberships = _myCommunityIds.value + communityId
+                _myCommunityIds.value = updatedMemberships
+                syncCommunityTopics(updatedMemberships)
+
                 loadCommunities()
                 loadCommunityDetails(communityId)
                 onSuccess()
@@ -297,6 +309,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 )
                 cacheDao.upsertCommunities(listOf(newCommunity.toEntity(now)))
                 cacheDao.upsertMemberships(listOf(CachedMembershipEntity(ownerId, communityRef.id, now)))
+
+                val updatedMemberships = _myCommunityIds.value + communityRef.id
+                _myCommunityIds.value = updatedMemberships
+                syncCommunityTopics(updatedMemberships)
 
                 loadCommunities()
                 onSuccess()
@@ -749,6 +765,30 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun toCommunityTopic(communityId: String): String {
+        return "community_${communityId.replace(Regex("[^a-zA-Z0-9_-]"), "_")}".take(900)
+    }
+
+    private fun syncCommunityTopics(membershipIds: Set<String>) {
+        val targetTopics = membershipIds.map { toCommunityTopic(it) }.toSet()
+        val savedTopics = topicPrefs.getStringSet("community_topics", emptySet())?.toSet() ?: emptySet()
+
+        val toSubscribe = targetTopics - savedTopics
+        val toUnsubscribe = savedTopics - targetTopics
+
+        toSubscribe.forEach { topic ->
+            Firebase.messaging.subscribeToTopic(topic)
+                .addOnFailureListener { e -> Log.e("FirestoreCommunities", "Topic subscribe failed: $topic", e) }
+        }
+
+        toUnsubscribe.forEach { topic ->
+            Firebase.messaging.unsubscribeFromTopic(topic)
+                .addOnFailureListener { e -> Log.e("FirestoreCommunities", "Topic unsubscribe failed: $topic", e) }
+        }
+
+        topicPrefs.edit().putStringSet("community_topics", targetTopics.toMutableSet()).apply()
     }
 
     override fun onCleared() {
