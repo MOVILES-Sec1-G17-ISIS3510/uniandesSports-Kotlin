@@ -105,8 +105,66 @@ fun TopAppBarDynamic(
 ) {
     var showThemeMenu by remember { mutableStateOf(false) }
 
+    if (currentRoute == Screen.Home.route) {
+        CenterAlignedTopAppBar(
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            navigationIcon = {
+                IconButton(onClick = onProfileClick) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
+                }
+            },
+            title = {
+                Text(
+                    text = "USports",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                )
+            },
+            actions = {
+                Box {
+                    IconButton(onClick = { showThemeMenu = true }) {
+                        val themeIcon = when (themeMode) {
+                            ThemeMode.LIGHT -> Icons.Default.LightMode
+                            ThemeMode.DARK -> Icons.Default.DarkMode
+                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                        }
+                        Icon(themeIcon, contentDescription = "Theme options")
+                    }
+                    DropdownMenu(
+                        expanded = showThemeMenu,
+                        onDismissRequest = { showThemeMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("System Theme") },
+                            onClick = { onThemeChange(ThemeMode.SYSTEM); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.SettingsBrightness, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Light Theme") },
+                            onClick = { onThemeChange(ThemeMode.LIGHT); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.LightMode, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dark Theme") },
+                            onClick = { onThemeChange(ThemeMode.DARK); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.DarkMode, null) }
+                        )
+                    }
+                }
+                IconButton(onClick = { /* TODO: Open app settings screen */ }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
+            }
+        )
+        return
+    }
+
     val title = when (currentRoute) {
-        Screen.Home.route -> "Welcome"
+        Screen.Home.route -> "USports"
         Screen.Retos.route -> "Challenges"
         Screen.Play.route -> "Play"
         Screen.Comunidades.route -> "Communities"
@@ -120,7 +178,7 @@ fun TopAppBarDynamic(
     }
     
     val subtitle = when (currentRoute) {
-        Screen.Home.route -> "UNIANDES SPORTS"
+        Screen.Home.route -> ""
         Screen.Retos.route -> "COMPETE AND IMPROVE"
         Screen.Play.route -> "FIND YOUR NEXT MATCH"
         Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
@@ -148,41 +206,7 @@ fun TopAppBarDynamic(
             }
         },
         actions = {
-            if (currentRoute == Screen.Home.route) {
-                IconButton(onClick = onProfileClick) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurface)
-                }
-                Box {
-                    IconButton(onClick = { showThemeMenu = true }) {
-                        val themeIcon = when (themeMode) {
-                            ThemeMode.LIGHT -> Icons.Default.LightMode
-                            ThemeMode.DARK -> Icons.Default.DarkMode
-                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
-                        }
-                        Icon(themeIcon, contentDescription = "Theme Options")
-                    }
-                    DropdownMenu(
-                        expanded = showThemeMenu,
-                        onDismissRequest = { showThemeMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("System Theme") },
-                            onClick = { onThemeChange(ThemeMode.SYSTEM); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.SettingsBrightness, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Light Theme") },
-                            onClick = { onThemeChange(ThemeMode.LIGHT); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.LightMode, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dark Theme") },
-                            onClick = { onThemeChange(ThemeMode.DARK); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.DarkMode, null) }
-                        )
-                    }
-                }
-            } else if (currentRoute == Screen.Retos.route) {
+            if (currentRoute == Screen.Retos.route) {
                 IconButton(onClick = { /* TODO */ }) {
                     Icon(Icons.Default.Search, contentDescription = "Search")
                 }
