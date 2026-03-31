@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.data.local.CachedMemberEntity
 import com.uniandes.sport.data.local.CachedMembershipEntity
 import com.uniandes.sport.data.local.CommunitiesCacheDatabase
@@ -61,6 +62,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private var activeCommunityId: String? = null
     private var activeChannelId: String? = null
     private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
+    private var channelMessagesListener: ListenerRegistration? = null
 
     init {
         viewModelScope.launch {
@@ -436,33 +438,54 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     override fun loadChannelMessages(communityId: String, channelId: String) {
         viewModelScope.launch {
             try {
+                val isDifferentChannel = communityId != activeCommunityId || channelId != activeChannelId
                 activeCommunityId = communityId
                 activeChannelId = channelId
+
+                if (isDifferentChannel) {
+                    oldestLoadedMessageSnapshot = null
+                }
+
+                channelMessagesListener?.remove()
+                channelMessagesListener = null
 
                 // 1. Emit Room cache immediately
                 val cached = loadCachedRecentMessages(communityId, channelId)
                 if (cached.isNotEmpty()) _channelMessages.value = cached
 
-                // 2. Fetch from Firebase
-                val snapshot = db.collection("communities").document(communityId)
+                // 2. Keep latest messages in real time
+                channelMessagesListener = db.collection("communities").document(communityId)
                     .collection("channels").document(channelId)
                     .collection("messages")
                     .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(20)
-                    .get()
-                    .await()
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e("FirestoreCommunities", "Realtime listener error for channel messages", error)
+                            return@addSnapshotListener
+                        }
 
-                oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
-                _hasMoreOldChannelMessages.value = snapshot.size() >= 20
+                        if (snapshot == null) return@addSnapshotListener
 
-                val messages = snapshot.documents.mapNotNull { doc ->
-                    val m = doc.toObject(ChannelMessage::class.java)
-                    m?.copy(id = doc.id)
-                }.reversed()
-                _channelMessages.value = messages
+                        oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
+                        _hasMoreOldChannelMessages.value = snapshot.size() >= 20
 
-                // 3. Write to Room
-                cacheRecentMessages(communityId, channelId, messages)
+                        val latestMessages = snapshot.documents.mapNotNull { doc ->
+                            val m = doc.toObject(ChannelMessage::class.java)
+                            m?.copy(id = doc.id)
+                        }.reversed()
+
+                        // Preserve already loaded older pages and update the latest window in place.
+                        val merged = (_channelMessages.value + latestMessages)
+                            .distinctBy { it.id }
+                            .sortedBy { it.createdAt }
+
+                        _channelMessages.value = merged
+
+                        viewModelScope.launch {
+                            cacheRecentMessages(communityId, channelId, merged)
+                        }
+                    }
 
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error loading channel messages", e)
@@ -561,7 +584,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 cacheDao.upsertChannelMessages(listOf(newMsg.toEntity(communityId, channelId, now)))
 
                 loadCommunityDetails(communityId)
-                loadChannelMessages(communityId, channelId)
                 onSuccess()
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error sending channel message", e)
@@ -625,7 +647,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     null
                 }.await()
 
-                loadChannelMessages(communityId, channelId)
                 onSuccess()
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error reacting to message", e)
@@ -728,5 +749,11 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    override fun onCleared() {
+        channelMessagesListener?.remove()
+        channelMessagesListener = null
+        super.onCleared()
     }
 }
