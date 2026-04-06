@@ -65,6 +65,14 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             }
     }
 
+    override fun refreshProfesores(onComplete: () -> Unit) {
+        cachedProfesores = null
+        fetchProfesoresFromServerBackground(
+            onSuccess = { onComplete() },
+            onFailure = { onComplete() }
+        )
+    }
+
     private fun fetchProfesoresFromServerBackground(
         onSuccess: (List<Profesor>) -> Unit, 
         onFailure: (Exception) -> Unit
@@ -75,9 +83,16 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             .addOnSuccessListener { snapshot ->
                 val list = snapshot.mapNotNull { doc ->
                     try {
-                        doc.toObject(Profesor::class.java).apply { id = doc.id }
+                        val p = doc.toObject(Profesor::class.java).apply { id = doc.id }
+                        // Automated Database Migration + RAM fix
+                        if (p.disponibilidad == "A convenir") {
+                            p.disponibilidad = "To be agreed"
+                            doc.reference.update("disponibilidad", "To be agreed")
+                        }
+                        p
                     } catch (e: Exception) { null }
                 }
+
                 cachedProfesores = list
                 _profesores.value = list
                 onSuccess(list)
@@ -175,9 +190,66 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             transaction.update(profRef, "totalReviews", newTotal)
             transaction.update(profRef, "rating", newRating)
         }.addOnSuccessListener {
+            val currentList = _profesores.value.toMutableList()
+            val idx = currentList.indexOfFirst { it.id == profesorId }
+            if (idx != -1) {
+                // Calculate again to avoid another DB read just for UI, using the new values
+                val p = currentList[idx]
+                val currentTotal = p.totalReviews
+                val currentRating = p.rating
+                val updatedTotal = currentTotal + 1
+                val updatedRating = ((currentRating * currentTotal) + reviewToSave.rating) / updatedTotal
+                
+                currentList[idx] = p.copy(totalReviews = updatedTotal, rating = updatedRating)
+                _profesores.value = currentList
+                cachedProfesores = currentList
+            }
             onSuccess()
         }.addOnFailureListener { e ->
             Log.e("FirestoreProfesores", "Error adding review", e)
+            onFailure(e)
+        }
+    }
+
+    override fun syncReviewsCount(
+        profesorId: String,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val profRef = db.collection("profesores").document(profesorId)
+        val reviewsRef = profRef.collection("reviews")
+
+        reviewsRef.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener { snapshot ->
+            val realCount = snapshot.size()
+            var totalRating = 0.0
+
+            for (doc in snapshot) {
+                totalRating += doc.getDouble("rating") ?: 0.0
+            }
+
+            val newRating = if (realCount > 0) totalRating / realCount else 0.0
+
+            profRef.update(
+                mapOf(
+                    "totalReviews" to realCount,
+                    "rating" to newRating
+                )
+            ).addOnSuccessListener {
+                val currentList = _profesores.value.toMutableList()
+                val idx = currentList.indexOfFirst { it.id == profesorId }
+                if (idx != -1) {
+                    val p = currentList[idx]
+                    currentList[idx] = p.copy(totalReviews = realCount, rating = newRating)
+                    _profesores.value = currentList
+                    cachedProfesores = currentList
+                }
+                onSuccess()
+            }.addOnFailureListener { e ->
+                Log.e("FirestoreProfesores", "Error syncing reviews on profRef update", e)
+                onFailure(e)
+            }
+        }.addOnFailureListener { e ->
+            Log.e("FirestoreProfesores", "Error syncing reviews on get", e)
             onFailure(e)
         }
     }

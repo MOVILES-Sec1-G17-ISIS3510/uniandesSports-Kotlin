@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
@@ -20,6 +21,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     override val events: StateFlow<List<Event>> = _events.asStateFlow()
 
+    private val _finishedEvents = MutableStateFlow<List<Event>>(emptyList())
+    override val finishedEvents: StateFlow<List<Event>> = _finishedEvents.asStateFlow()
+
     private val _members = MutableStateFlow<List<com.uniandes.sport.models.MatchMember>>(emptyList())
     override val members: StateFlow<List<com.uniandes.sport.models.MatchMember>> = _members.asStateFlow()
 
@@ -28,6 +32,11 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
     private val _selectedSport = MutableStateFlow<String?>(null)
     override val selectedSport: StateFlow<String?> = _selectedSport.asStateFlow()
+
+    private val _joinedEventIds = MutableStateFlow<Set<String>>(emptySet())
+    override val joinedEventIds: StateFlow<Set<String>> = _joinedEventIds.asStateFlow()
+
+    private var joinedEventsListener: ListenerRegistration? = null
 
     override val currentUserId: String?
         get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
@@ -39,6 +48,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.cachedEvents.collect { list ->
                 _rawEvents.value = list
                 applyCurrentStrategy()
+                updateFinishedEvents()
             }
         }
         viewModelScope.launch {
@@ -46,12 +56,42 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                 _isLoading.value = loading
             }
         }
+        observeCurrentUserJoinedEvents()
         fetchEvents()
+    }
+
+    private fun observeCurrentUserJoinedEvents() {
+        val uid = currentUserId
+        if (uid.isNullOrBlank()) {
+            _joinedEventIds.value = emptySet()
+            return
+        }
+
+        joinedEventsListener?.remove()
+        joinedEventsListener = db.collectionGroup("members")
+            .whereEqualTo("userId", uid)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("PlayVM", "Error listening joined events: ${e.message}")
+                    return@addSnapshotListener
+                }
+
+                val joined = snapshot?.documents
+                    ?.mapNotNull { it.reference.parent.parent?.id }
+                    ?.toSet()
+                    ?: emptySet()
+                _joinedEventIds.value = joined
+            }
     }
 
     override fun fetchEvents() {
         // TÁCTICA DE DESEMPEÑO: Delegamos al CacheProxy para ahorrar Network calls redundantes
         com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded()
+    }
+
+    override fun refreshEvents() {
+        com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+        com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
     }
 
     override fun setSportFilter(sport: String?) {
@@ -66,6 +106,16 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
     private fun applyCurrentStrategy() {
         _events.value = currentFilterStrategy.filter(_rawEvents.value)
+    }
+
+    private fun updateFinishedEvents() {
+        val now = com.google.firebase.Timestamp.now()
+        _finishedEvents.value = _rawEvents.value
+            .filter {
+                it.status == "active" &&
+                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) <= now
+            }
+            .sortedByDescending { it.scheduledAt }
     }
 
     override fun fetchMembers(eventId: String) {
@@ -117,6 +167,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             }
         }.addOnSuccessListener {
             Log.d("PlayVM", "User $userId successfully JOINED event $eventId")
+            _joinedEventIds.value = _joinedEventIds.value + eventId
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
@@ -177,6 +228,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             batch.commit()
                 .addOnSuccessListener { 
                     Log.d("PlayVM", "Batch commit SUCCESS: Event and Organizer created.")
+                    _joinedEventIds.value = _joinedEventIds.value + event.id
                     com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
                     com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
                     onSuccess() 
@@ -204,5 +256,10 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
         }.addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        joinedEventsListener?.remove()
     }
 }
