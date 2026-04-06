@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -913,10 +915,11 @@ private fun ReviewDialog(
     var reviewText by remember(existingReview?.text) { mutableStateOf(existingReview?.text.orEmpty()) }
     var rating by remember(existingReview?.rating) { mutableIntStateOf(existingReview?.rating ?: 0) }
     var submitting by remember { mutableStateOf(false) }
-    var inputSource by remember { mutableStateOf("text") }
+    var inputSource by remember { mutableStateOf(existingReview?.source ?: "text") }
     var members by remember { mutableStateOf<List<com.uniandes.sport.models.MatchMember>>(emptyList()) }
     var loadingMembers by remember { mutableStateOf(true) }
     val attendanceByUserId = remember { mutableStateMapOf<String, Boolean>() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(event.id, existingReview?.attendanceByUserId) {
         loadingMembers = true
@@ -955,95 +958,164 @@ private fun ReviewDialog(
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = {
-            Text("Review: ${event.title}")
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Match review",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                 ) {
-                    Text("Rating", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    (1..5).forEach { star ->
-                        IconButton(
-                            onClick = { rating = star },
-                            modifier = Modifier.size(28.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Rate the match", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = "Star $star",
-                                tint = if (star <= rating) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
+                            (1..5).forEach { star ->
+                                FilledIconButton(
+                                    onClick = { rating = star },
+                                    modifier = Modifier.size(34.dp),
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "Star $star",
+                                        tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (rating == 0) "Select" else "$rating/5",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                OutlinedTextField(
-                    value = reviewText,
-                    onValueChange = {
-                        reviewText = it
-                        inputSource = "text"
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 4,
-                    maxLines = 6,
-                    placeholder = { Text("How was this match?") }
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Attendance", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                if (loadingMembers) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else if (members.isEmpty()) {
-                    Text("No members found for this match", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        members.forEach { member ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val current = attendanceByUserId[member.userId] ?: false
-                                        attendanceByUserId[member.userId] = !current
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Your review", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
                                     }
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    try {
+                                        speechLauncher.launch(intent)
+                                    } catch (_: Exception) {
+                                        android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                             ) {
-                                Checkbox(
-                                    checked = attendanceByUserId[member.userId] == true,
-                                    onCheckedChange = { checked -> attendanceByUserId[member.userId] = checked }
-                                )
-                                Text(
-                                    text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Voice")
                             }
+                        }
+
+                        OutlinedTextField(
+                            value = reviewText,
+                            onValueChange = {
+                                reviewText = it
+                                inputSource = "text"
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 7,
+                            placeholder = { Text("Tell us what happened in this match") }
+                        )
+
+                        if (inputSource == "microphone") {
+                            AssistChip(onClick = {}, label = { Text("Voice input") })
                         }
                     }
                 }
 
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
-                            }
-                            try {
-                                speechLauncher.launch(intent)
-                            } catch (_: Exception) {
-                                android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Attendance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            if (loadingMembers) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             }
                         }
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = "Mic")
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Use microphone")
-                    }
 
-                    if (inputSource == "microphone") {
-                        AssistChip(onClick = {}, label = { Text("Voice input") })
+                        if (!loadingMembers && members.isEmpty()) {
+                            Text("No members found for this match", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        members.forEach { member ->
+                            val checked = attendanceByUserId[member.userId] == true
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    attendanceByUserId[member.userId] = !checked
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (checked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { value -> attendanceByUserId[member.userId] = value }
+                                    )
+                                    Text(
+                                        text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (member.userId == viewModel.currentUserId) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
