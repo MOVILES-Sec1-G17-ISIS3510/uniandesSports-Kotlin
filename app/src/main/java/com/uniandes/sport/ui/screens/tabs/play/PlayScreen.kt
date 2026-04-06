@@ -125,8 +125,8 @@ fun PlayScreen(
         }
     }
 
-    LaunchedEffect(events, inProgressEvents, finishedEvents) {
-        val ids = (events + inProgressEvents + finishedEvents).map { it.id }.distinct()
+    LaunchedEffect(inProgressEvents, finishedEvents) {
+        val ids = (inProgressEvents + finishedEvents).map { it.id }.distinct()
         viewModel.fetchMyReviewsForEvents(ids)
     }
 
@@ -333,8 +333,6 @@ fun PlayScreen(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
                                     urgency = urgency,
-                                    reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
-                                    onReviewClick = { reviewEvent = event },
                                     onClick = { onMatchSelected(event) }
                                 )
                             }
@@ -404,8 +402,6 @@ fun PlayScreen(
                         val uiModel = EventUIAdapter.toUIModel(event)
                         MatchCard(
                             uiModel = uiModel,
-                            reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
-                            onReviewClick = { reviewEvent = event },
                             onMatchClick = { onMatchSelected(event) }
                         )
                     }
