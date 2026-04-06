@@ -68,25 +68,16 @@ fun ChallengesScreen(
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showDialog = true },
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = MaterialTheme.colorScheme.onTertiary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Challenge")
-            }
-        }
-    ) { padding ->
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .background(Color(0xFFF8F9FA)),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
         ) {
+
             // --- SECTION: ACTIVE CHALLENGES ---
             if (activeChallenges.isNotEmpty()) {
                 item {
@@ -179,7 +170,21 @@ fun ChallengesScreen(
                 }
             }
         }
+        
+        FloatingActionButton(
+            onClick = { showDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New Challenge")
+        }
+
     }
+
 
     if (selectedReto != null) {
         ChallengeDetailModal(

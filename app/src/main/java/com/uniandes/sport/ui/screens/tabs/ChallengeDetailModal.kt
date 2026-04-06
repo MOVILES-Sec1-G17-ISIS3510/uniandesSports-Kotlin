@@ -139,10 +139,13 @@ fun ChallengeDetailModal(
                             onClick = { showConfirmLeave = true },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE74C3C))
                         ) {
+                            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text("LEAVE CHALLENGE", fontWeight = FontWeight.Black)
                         }
+
                     } else {
                         Button(
                             onClick = { 
@@ -164,18 +167,19 @@ fun ChallengeDetailModal(
     if (showConfirmLeave) {
         AlertDialog(
             onDismissRequest = { showConfirmLeave = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { 
                 Text(
-                    "Leave Challenge?", 
+                    "LEAVE CHALLENGE?", 
                     fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.headlineSmall
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color(0xFFE74C3C)
                 ) 
             },
             text = { 
                 Text(
                     "You're doing great so far! Are you sure you want to leave? All your progress will be lost and cannot be recovered.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 ) 
             },
             confirmButton = {
@@ -185,23 +189,23 @@ fun ChallengeDetailModal(
                         showConfirmLeave = false
                         onDismiss()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE74C3C)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("YES, LEAVE", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                Button(
-                    onClick = { showConfirmLeave = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("KEEP GOING", fontWeight = FontWeight.Bold)
+                TextButton(onClick = { showConfirmLeave = false }) {
+                    Text("KEEP GOING", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                 }
             },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = Color.White
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
         )
     }
+
 }
 
 @Composable

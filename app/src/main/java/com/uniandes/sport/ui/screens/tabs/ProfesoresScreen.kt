@@ -95,29 +95,13 @@ fun ProfesoresScreen(
         profesores.filter { it.deporte == selectedFilter }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { isFabExpanded = !isFabExpanded },
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Menu",
-                    modifier = Modifier.rotate(rotation)
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding).pullRefresh(pullRefreshState)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+    Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+
             // Sport Filter
             LazyRow(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -175,17 +159,15 @@ fun ProfesoresScreen(
         if (isFabExpanded) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { isFabExpanded = false },
+                        .fillMaxSize(),
                     contentAlignment = Alignment.BottomEnd
                 ) {
                     Column(
-                        modifier = Modifier.padding(end = 16.dp, bottom = 80.dp),
+                        modifier = Modifier.padding(end = 20.dp, bottom = 100.dp),
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+
                         FabMenuItem(
                             text = "Book Class",
                             icon = Icons.Default.CalendarToday,
@@ -234,8 +216,27 @@ fun ProfesoresScreen(
                 contentColor = MaterialTheme.colorScheme.primary,
                 backgroundColor = MaterialTheme.colorScheme.surface
             )
+
+            // Standardized FAB
+            FloatingActionButton(
+                onClick = { isFabExpanded = !isFabExpanded },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 20.dp),
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Menu",
+                    modifier = Modifier.rotate(rotation)
+                )
+            }
         }
-    }
+
+
 
     // Coach Detail Modal
     selectedProfesor?.let { prof ->

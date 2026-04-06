@@ -309,6 +309,22 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         }
     }
 
+    override fun leaveEvent(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        // Semánticamente igual a kickMember pero para uno mismo
+        kickMember(eventId, userId, onSuccess, onError)
+    }
+
+    override fun cancelEvent(eventId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        db.collection("events").document(eventId)
+            .update("status", "cancelled")
+            .addOnSuccessListener {
+                com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+                com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+                onSuccess()
+            }
+            .addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
+    }
+
     override fun createEvent(
         title: String,
         description: String,
@@ -318,6 +334,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         scheduledAt: java.util.Date,
         skillLevel: String,
         maxParticipants: Long,
+        shouldJoin: Boolean,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
@@ -344,23 +361,29 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             // Atómicamente crear el evento y el primer miembro usando un Batch
             val eventDoc = db.collection("events").document()
             event.id = eventDoc.id
-            val memberDoc = eventDoc.collection("members").document(uid)
             val batch = db.batch()
             
             batch.set(eventDoc, event)
-            val organizer = com.uniandes.sport.models.MatchMember(
-                userId = uid,
-                displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
-                joinedAt = System.currentTimeMillis(),
-                role = "organizer"
-            )
-            batch.set(memberDoc, organizer)
+            
+            if (shouldJoin) {
+                val memberDoc = eventDoc.collection("members").document(uid)
+                val organizer = com.uniandes.sport.models.MatchMember(
+                    userId = uid,
+                    displayName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "Organizer",
+                    joinedAt = System.currentTimeMillis(),
+                    role = "organizer"
+                )
+                batch.set(memberDoc, organizer)
+            }
+
             
             Log.d("PlayVM", "Committing batch for event creation...")
             batch.commit()
                 .addOnSuccessListener { 
-                    Log.d("PlayVM", "Batch commit SUCCESS: Event and Organizer created.")
-                    _joinedEventIds.value = _joinedEventIds.value + event.id
+                    Log.d("PlayVM", "Batch commit SUCCESS: Event creation finished (shouldJoin=$shouldJoin).")
+                    if (shouldJoin) {
+                        _joinedEventIds.value = _joinedEventIds.value + event.id
+                    }
                     com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
                     com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
                     onSuccess() 

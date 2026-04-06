@@ -175,7 +175,7 @@ fun PlayScreen(
             sport = selectedSport!!,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel, maxParticipants, dialogOnSuccess, dialogOnError ->
+            onCreate = { title, location, description, date, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
                     description = description,
@@ -185,6 +185,7 @@ fun PlayScreen(
                     scheduledAt = date,
                     skillLevel = skillLevel,
                     maxParticipants = maxParticipants,
+                    shouldJoin = shouldJoin,
                     onSuccess = { 
                         // Analytics Engine: BQ4 (Registration / Funnel Conversion tracking)
                         logViewModel.log(
@@ -211,6 +212,7 @@ fun PlayScreen(
             }
         )
     }
+
 
     Box(
         modifier = Modifier
@@ -537,7 +539,27 @@ fun PlayScreen(
             backgroundColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary
         )
+
+        // Standardized FAB for creating matches
+        FloatingActionButton(
+            onClick = { 
+                if (selectedSport == null || selectedMode == null) {
+                    android.widget.Toast.makeText(context, "Please select a sport and mode first!", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    showCreateDialog = true 
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = Color.White,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Create Match")
+        }
     }
+
 }
 
 private fun formatRemainingTime(event: com.uniandes.sport.models.Event, nowMillis: Long): String {
