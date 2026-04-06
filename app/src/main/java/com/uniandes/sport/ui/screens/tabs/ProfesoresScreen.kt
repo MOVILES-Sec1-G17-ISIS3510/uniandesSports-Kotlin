@@ -172,7 +172,7 @@ fun ProfesoresScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         FabMenuItem(
-                            text = "Agendar Clase",
+                            text = "Book Class",
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
@@ -180,13 +180,13 @@ fun ProfesoresScreen(
                                 if (firstProfId != null) {
                                     onNavigate("book_class/$firstProfId")
                                 } else {
-                                    android.widget.Toast.makeText(context, "No hay profesores disponibles", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "No coaches available", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
                         if (isCurrentUserCoach) {
                             FabMenuItem(
-                                text = "Mi Panel de Profe",
+                                text = "My Coach Dashboard",
                                 icon = Icons.Default.Dashboard,
                                 onClick = { 
                                     isFabExpanded = false
@@ -194,7 +194,7 @@ fun ProfesoresScreen(
                                     try {
                                         onNavigate(targetDash)
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Error Nav: ${e.message}", Toast.LENGTH_LONG).show()
+                                        android.widget.Toast.makeText(context, "Nav Error: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             )
