@@ -21,6 +21,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     override val events: StateFlow<List<Event>> = _events.asStateFlow()
 
+    private val _inProgressEvents = MutableStateFlow<List<Event>>(emptyList())
+    override val inProgressEvents: StateFlow<List<Event>> = _inProgressEvents.asStateFlow()
+
     private val _finishedEvents = MutableStateFlow<List<Event>>(emptyList())
     override val finishedEvents: StateFlow<List<Event>> = _finishedEvents.asStateFlow()
 
@@ -48,6 +51,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.cachedEvents.collect { list ->
                 _rawEvents.value = list
                 applyCurrentStrategy()
+                updateInProgressEvents()
                 updateFinishedEvents()
             }
         }
@@ -108,14 +112,52 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         _events.value = currentFilterStrategy.filter(_rawEvents.value)
     }
 
+    private fun updateInProgressEvents() {
+        val now = com.google.firebase.Timestamp.now()
+        val oneHourAgo = com.google.firebase.Timestamp((now.seconds - 3600).coerceAtLeast(0L), now.nanoseconds)
+        _inProgressEvents.value = _rawEvents.value
+            .filter {
+                it.status == "active" &&
+                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) <= now &&
+                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) >= oneHourAgo
+            }
+            .sortedByDescending { it.scheduledAt }
+    }
+
     private fun updateFinishedEvents() {
         val now = com.google.firebase.Timestamp.now()
+        val oneHourAgo = com.google.firebase.Timestamp((now.seconds - 3600).coerceAtLeast(0L), now.nanoseconds)
         _finishedEvents.value = _rawEvents.value
             .filter {
                 it.status == "active" &&
-                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) <= now
+                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) < oneHourAgo
             }
             .sortedByDescending { it.scheduledAt }
+    }
+
+    override fun submitReview(eventId: String, reviewText: String, source: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        val text = reviewText.trim()
+        if (text.isBlank()) {
+            onError(IllegalArgumentException("Review text cannot be empty"))
+            return
+        }
+
+        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        val payload = mapOf(
+            "eventId" to eventId,
+            "userId" to (user?.uid ?: "anonymous"),
+            "userEmail" to (user?.email ?: ""),
+            "text" to text,
+            "source" to source,
+            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+        )
+
+        db.collection("events")
+            .document(eventId)
+            .collection("reviews")
+            .add(payload)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { e -> onError(e as? Exception ?: Exception(e.message)) }
     }
 
     override fun fetchMembers(eventId: String) {

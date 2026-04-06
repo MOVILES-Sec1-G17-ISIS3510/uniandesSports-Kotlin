@@ -1,5 +1,7 @@
 package com.uniandes.sport.ui.screens.tabs.play
 
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -26,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
@@ -40,6 +45,7 @@ fun PlayScreen(
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
+    val inProgressEvents by viewModel.inProgressEvents.collectAsState()
     val finishedEvents by viewModel.finishedEvents.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
@@ -51,6 +57,7 @@ fun PlayScreen(
     var showAllJoinedMatches by remember { mutableStateOf(false) }
     var showAllFinishedMatches by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    var reviewEvent by remember { mutableStateOf<com.uniandes.sport.models.Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
@@ -128,6 +135,28 @@ fun PlayScreen(
         )
     }
 
+    if (reviewEvent != null) {
+        ReviewDialog(
+            event = reviewEvent!!,
+            onDismiss = { reviewEvent = null },
+            onSubmit = { text, source, onDone ->
+                viewModel.submitReview(
+                    eventId = reviewEvent!!.id,
+                    reviewText = text,
+                    source = source,
+                    onSuccess = {
+                        android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
+                        onDone(true)
+                    },
+                    onError = { e ->
+                        android.widget.Toast.makeText(context, "Could not save review: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        onDone(false)
+                    }
+                )
+            }
+        )
+    }
+
     if (showCreateDialog && selectedSport != null && selectedMode != null) {
         CreateMatchDialog(
             sport = selectedSport!!,
@@ -181,6 +210,32 @@ fun PlayScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            if (inProgressEvents.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "IN PROGRESS NOW",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Matches started less than 1 hour ago",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                items(inProgressEvents, key = { it.id }) { event ->
+                    val uiModel = EventUIAdapter.toUIModel(event)
+                    MatchCard(
+                        uiModel = uiModel,
+                        badgeText = "IN PROGRESS",
+                        onMatchClick = { onMatchSelected(event) }
+                    )
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -367,6 +422,7 @@ fun PlayScreen(
                             uiModel = uiModel,
                             highlighted = false,
                             badgeText = "FINISHED",
+                            onReviewClick = { reviewEvent = event },
                             onMatchClick = { onMatchSelected(event) }
                         )
                     }
@@ -729,6 +785,7 @@ fun MatchCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     highlighted: Boolean = false,
     badgeText: String? = null,
+    onReviewClick: (() -> Unit)? = null,
     onMatchClick: () -> Unit = {}
 ) {
     val event = uiModel.rawEvent
@@ -796,9 +853,118 @@ fun MatchCard(
                         )
                     }
                 }
+
+                if (onReviewClick != null) {
+                    TextButton(
+                        onClick = onReviewClick,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Write review", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             
             Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = MaterialTheme.colorScheme.outline)
         }
     }
+}
+
+@Composable
+private fun ReviewDialog(
+    event: com.uniandes.sport.models.Event,
+    onDismiss: () -> Unit,
+    onSubmit: (text: String, source: String, onDone: (Boolean) -> Unit) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var reviewText by remember { mutableStateOf("") }
+    var submitting by remember { mutableStateOf(false) }
+    var inputSource by remember { mutableStateOf("text") }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+            if (spoken.isNotBlank()) {
+                reviewText = spoken
+                inputSource = "microphone"
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = {
+            Text("Review: ${event.title}")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = reviewText,
+                    onValueChange = {
+                        reviewText = it
+                        inputSource = "text"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 6,
+                    placeholder = { Text("How was this match?") }
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
+                            }
+                            try {
+                                speechLauncher.launch(intent)
+                            } catch (_: Exception) {
+                                android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Mic, contentDescription = "Mic")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Use microphone")
+                    }
+
+                    if (inputSource == "microphone") {
+                        AssistChip(onClick = {}, label = { Text("Voice input") })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = reviewText.isNotBlank() && !submitting,
+                onClick = {
+                    submitting = true
+                    onSubmit(reviewText, inputSource) { success ->
+                        submitting = false
+                        if (success) onDismiss()
+                    }
+                }
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!submitting) onDismiss() }) {
+                Text("Cancel")
+            }
+        }
+    )
 }
