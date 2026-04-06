@@ -64,7 +64,7 @@ fun CoachDashboardScreen(
                             "${(profesor?.deporte ?: "Sport").uppercase()} DASHBOARD",
                             fontSize = 11.sp, 
                             fontWeight = FontWeight.Bold,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             letterSpacing = 1.sp
                         )
                     }
@@ -91,7 +91,7 @@ fun CoachDashboardScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         if (profesor == null) {
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
@@ -147,7 +147,7 @@ fun CoachDashboardScreen(
                             Text("SESIONES", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
-                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(Color.White.copy(alpha = 0.2f)))
+                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("PRÓXIMO PAGO", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text("FIN DE MES", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
@@ -161,7 +161,7 @@ fun CoachDashboardScreen(
                 "RESUMEN DE RENDIMIENTO", 
                 fontWeight = FontWeight.Black, 
                 fontSize = 13.sp, 
-                color = Color.Gray, 
+                color = MaterialTheme.colorScheme.onSurfaceVariant, 
                 letterSpacing = 1.sp
             )
             
@@ -201,7 +201,7 @@ fun CoachDashboardScreen(
             // Manage Schedule Action
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth().clickable { 
                     android.widget.Toast.makeText(context, "¡Gestor de Horarios Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
@@ -221,8 +221,8 @@ fun CoachDashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
-                            Text("Gestionar Horario", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.Black)
-                            Text("Configura tu disponibilidad", fontSize = 12.sp, color = Color.Gray)
+                            Text("Gestionar Horario", fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Configura tu disponibilidad", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Icon(
@@ -241,7 +241,7 @@ fun CoachDashboardScreen(
 fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Color, modifier: Modifier = Modifier) {
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
     ) {
@@ -254,10 +254,10 @@ fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Co
                     Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(16.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Text(title.uppercase(), color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                Text(title.uppercase(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.Black)
+            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
