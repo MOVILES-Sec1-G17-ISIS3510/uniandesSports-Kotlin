@@ -19,8 +19,8 @@ fun AppNavigation(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
     startTabIndex: Int = 0,
-    pendingOpenMatchEventId: String? = null,
-    onOpenMatchConsumed: () -> Unit = {},
+    pendingOpenEventId: String? = null,
+    onOpenEventConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit = {},
     searchQuery: String = ""
 ) {
@@ -63,8 +63,8 @@ fun AppNavigation(
             val initialPage = backStackEntry.arguments?.getInt("initialPage") ?: 0
             MainTabsScreen(
                 initialPage = initialPage,
-                pendingOpenMatchEventId = pendingOpenMatchEventId,
-                onOpenMatchConsumed = onOpenMatchConsumed,
+                pendingOpenEventId = pendingOpenEventId,
+                onOpenEventConsumed = onOpenEventConsumed,
                 onPageChanged = onPageChanged,
                 onNavigate = { route -> navController.navigate(route) },
                 searchQuery = searchQuery
@@ -131,3 +131,4 @@ fun AppNavigation(
         }
     }
 }
+

@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
     private val themePrefsName = "app_prefs"
     private val themePrefsKey = "theme_mode"
     private val initialTabState = mutableStateOf(0)
-    private val pendingOpenMatchEventIdState = mutableStateOf<String?>(null)
+    private val pendingOpenEventIdState = mutableStateOf<String?>(null)
 
     companion object {
         const val EXTRA_NOTIFICATION_TYPE = "notification_type"
@@ -109,8 +109,8 @@ class MainActivity : ComponentActivity() {
                     composable(Routes.MAIN_TABS) {
                         MainScaffold(
                             initialTabIndex = initialTabState.value,
-                            pendingOpenMatchEventId = pendingOpenMatchEventIdState.value,
-                            onOpenMatchConsumed = { pendingOpenMatchEventIdState.value = null },
+                            pendingOpenEventId = pendingOpenEventIdState.value,
+                            onOpenEventConsumed = { pendingOpenEventIdState.value = null },
                             themeMode = themeMode.value,
                             onThemeChange = {
                                 themeMode.value = it
@@ -184,8 +184,9 @@ class MainActivity : ComponentActivity() {
             val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
             if (!eventId.isNullOrBlank()) {
                 initialTabState.value = PLAY_TAB_INDEX
-                pendingOpenMatchEventIdState.value = eventId
+                pendingOpenEventIdState.value = eventId
             }
         }
     }
 }
+

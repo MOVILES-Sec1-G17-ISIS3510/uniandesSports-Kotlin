@@ -33,8 +33,8 @@ import com.uniandes.sport.ui.theme.ThemeMode
 @Composable
 fun MainScaffold(
     initialTabIndex: Int = 0,
-    pendingOpenMatchEventId: String? = null,
-    onOpenMatchConsumed: () -> Unit = {},
+    pendingOpenEventId: String? = null,
+    onOpenEventConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {},
     onExitApp: () -> Unit = {}
@@ -64,8 +64,8 @@ fun MainScaffold(
     }
 
     // React to notification deep-links even when the app is already running.
-    LaunchedEffect(pendingOpenMatchEventId) {
-        if (!pendingOpenMatchEventId.isNullOrBlank()) {
+    LaunchedEffect(pendingOpenEventId) {
+        if (!pendingOpenEventId.isNullOrBlank()) {
             navController.navigate("main_tabs/$playTabIndex") {
                 popUpTo(navController.graph.startDestinationId) { saveState = true }
                 launchSingleTop = true
@@ -155,8 +155,8 @@ fun MainScaffold(
             AppNavigation(
                 navController = navController, 
                 startTabIndex = initialTabIndex,
-                pendingOpenMatchEventId = pendingOpenMatchEventId,
-                onOpenMatchConsumed = onOpenMatchConsumed,
+                pendingOpenEventId = pendingOpenEventId,
+                onOpenEventConsumed = onOpenEventConsumed,
                 modifier = Modifier.padding(innerPadding),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page
@@ -423,3 +423,4 @@ fun FabMenuItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVec
         }
     }
 }
+

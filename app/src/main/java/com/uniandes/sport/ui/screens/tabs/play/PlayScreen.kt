@@ -37,12 +37,17 @@ import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
-@OptIn(ExperimentalMaterialApi::class)
+import com.uniandes.sport.ui.components.FabMenuItem
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.draw.rotate
+
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
-    openMatchEventId: String? = null,
-    onOpenMatchConsumed: () -> Unit = {},
+    openEventId: String? = null,
+    onOpenEventConsumed: () -> Unit = {},
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
@@ -57,8 +62,9 @@ fun PlayScreen(
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var isPullRefreshing by remember { mutableStateOf(false) }
-    var showAllJoinedMatches by remember { mutableStateOf(false) }
-    var showAllFinishedMatches by remember { mutableStateOf(false) }
+    var isFabExpanded by remember { mutableStateOf(false) }
+    var showAllJoinedEvents by remember { mutableStateOf(false) }
+    var showAllFinishedEvents by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     var reviewEvent by remember { mutableStateOf<com.uniandes.sport.models.Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -75,17 +81,17 @@ fun PlayScreen(
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
-    val visibleJoinedEvents = remember(joinedEvents, showAllJoinedMatches) {
-        if (showAllJoinedMatches) joinedEvents else joinedEvents.take(2)
+    val visibleJoinedEvents = remember(joinedEvents, showAllJoinedEvents) {
+        if (showAllJoinedEvents) joinedEvents else joinedEvents.take(2)
     }
-    val visibleFinishedEvents = remember(finishedEvents, showAllFinishedMatches) {
-        if (showAllFinishedMatches) finishedEvents else finishedEvents.take(2)
+    val visibleFinishedEvents = remember(finishedEvents, showAllFinishedEvents) {
+        if (showAllFinishedEvents) finishedEvents else finishedEvents.take(2)
     }
 
-    val onMatchSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
+    val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
         logViewModel.log(
             screen = "PlayScreen",
-            action = "MATCH_VIEWED",
+            action = "EVENT_VIEWED",
             params = mapOf(
                 "sport_category" to event.sport,
                 "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
@@ -109,21 +115,21 @@ fun PlayScreen(
         }
     }
 
-    // If a deep-link asks to open a specific match, clear sport filter to avoid hiding it.
-    LaunchedEffect(openMatchEventId) {
-        if (!openMatchEventId.isNullOrBlank() && selectedSport != null) {
+    // If a deep-link asks to open a specific Event, clear sport filter to avoid hiding it.
+    LaunchedEffect(openEventId) {
+        if (!openEventId.isNullOrBlank() && selectedSport != null) {
             viewModel.setSportFilter(null)
         }
     }
 
-    LaunchedEffect(openMatchEventId, events) {
-        val pendingId = openMatchEventId ?: return@LaunchedEffect
+    LaunchedEffect(openEventId, events) {
+        val pendingId = openEventId ?: return@LaunchedEffect
         if (events.isEmpty()) return@LaunchedEffect
 
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
-            onOpenMatchConsumed()
+            onOpenEventConsumed()
         }
     }
 
@@ -133,7 +139,7 @@ fun PlayScreen(
     }
 
     if (selectedEventUIModel != null) {
-        MatchDetailModal(
+        EventDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
             onDismiss = {
@@ -170,17 +176,18 @@ fun PlayScreen(
         )
     }
 
-    if (showCreateDialog && selectedSport != null && selectedMode != null) {
-        CreateMatchDialog(
-            sport = selectedSport!!,
+    if (showCreateDialog && selectedMode != null) {
+        val creationSport = selectedSport ?: "soccer" // Default to soccer if no filter active
+        CreateEventDialog(
+            sport = creationSport,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
+            onCreate = { finalSport, title, location, description, date, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
                     description = description,
                     location = location,
-                    sport = selectedSport!!,
+                    sport = finalSport,
                     modality = selectedMode!!,
                     scheduledAt = date,
                     skillLevel = skillLevel,
@@ -194,17 +201,16 @@ fun PlayScreen(
                             params = mapOf(
                                 "source" to "organic",
                                 "challenge_type" to selectedMode!!,
-                                "sport_category" to selectedSport!!
+                                "sport_category" to finalSport
                             )
                         )
                         dialogOnSuccess()
-                        showCreateDialog = false 
                     },
                     onError = { e ->
                         dialogOnError(e)
                         android.widget.Toast.makeText(
                             context, 
-                            "Error creating match: ${e.message}", 
+                            "Error creating event: ${e.message}", 
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
@@ -222,9 +228,47 @@ fun PlayScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // New Compact Sport Filter
+            item {
+                Text(
+                    text = "EXPLORE BY SPORT",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
+                    val categories = listOf(
+                        "soccer" to Icons.Default.SportsSoccer,
+                        "basketball" to Icons.Default.SportsBasketball,
+                        "tennis" to Icons.Default.SportsTennis,
+                        "calisthenics" to Icons.Default.FitnessCenter,
+                        "running" to Icons.Default.DirectionsRun
+                    )
+                    
+                    items(categories) { (name, icon) ->
+                        val isSelected = selectedSport == name
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setSportFilter(if (isSelected) null else name) },
+                            label = { Text(name.replaceFirstChar { it.uppercase() }) },
+                            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        )
+                    }
+                }
+            }
+
             if (inProgressEvents.isNotEmpty()) {
                 item {
                     Text(
@@ -235,7 +279,7 @@ fun PlayScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Matches started less than 1 hour ago",
+                        text = "Events started less than 1 hour ago",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -243,12 +287,12 @@ fun PlayScreen(
 
                 items(inProgressEvents, key = { it.id }) { event ->
                     val uiModel = EventUIAdapter.toUIModel(event)
-                    MatchCard(
+                    EventCard(
                         uiModel = uiModel,
                         badgeText = "IN PROGRESS",
                         reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
                         onReviewClick = { reviewEvent = event },
-                        onMatchClick = { onMatchSelected(event) }
+                        onEventClick = { onEventSelected(event) }
                     )
                 }
             }
@@ -262,16 +306,16 @@ fun PlayScreen(
                         modifier = Modifier.weight(1f),
                         title = "ACTIVE NOW",
                         value = joinedEvents.size.toString(),
-                        subtitle = if (joinedEvents.isEmpty()) "You have no joined matches" else "Joined open matches",
+                        subtitle = if (joinedEvents.isEmpty()) "You have no joined events" else "Joined open events",
                         metric = "${joinedEvents.size} of ${events.size} total",
                         icon = Icons.Default.Bolt,
                         iconTint = Color(0xFFF5B041)
                     )
                     SummaryCard(
                         modifier = Modifier.weight(1f),
-                        title = "OPEN MATCHES",
+                        title = "OPEN EVENTS",
                         value = events.size.toString(),
-                        subtitle = if (otherEvents.isEmpty()) "No additional matches now" else "Ready to join nearby",
+                        subtitle = if (otherEvents.isEmpty()) "No additional events now" else "Ready to join nearby",
                         metric = "${otherEvents.size} available to join",
                         icon = Icons.Default.EmojiEvents,
                         iconTint = Color(0xFF45B39D)
@@ -279,51 +323,19 @@ fun PlayScreen(
                 }
             }
 
-            // Section: Choose Your Sport
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (selectedSport != null) "1. SPORT ✓" else "1. CHOOSE YOUR SPORT",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SportButton(Modifier.weight(1f), "Fútbol", Icons.Default.SportsSoccer, Color(0xFF2ECC71), selectedSport == "fútbol") { viewModel.setSportFilter(if (selectedSport == "fútbol") null else "fútbol"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Basketball", Icons.Default.SportsBasketball, Color(0xFFE67E22), selectedSport == "basketball") { viewModel.setSportFilter(if (selectedSport == "basketball") null else "basketball"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Tennis", Icons.Default.SportsTennis, Color(0xFFF1C40F), selectedSport == "tennis") { viewModel.setSportFilter(if (selectedSport == "tennis") null else "tennis"); selectedMode = null }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SportButton(Modifier.weight(1f), "Calistenia", Icons.Default.FitnessCenter, Color(0xFF9B59B6), selectedSport == "calistenia") { viewModel.setSportFilter(if (selectedSport == "calistenia") null else "calistenia"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Running", Icons.Default.DirectionsRun, Color(0xFFE74C3C), selectedSport == "running") { viewModel.setSportFilter(if (selectedSport == "running") null else "running"); selectedMode = null }
-                        Box(Modifier.weight(1f))
-                    }
-                }
-            }
 
             if (selectedSport == null) {
                 if (joinedEvents.isNotEmpty()) {
                     item {
                         Text(
-                            text = "MY OPEN MATCHES",
+                            text = "MY OPEN EVENTS",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "You are already in these matches",
+                            text = "You are already in these events",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -338,21 +350,21 @@ fun PlayScreen(
                                 val remainingMillis = remainingTimeMillis(event, nowMillis)
                                 val urgency = countdownUrgency(remainingMillis)
 
-                                JoinedMatchListCard(
+                                JoinedEventListCard(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
                                     urgency = urgency,
-                                    onClick = { onMatchSelected(event) }
+                                    onClick = { onEventSelected(event) }
                                 )
                             }
 
                             if (joinedEvents.size > 2) {
                                 TextButton(
-                                    onClick = { showAllJoinedMatches = !showAllJoinedMatches },
+                                    onClick = { showAllJoinedEvents = !showAllJoinedEvents },
                                     modifier = Modifier.align(Alignment.End)
                                 ) {
-                                    val label = if (showAllJoinedMatches) {
-                                        "Show less"
+                                    val label = if (showAllJoinedEvents) {
+                                         "Show less"
                                     } else {
                                         "Show all (${joinedEvents.size})"
                                     }
@@ -363,7 +375,6 @@ fun PlayScreen(
                     }
                 }
 
-                // Section: Open Matches
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -371,7 +382,7 @@ fun PlayScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "OPEN MATCHES",
+                            text = "OPEN EVENTS",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -401,7 +412,7 @@ fun PlayScreen(
                 } else if (otherEvents.isEmpty()) {
                     item {
                         Text(
-                            if (joinedEvents.isNotEmpty()) "No additional open matches right now." else "Not recent matches found. Create one!",
+                            if (joinedEvents.isNotEmpty()) "No additional open events right now." else "No recent events found. Create one!",
                             modifier = Modifier.padding(16.dp),
                             color = Color.Gray
                         )
@@ -409,9 +420,9 @@ fun PlayScreen(
                 } else {
                     items(otherEvents, key = { it.id }) { event ->
                         val uiModel = EventUIAdapter.toUIModel(event)
-                        MatchCard(
+                        EventCard(
                             uiModel = uiModel,
-                            onMatchClick = { onMatchSelected(event) }
+                            onEventClick = { onEventSelected(event) }
                         )
                     }
                 }
@@ -420,14 +431,14 @@ fun PlayScreen(
                     item {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "FINISHED OPEN MATCHES",
+                            text = "FINISHED OPEN Events",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Most recent completed matches",
+                            text = "Most recent completed Events",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -435,23 +446,23 @@ fun PlayScreen(
 
                     items(visibleFinishedEvents, key = { it.id }) { event ->
                         val uiModel = EventUIAdapter.toUIModel(event)
-                        MatchCard(
+                        EventCard(
                             uiModel = uiModel,
                             highlighted = false,
                             badgeText = "FINISHED",
                             reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
                             onReviewClick = { reviewEvent = event },
-                            onMatchClick = { onMatchSelected(event) }
+                            onEventClick = { onEventSelected(event) }
                         )
                     }
 
                     if (finishedEvents.size > 2) {
                         item {
                             TextButton(
-                                onClick = { showAllFinishedMatches = !showAllFinishedMatches },
+                                onClick = { showAllFinishedEvents = !showAllFinishedEvents },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                val label = if (showAllFinishedMatches) {
+                                val label = if (showAllFinishedEvents) {
                                     "Show less"
                                 } else {
                                     "Show all (${finishedEvents.size})"
@@ -461,76 +472,9 @@ fun PlayScreen(
                         }
                     }
                 }
-            } else {
-                // Section: Mode Selection
-                item {
-                    Text(
-                        text = if (selectedMode != null) "2. MODE ✓" else "2. CHOOSE MODE",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ModeButton(Modifier.weight(1f), "Casual", "Just for fun", Icons.Default.Handshake, selectedMode == "casual") { selectedMode = "casual" }
-                            ModeButton(Modifier.weight(1f), "Amateur", "Competitive but relaxed", Icons.Default.Groups, selectedMode == "amateur") { selectedMode = "amateur" }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ModeButton(Modifier.weight(1f), "Torneo", "Competitive match", Icons.Default.EmojiEvents, selectedMode == "torneo") { selectedMode = "torneo" }
-                            ModeButton(Modifier.weight(1f), "Training", "Practice & improve", Icons.Default.TrackChanges, selectedMode == "training") { selectedMode = "training" }
-                        }
-                    }
-                }
             }
         }
         
-        // Sticky Bottom Bar
-        if (selectedMode != null) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                shadowElevation = 16.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            viewModel.setSportFilter(selectedSport) // ensures the search executes
-                            // To actually search, we would reset modes or navigate. For now just clear mode to show matches.
-                            selectedMode = null
-                        },
-                        modifier = Modifier.weight(2f).height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Search", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                    
-                    OutlinedButton(
-                        onClick = { showCreateDialog = true },
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Create", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
 
         PullRefreshIndicator(
             refreshing = isPullRefreshing,
@@ -540,15 +484,63 @@ fun PlayScreen(
             contentColor = MaterialTheme.colorScheme.primary
         )
 
-        // Standardized FAB for creating matches
-        FloatingActionButton(
-            onClick = { 
-                if (selectedSport == null || selectedMode == null) {
-                    android.widget.Toast.makeText(context, "Please select a sport and mode first!", android.widget.Toast.LENGTH_SHORT).show()
-                } else {
-                    showCreateDialog = true 
+        // FAB Menu Overlay
+        if (isFabExpanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable { isFabExpanded = false },
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Column(
+                    modifier = Modifier.padding(end = 20.dp, bottom = 100.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    FabMenuItem(
+                        text = "Training",
+                        icon = Icons.Default.TrackChanges,
+                        onClick = { 
+                            selectedMode = "training"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Tournament",
+                        icon = Icons.Default.EmojiEvents,
+                        onClick = { 
+                            selectedMode = "torneo"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Amateur Match",
+                        icon = Icons.Default.Groups,
+                        onClick = { 
+                            selectedMode = "amateur"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Casual Match",
+                        icon = Icons.Default.Handshake,
+                        onClick = { 
+                            selectedMode = "casual"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
                 }
-            },
+            }
+        }
+
+        // Standardized Expanding FAB
+        FloatingActionButton(
+            onClick = { isFabExpanded = !isFabExpanded },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp),
@@ -556,7 +548,12 @@ fun PlayScreen(
             contentColor = Color.White,
             shape = CircleShape
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Create Match")
+            val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabRotation")
+            Icon(
+                Icons.Default.Add, 
+                contentDescription = "Create Event",
+                modifier = Modifier.rotate(rotation)
+            )
         }
     }
 
@@ -594,7 +591,7 @@ private fun countdownUrgency(remainingMillis: Long): CountdownUrgency {
 }
 
 @Composable
-private fun JoinedMatchListCard(
+private fun JoinedEventListCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     countdownText: String,
     urgency: CountdownUrgency,
@@ -833,13 +830,13 @@ fun ModeButton(
 }
 
 @Composable
-fun MatchCard(
+fun EventCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     highlighted: Boolean = false,
     badgeText: String? = null,
     reviewLabel: String = "Write review",
     onReviewClick: (() -> Unit)? = null,
-    onMatchClick: () -> Unit = {}
+    onEventClick: () -> Unit = {}
 ) {
     val event = uiModel.rawEvent
     
@@ -855,7 +852,7 @@ fun MatchCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onMatchClick() },
+            .clickable { onEventClick() },
         shape = RoundedCornerShape(16.dp),
         color = if (highlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
         border = if (highlighted) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)) else null,
@@ -982,7 +979,7 @@ private fun ReviewDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Match review",
+                    text = "Event review",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black
                 )
@@ -1009,7 +1006,7 @@ private fun ReviewDialog(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Rate the match", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text("Rate the Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1085,7 +1082,7 @@ private fun ReviewDialog(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 4,
                             maxLines = 7,
-                            placeholder = { Text("Tell us what happened in this match") }
+                            placeholder = { Text("Tell us what happened in this Event") }
                         )
 
                         if (inputSource == "microphone") {
@@ -1110,7 +1107,7 @@ private fun ReviewDialog(
                         }
 
                         if (!loadingMembers && members.isEmpty()) {
-                            Text("No members found for this match", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No members found for this Event", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
                         members.forEach { member ->
@@ -1167,3 +1164,5 @@ private fun ReviewDialog(
         }
     )
 }
+
+
