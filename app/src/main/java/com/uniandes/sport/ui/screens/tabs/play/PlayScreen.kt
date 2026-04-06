@@ -184,14 +184,18 @@ fun PlayScreen(
                     SummaryCard(
                         modifier = Modifier.weight(1f),
                         title = "ACTIVE NOW",
-                        value = "${joinedEvents.size} MY MATCHES",
+                        value = joinedEvents.size.toString(),
+                        subtitle = if (joinedEvents.isEmpty()) "You have no joined matches" else "Joined open matches",
+                        metric = "${joinedEvents.size} of ${events.size} total",
                         icon = Icons.Default.Bolt,
                         iconTint = Color(0xFFF5B041)
                     )
                     SummaryCard(
                         modifier = Modifier.weight(1f),
                         title = "OPEN MATCHES",
-                        value = "${events.size} AVAILABLE",
+                        value = events.size.toString(),
+                        subtitle = if (otherEvents.isEmpty()) "No additional matches now" else "Ready to join nearby",
+                        metric = "${otherEvents.size} available to join",
                         icon = Icons.Default.EmojiEvents,
                         iconTint = Color(0xFF45B39D)
                     )
@@ -515,35 +519,71 @@ fun SummaryCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
+    subtitle: String,
+    metric: String,
     icon: ImageVector,
     iconTint: Color
 ) {
     Surface(
-        modifier = modifier.height(90.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.height(132.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 1.dp
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        tonalElevation = 3.dp,
+        shadowElevation = 2.dp
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold
+                )
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(iconTint.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(14.dp))
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = iconTint.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = metric,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = iconTint,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
