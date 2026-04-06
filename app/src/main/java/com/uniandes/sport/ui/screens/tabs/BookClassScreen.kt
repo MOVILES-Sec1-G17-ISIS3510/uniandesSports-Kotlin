@@ -88,7 +88,7 @@ fun BookClassScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -128,7 +128,7 @@ fun BookClassScreen(
                 "DETAILS", 
                 fontWeight = FontWeight.Black, 
                 fontSize = 14.sp, 
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
             )
 
@@ -152,9 +152,9 @@ fun BookClassScreen(
                         },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = Color(0xFFE5E7EB),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface
                     )
                 )
                 ExposedDropdownMenu(
@@ -162,7 +162,7 @@ fun BookClassScreen(
                     onDismissRequest = { sportExpanded = false },
                     modifier = Modifier
                         .width(with(density) { textFieldSize.width.toDp() })
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     sports.forEach { sport ->
                         DropdownMenuItem(
@@ -196,9 +196,9 @@ fun BookClassScreen(
                         },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = Color(0xFFE5E7EB),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface
                     )
                 )
                 ExposedDropdownMenu(
@@ -206,7 +206,7 @@ fun BookClassScreen(
                     onDismissRequest = { skillExpanded = false },
                     modifier = Modifier
                         .width(with(density) { textFieldSize.width.toDp() })
-                        .background(Color.White)
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     skillLevels.forEach { level ->
                         DropdownMenuItem(
@@ -226,7 +226,7 @@ fun BookClassScreen(
                 onValueChange = { viewModel.preferredSchedule = it },
                 label = { Text("Preferred Schedule") },
                 placeholder = { Text("e.g. Mon & Wed 4-6 PM") },
-                leadingIcon = { Icon(Icons.Default.CalendarToday, null, tint = Color.Gray, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -236,9 +236,9 @@ fun BookClassScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color(0xFFE5E7EB),
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White
+                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
 
@@ -259,9 +259,9 @@ fun BookClassScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color(0xFFE5E7EB),
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White
+                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
 
@@ -276,8 +276,8 @@ fun BookClassScreen(
                     onClick = onNavigateBack,
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
                     Text("Cancel", fontWeight = FontWeight.Bold)
                 }
