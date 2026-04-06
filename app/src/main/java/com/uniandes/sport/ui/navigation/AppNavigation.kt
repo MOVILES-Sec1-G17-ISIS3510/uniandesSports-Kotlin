@@ -108,7 +108,8 @@ fun AppNavigation(
             val profId = backStackEntry.arguments?.getString("profesorId") ?: ""
             BookClassScreen(
                 profesorId = profId,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onOpenProfile = { navController.navigate(Screen.Perfil.route) }
             )
         }
     }

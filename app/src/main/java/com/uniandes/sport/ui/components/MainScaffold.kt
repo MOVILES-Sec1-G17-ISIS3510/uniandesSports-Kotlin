@@ -38,6 +38,7 @@ fun MainScaffold(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
+    val isMainTabsRoute = fullRoute.startsWith("main_tabs")
     val playTabIndex = 2
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
@@ -73,7 +74,7 @@ fun MainScaffold(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                if (currentRoute != Screen.Perfil.route) {
+                if (isMainTabsRoute && currentRoute != Screen.Perfil.route) {
                     TopAppBarDynamic(
                         currentRoute = currentRoute, 
                         onProfileClick = { navController.navigate(Screen.Perfil.route) },
@@ -83,7 +84,7 @@ fun MainScaffold(
                 }
             },
             bottomBar = {
-                if (currentRoute != Screen.Perfil.route) {
+                if (isMainTabsRoute && currentRoute != Screen.Perfil.route) {
                     BottomNavigationBar(
                         navController = navController, 
                         currentRoute = currentRoute, 
@@ -123,50 +124,26 @@ fun TopAppBarDynamic(
 ) {
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    val title = when (currentRoute) {
-        Screen.Home.route -> "Buenos días \uD83D\uDC4B"
-        Screen.Retos.route -> "Retos"
-        Screen.Play.route -> "Play"
-        Screen.Comunidades.route -> "Social"
-        Screen.Profesores.route -> "Profesores"
-        Screen.Torneos.route -> "Torneos"
-        Screen.Clima.route -> "Weather"
-        Screen.Strava.route -> "Strava"
-        Screen.Historial.route -> "History"
-        Screen.Perfil.route -> "Perfil de Usuario"
-        else -> ""
-    }
-    
-    val subtitle = when (currentRoute) {
-        Screen.Home.route -> "UNIANDES SPORTS"
-        Screen.Retos.route -> "COMPITE Y MEJORA"
-        Screen.Play.route -> "ENCUENTRA PARTIDO"
-        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
-        Screen.Profesores.route -> "APRENDE CON EXPERTOS"
-        Screen.Torneos.route -> "COMPETICIONES"
-        Screen.Perfil.route -> "MI CUENTA"
-        else -> ""
-    }
-
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        title = {
-            Column {
-                if (subtitle.isNotEmpty()) {
-                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
-                }
-                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
-            }
-        },
-        actions = {
-            if (currentRoute == Screen.Home.route) {
+    if (currentRoute == Screen.Home.route) {
+        CenterAlignedTopAppBar(
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            navigationIcon = {
                 IconButton(onClick = onProfileClick) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
                 }
+            },
+            title = {
+                Text(
+                    text = "USports",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                )
+            },
+            actions = {
                 Box {
                     IconButton(onClick = { showThemeMenu = true }) {
                         val themeIcon = when (themeMode) {
@@ -174,7 +151,7 @@ fun TopAppBarDynamic(
                             ThemeMode.DARK -> Icons.Default.DarkMode
                             ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
                         }
-                        Icon(themeIcon, contentDescription = "Theme Options")
+                        Icon(themeIcon, contentDescription = "Theme options")
                     }
                     DropdownMenu(
                         expanded = showThemeMenu,
@@ -197,13 +174,67 @@ fun TopAppBarDynamic(
                         )
                     }
                 }
-            } else if (currentRoute == Screen.Retos.route) {
+                IconButton(onClick = { /* TODO: Open app settings screen */ }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
+            }
+        )
+        return
+    }
+
+    val title = when (currentRoute) {
+        Screen.Home.route -> "USports"
+        Screen.Retos.route -> "Challenges"
+        Screen.Play.route -> "Play"
+        Screen.Comunidades.route -> "Communities"
+        Screen.Profesores.route -> "Coaches"
+        Screen.Torneos.route -> "Tournaments"
+        Screen.Clima.route -> "Weather"
+        Screen.Strava.route -> "Strava"
+        Screen.Historial.route -> "History"
+        Screen.Perfil.route -> "Profile"
+        else -> ""
+    }
+    
+    val subtitle = when (currentRoute) {
+        Screen.Home.route -> ""
+        Screen.Retos.route -> "COMPETE AND IMPROVE"
+        Screen.Play.route -> "FIND YOUR NEXT MATCH"
+        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
+        Screen.Profesores.route -> "LEARN FROM EXPERTS"
+        Screen.Torneos.route -> "COMPETITIVE EVENTS"
+        Screen.Clima.route -> "TRAIN SMARTER"
+        Screen.Strava.route -> "PERFORMANCE INSIGHTS"
+        Screen.Historial.route -> "RECENT ACTIVITY"
+        Screen.Perfil.route -> "ACCOUNT SETTINGS"
+        else -> ""
+    }
+
+    TopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        title = {
+            Column {
+                if (subtitle.isNotEmpty()) {
+                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
+                }
+                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
+            }
+        },
+        actions = {
+            if (currentRoute == Screen.Retos.route) {
                 IconButton(onClick = { /* TODO */ }) {
                     Icon(Icons.Default.Search, contentDescription = "Search")
                 }
-                IconButton(onClick = { /* TODO: Histórico de retos */ }) {
-                    Icon(Icons.Default.EventNote, contentDescription = "Historial")
+                IconButton(onClick = { /* TODO: Challenge history */ }) {
+                    Icon(Icons.Default.EventNote, contentDescription = "History")
                 }
+            }
+            IconButton(onClick = onProfileClick) {
+                Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
             }
         }
     )
