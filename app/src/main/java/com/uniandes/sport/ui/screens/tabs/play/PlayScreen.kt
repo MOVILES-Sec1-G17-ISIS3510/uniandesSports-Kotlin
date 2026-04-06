@@ -40,6 +40,7 @@ fun PlayScreen(
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
+    val finishedEvents by viewModel.finishedEvents.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
@@ -48,6 +49,7 @@ fun PlayScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var isPullRefreshing by remember { mutableStateOf(false) }
     var showAllJoinedMatches by remember { mutableStateOf(false) }
+    var showAllFinishedMatches by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -65,6 +67,9 @@ fun PlayScreen(
     }
     val visibleJoinedEvents = remember(joinedEvents, showAllJoinedMatches) {
         if (showAllJoinedMatches) joinedEvents else joinedEvents.take(2)
+    }
+    val visibleFinishedEvents = remember(finishedEvents, showAllFinishedMatches) {
+        if (showAllFinishedMatches) finishedEvents else finishedEvents.take(2)
     }
 
     val onMatchSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
@@ -336,6 +341,50 @@ fun PlayScreen(
                             uiModel = uiModel,
                             onMatchClick = { onMatchSelected(event) }
                         )
+                    }
+                }
+
+                if (finishedEvents.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "FINISHED OPEN MATCHES",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Most recent completed matches",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    items(visibleFinishedEvents, key = { it.id }) { event ->
+                        val uiModel = EventUIAdapter.toUIModel(event)
+                        MatchCard(
+                            uiModel = uiModel,
+                            highlighted = false,
+                            badgeText = "FINISHED",
+                            onMatchClick = { onMatchSelected(event) }
+                        )
+                    }
+
+                    if (finishedEvents.size > 2) {
+                        item {
+                            TextButton(
+                                onClick = { showAllFinishedMatches = !showAllFinishedMatches },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val label = if (showAllFinishedMatches) {
+                                    "Show less"
+                                } else {
+                                    "Show all (${finishedEvents.size})"
+                                }
+                                Text(label, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             } else {

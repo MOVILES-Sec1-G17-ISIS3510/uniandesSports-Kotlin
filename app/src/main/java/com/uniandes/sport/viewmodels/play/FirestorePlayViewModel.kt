@@ -21,6 +21,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     override val events: StateFlow<List<Event>> = _events.asStateFlow()
 
+    private val _finishedEvents = MutableStateFlow<List<Event>>(emptyList())
+    override val finishedEvents: StateFlow<List<Event>> = _finishedEvents.asStateFlow()
+
     private val _members = MutableStateFlow<List<com.uniandes.sport.models.MatchMember>>(emptyList())
     override val members: StateFlow<List<com.uniandes.sport.models.MatchMember>> = _members.asStateFlow()
 
@@ -45,6 +48,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.cachedEvents.collect { list ->
                 _rawEvents.value = list
                 applyCurrentStrategy()
+                updateFinishedEvents()
             }
         }
         viewModelScope.launch {
@@ -102,6 +106,16 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
     private fun applyCurrentStrategy() {
         _events.value = currentFilterStrategy.filter(_rawEvents.value)
+    }
+
+    private fun updateFinishedEvents() {
+        val now = com.google.firebase.Timestamp.now()
+        _finishedEvents.value = _rawEvents.value
+            .filter {
+                it.status == "active" &&
+                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) <= now
+            }
+            .sortedByDescending { it.scheduledAt }
     }
 
     override fun fetchMembers(eventId: String) {

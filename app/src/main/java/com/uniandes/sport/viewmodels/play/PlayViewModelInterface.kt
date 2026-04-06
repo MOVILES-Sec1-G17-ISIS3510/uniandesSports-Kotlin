@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface PlayViewModelInterface {
     val events: StateFlow<List<Event>>
+    val finishedEvents: StateFlow<List<Event>>
     val isLoading: StateFlow<Boolean>
     val members: StateFlow<List<com.uniandes.sport.models.MatchMember>>
     val selectedSport: StateFlow<String?>
