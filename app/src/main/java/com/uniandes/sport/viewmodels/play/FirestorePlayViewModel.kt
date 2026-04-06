@@ -85,6 +85,11 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded()
     }
 
+    override fun refreshEvents() {
+        com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+        com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+    }
+
     override fun setSportFilter(sport: String?) {
         _selectedSport.value = sport
         currentFilterStrategy = if (sport != null) {
@@ -148,6 +153,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             }
         }.addOnSuccessListener {
             Log.d("PlayVM", "User $userId successfully JOINED event $eventId")
+            _joinedEventIds.value = _joinedEventIds.value + eventId
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
@@ -208,6 +214,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             batch.commit()
                 .addOnSuccessListener { 
                     Log.d("PlayVM", "Batch commit SUCCESS: Event and Organizer created.")
+                    _joinedEventIds.value = _joinedEventIds.value + event.id
                     com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
                     com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
                     onSuccess() 

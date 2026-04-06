@@ -5,10 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,6 +30,7 @@ import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
@@ -42,6 +46,8 @@ fun PlayScreen(
     
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var isPullRefreshing by remember { mutableStateOf(false) }
+    var showAllJoinedMatches by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -57,6 +63,9 @@ fun PlayScreen(
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
+    val visibleJoinedEvents = remember(joinedEvents, showAllJoinedMatches) {
+        if (showAllJoinedMatches) joinedEvents else joinedEvents.take(2)
+    }
 
     val onMatchSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
         logViewModel.log(
@@ -69,6 +78,20 @@ fun PlayScreen(
             )
         )
         selectedEventUIModel = EventUIAdapter.toUIModel(event)
+    }
+
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isPullRefreshing,
+        onRefresh = {
+            isPullRefreshing = true
+            viewModel.refreshEvents()
+        }
+    )
+
+    LaunchedEffect(isLoading, isPullRefreshing) {
+        if (isPullRefreshing && !isLoading) {
+            isPullRefreshing = false
+        }
     }
 
     // If a deep-link asks to open a specific match, clear sport filter to avoid hiding it.
@@ -93,7 +116,10 @@ fun PlayScreen(
         MatchDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
-            onDismiss = { selectedEventUIModel = null }
+            onDismiss = {
+                selectedEventUIModel = null
+                viewModel.refreshEvents()
+            }
         )
     }
 
@@ -139,7 +165,12 @@ fun PlayScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .pullRefresh(pullRefreshState)
+    ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
@@ -218,21 +249,34 @@ fun PlayScreen(
                     }
 
                     item {
-                        LazyRow(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(end = 4.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(joinedEvents, key = { it.id }) { event ->
+                            visibleJoinedEvents.forEach { event ->
                                 val remainingMillis = remainingTimeMillis(event, nowMillis)
                                 val urgency = countdownUrgency(remainingMillis)
 
-                                JoinedMatchCarouselCard(
+                                JoinedMatchListCard(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
                                     urgency = urgency,
                                     onClick = { onMatchSelected(event) }
                                 )
+                            }
+
+                            if (joinedEvents.size > 2) {
+                                TextButton(
+                                    onClick = { showAllJoinedMatches = !showAllJoinedMatches },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    val label = if (showAllJoinedMatches) {
+                                        "Show less"
+                                    } else {
+                                        "Show all (${joinedEvents.size})"
+                                    }
+                                    Text(label, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -360,6 +404,14 @@ fun PlayScreen(
                 }
             }
         }
+
+        PullRefreshIndicator(
+            refreshing = isPullRefreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
@@ -395,7 +447,7 @@ private fun countdownUrgency(remainingMillis: Long): CountdownUrgency {
 }
 
 @Composable
-private fun JoinedMatchCarouselCard(
+private fun JoinedMatchListCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     countdownText: String,
     urgency: CountdownUrgency,
@@ -410,7 +462,7 @@ private fun JoinedMatchCarouselCard(
 
     Surface(
         modifier = Modifier
-            .width(280.dp)
+            .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,

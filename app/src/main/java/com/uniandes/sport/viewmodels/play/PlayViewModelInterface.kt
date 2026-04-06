@@ -13,6 +13,7 @@ interface PlayViewModelInterface {
     
     fun setSportFilter(sport: String?)
     fun fetchEvents()
+    fun refreshEvents()
     fun fetchMembers(eventId: String)
     fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun createEvent(title: String, description: String, location: String, sport: String, modality: String, scheduledAt: java.util.Date, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit)
