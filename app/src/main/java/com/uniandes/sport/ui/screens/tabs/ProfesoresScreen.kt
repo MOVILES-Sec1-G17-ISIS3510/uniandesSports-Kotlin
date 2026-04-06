@@ -45,6 +45,8 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -268,6 +270,10 @@ fun ProfesoresScreen(
             profesor = selectedProfesor!!,
             onDismiss = { showReviewDialog = false },
             onSubmit = { rating, comment -> 
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@AddReviewDialog
+                }
                 val newReview = Review(
                     estudiante = userEmail,
                     rating = rating,
@@ -306,6 +312,10 @@ fun ProfesoresScreen(
         BecomeCoachDialog(
             onDismiss = { showBecomeCoachDialog = false },
             onSubmit = { deporte, precio, experiencia, whatsapp, especialidad ->
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@BecomeCoachDialog
+                }
                 val newCoach = ProfesorBuilder(id = userUid)
                     .setBasicInfo(
                         nombre = userName.takeIf { it.isNotBlank() } ?: userEmail,
@@ -334,6 +344,10 @@ fun ProfesoresScreen(
 fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
     val context = LocalContext.current
     val openWhatsApp = {
+        if (!hasNetworkConnection(context)) {
+            showNoConnectionToast(context)
+            return@let
+        }
         val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}?text=Hi ${profesor.nombre}, I'm interested in your classes!"
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         context.startActivity(intent)
@@ -604,6 +618,10 @@ fun CoachDetailDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(
                             onClick = {
+                                if (!hasNetworkConnection(context)) {
+                                    showNoConnectionToast(context)
+                                    return@Button
+                                }
                                 val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}"
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)

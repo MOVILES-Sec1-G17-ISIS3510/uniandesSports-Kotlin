@@ -21,11 +21,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.uniandes.sport.models.Tweet
 import com.uniandes.sport.models.TweetType
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.viewmodels.storage.StorageViewModelInterface
@@ -47,11 +50,13 @@ fun TweetForm(
     modifier: Modifier
 ) {
     val screenName = "TweetForm"
+    val context = LocalContext.current
     val (tweetText, setTweetText) = remember { mutableStateOf("") }
 
     val takePictureLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.TakePicturePreview()) { bitmap ->
         if (bitmap != null) {
             sendTweet(
+                context = context,
                 bitmap = bitmap,
                 tweetType = TweetType.IMAGE,
                 tweetsViewModel = tweetsViewModel,
@@ -112,6 +117,10 @@ fun TweetForm(
         ) {
             TextButton(
                 onClick = {
+                    if (!hasNetworkConnection(context)) {
+                        showNoConnectionToast(context)
+                        return@TextButton
+                    }
                     requestPermissionLauncher.launch(Manifest.permission.CAMERA)
                 },
                 modifier = Modifier.weight(1f)
@@ -128,7 +137,12 @@ fun TweetForm(
 
             TextButton(
                 onClick = {
+                    if (!hasNetworkConnection(context)) {
+                        showNoConnectionToast(context)
+                        return@TextButton
+                    }
                     sendTweet(
+                        context = context,
                         tweetText = tweetText,
                         tweetType = TweetType.TEXT,
                         tweetsViewModel = tweetsViewModel,
@@ -156,6 +170,7 @@ fun TweetForm(
 }
 
 private fun sendTweet(
+    context: android.content.Context,
     tweetText: String? = null,
     bitmap: Bitmap? = null,
     tweetType: TweetType,
@@ -168,6 +183,11 @@ private fun sendTweet(
     setTweetText: (String) -> Unit
 ) {
     val screenName = "sendTweet"
+
+    if (!hasNetworkConnection(context)) {
+        showNoConnectionToast(context)
+        return
+    }
 
     authViewModel.getUser(
         onSuccess = { user ->
