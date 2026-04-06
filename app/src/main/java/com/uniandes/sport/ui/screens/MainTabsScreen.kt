@@ -18,6 +18,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun MainTabsScreen(
     initialPage: Int = 0,
+    pendingOpenMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
     onNavigate: (String) -> Unit
 ) {
@@ -56,6 +58,8 @@ fun MainTabsScreen(
                 val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 com.uniandes.sport.ui.screens.tabs.play.PlayScreen(
                     viewModel = playViewModel,
+                    openMatchEventId = pendingOpenMatchEventId,
+                    onOpenMatchConsumed = onOpenMatchConsumed,
                     onNavigate = onNavigate
                 )
             }

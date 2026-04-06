@@ -28,6 +28,8 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
+    openMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
@@ -39,6 +41,24 @@ fun PlayScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // If a deep-link asks to open a specific match, clear sport filter to avoid hiding it.
+    LaunchedEffect(openMatchEventId) {
+        if (!openMatchEventId.isNullOrBlank() && selectedSport != null) {
+            viewModel.setSportFilter(null)
+        }
+    }
+
+    LaunchedEffect(openMatchEventId, events) {
+        val pendingId = openMatchEventId ?: return@LaunchedEffect
+        if (events.isEmpty()) return@LaunchedEffect
+
+        val pendingEvent = events.firstOrNull { it.id == pendingId }
+        if (pendingEvent != null) {
+            selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
+            onOpenMatchConsumed()
+        }
+    }
 
     if (selectedEventUIModel != null) {
         MatchDetailModal(
