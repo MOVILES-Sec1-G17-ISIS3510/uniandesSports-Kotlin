@@ -26,7 +26,8 @@ import java.util.Date
 @Composable
 fun HistorialScreen(
     viewModel: RetosViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel::class.java),
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onNavigateBack: () -> Unit
 ) {
     val retos by viewModel.retos.collectAsState()
     val uid = Firebase.auth.currentUser?.uid ?: ""
@@ -44,7 +45,7 @@ fun HistorialScreen(
             CenterAlignedTopAppBar(
                 title = { Text("CHALLENGE HISTORY", fontWeight = FontWeight.Black, fontSize = 18.sp) },
                 navigationIcon = {
-                    IconButton(onClick = { onNavigate("back") }) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }

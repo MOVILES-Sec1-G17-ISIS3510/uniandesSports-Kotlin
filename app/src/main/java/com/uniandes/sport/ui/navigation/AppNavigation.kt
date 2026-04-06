@@ -30,27 +30,27 @@ fun AppNavigation(
         modifier = modifier,
         enterTransition = {
             slideInHorizontally(
-                initialOffsetX = { 300 },
-                animationSpec = tween(300)
-            ) + fadeIn(animationSpec = tween(300))
+                initialOffsetX = { it },
+                animationSpec = tween(350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(350))
         },
         exitTransition = {
             slideOutHorizontally(
-                targetOffsetX = { -300 },
-                animationSpec = tween(300)
-            ) + fadeOut(animationSpec = tween(300))
+                targetOffsetX = { -it / 3 },
+                animationSpec = tween(350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(350))
         },
         popEnterTransition = {
             slideInHorizontally(
-                initialOffsetX = { -300 },
-                animationSpec = tween(300)
-            ) + fadeIn(animationSpec = tween(300))
+                initialOffsetX = { -it / 3 },
+                animationSpec = tween(350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(350))
         },
         popExitTransition = {
             slideOutHorizontally(
-                targetOffsetX = { 300 },
-                animationSpec = tween(300)
-            ) + fadeOut(animationSpec = tween(300))
+                targetOffsetX = { it },
+                animationSpec = tween(350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(350))
         }
     ) {
         composable(
@@ -72,19 +72,34 @@ fun AppNavigation(
         }
         
         composable(Screen.Perfil.route) {
-            PerfilUsuarioScreen(onNavigate = { route -> navController.navigate(route) })
+            PerfilUsuarioScreen(
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Screen.Torneos.route) {
-            TorneosScreen(onNavigate = { route -> navController.navigate(route) })
+            TorneosScreen(
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Screen.Clima.route) {
-            ClimaScreen(onNavigate = { route -> navController.navigate(route) })
+            ClimaScreen(
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Screen.Strava.route) {
-            StravaScreen(onNavigate = { route -> navController.navigate(route) })
+            StravaScreen(
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Screen.Historial.route) {
-            HistorialScreen(onNavigate = { route -> navController.navigate(route) })
+            HistorialScreen(
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         
         composable(

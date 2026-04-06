@@ -33,6 +33,9 @@ interface RetosViewModelInterface {
     // para unirse a uno nuevo
     fun joinReto(retoId: String, userId: String)
     
+    // para abandonar un reto activo
+    fun leaveReto(retoId: String, userId: String)
+    
     // para crear retos nuevos desde el celular
     fun addReto(reto: Reto)
 }
