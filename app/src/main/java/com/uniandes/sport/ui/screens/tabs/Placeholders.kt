@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.sp
 fun SimplePlaceholderScreen(
     title: String, 
     onNavigate: (String) -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
     extraContent: @Composable ColumnScope.() -> Unit = {}
 ) {
     Scaffold(
@@ -34,6 +36,13 @@ fun SimplePlaceholderScreen(
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                },
+                navigationIcon = {
+                    if (onNavigateBack != null) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -87,12 +96,12 @@ fun HomeScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Home", o
 fun ComunidadesScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Communities", onNavigate)
 
 @Composable
-fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
+fun PerfilUsuarioScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var isLoggingOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    SimplePlaceholderScreen("Profile", onNavigate) {
+    SimplePlaceholderScreen("Profile", onNavigate, onNavigateBack) {
         Button(
             onClick = {
                 isLoggingOut = true
@@ -122,11 +131,11 @@ fun PerfilUsuarioScreen(onNavigate: (String) -> Unit) {
 }
 
 @Composable
-fun TorneosScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Tournaments", onNavigate)
+fun TorneosScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Tournaments", onNavigate, onNavigateBack)
 
 @Composable
-fun ClimaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Weather", onNavigate)
+fun ClimaScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Weather", onNavigate, onNavigateBack)
 
 @Composable
-fun StravaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Strava", onNavigate)
+fun StravaScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Strava", onNavigate, onNavigateBack)
 

@@ -59,7 +59,7 @@ fun HistorialScreen(
             CenterAlignedTopAppBar(
                 title = { Text("CHALLENGE HISTORY", fontWeight = FontWeight.Black, fontSize = 18.sp) },
                 navigationIcon = {
-                    IconButton(onClick = { onNavigate("back") }) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }

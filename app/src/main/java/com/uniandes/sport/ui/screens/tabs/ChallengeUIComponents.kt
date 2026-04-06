@@ -1,6 +1,8 @@
 package com.uniandes.sport.ui.screens.tabs
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,7 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,47 +44,81 @@ fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-fun ActiveChallengeCard(reto: Reto, currentUserId: String, onClick: () -> Unit) {
+fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit) {
     val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
     val progressPercent = (progressRaw * 100).toInt()
+    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
 
-    Card(
-        onClick = onClick,
-        modifier = Modifier.width(260.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(4.dp)
+    Column(
+        modifier = Modifier
+            .width(84.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SportIconBox(reto.sport, size = 40.dp)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(reto.title, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(72.dp)) {
+            // Fondo del anillo (gris claro)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color.LightGray.copy(alpha = 0.3f),
+                    style = Stroke(width = 4.dp.toPx())
+                )
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            // Anillo de progreso
+            Canvas(modifier = Modifier.fillMaxSize().padding(2.dp)) {
+                drawArc(
+                    color = indicatorColor,
+                    startAngle = -90f,
+                    sweepAngle = (progressRaw * 360).toFloat(),
+                    useCenter = false,
+                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
             
-            Text("Progress: $progressPercent%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progressRaw.toFloat() },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                color = Color(0xFF4CAF50),
-                trackColor = Color(0xFFE0E0E0)
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                DetailItemSmall(Icons.Default.Groups, "${reto.participantsCount}")
-                DetailItemSmall(Icons.Default.AccessTime, "Active")
+            // Icono central (circular)
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE0F2F1)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when(reto.sport.lowercase()) {
+                        "running" -> Icons.Default.DirectionsRun
+                        "soccer" -> Icons.Default.SportsSoccer
+                        "calisthenics" -> Icons.Default.FitnessCenter
+                        "tennis" -> Icons.Default.SportsTennis
+                        else -> Icons.Default.FlashOn
+                    },
+                    contentDescription = null,
+                    tint = Color(0xFF00796B),
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = reto.title,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center
+            ),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
+
 @Composable
-fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit) {
+fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp),
@@ -100,7 +140,10 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit) {
             }
             
             Button(
-                onClick = onJoin,
+                onClick = { 
+                    // Stop propagation is handled by Compose by default for nested buttons
+                    onJoin() 
+                },
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
