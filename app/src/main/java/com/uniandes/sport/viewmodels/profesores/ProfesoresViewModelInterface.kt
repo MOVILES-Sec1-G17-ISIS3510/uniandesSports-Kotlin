@@ -13,6 +13,8 @@ interface ProfesoresViewModelInterface {
         onFailure: (Exception) -> Unit = {}
     )
     
+    fun refreshProfesores(onComplete: () -> Unit = {})
+    
     fun fetchReviews(profesorId: String)
 
     fun createProfesor(
@@ -26,5 +28,11 @@ interface ProfesoresViewModelInterface {
         review: Review,
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
+    )
+
+    fun syncReviewsCount(
+        profesorId: String,
+        onSuccess: () -> Unit = {},
+        onFailure: (Exception) -> Unit = {}
     )
 }

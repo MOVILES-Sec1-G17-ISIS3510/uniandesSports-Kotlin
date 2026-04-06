@@ -26,6 +26,10 @@ class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         onSuccess(_profesoresList)
     }
 
+    override fun refreshProfesores(onComplete: () -> Unit) {
+        onComplete()
+    }
+
     override fun fetchReviews(profesorId: String) {
         _reviews.value = _reviewsMap[profesorId] ?: emptyList()
     }
@@ -42,6 +46,14 @@ class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     override fun addReview(
         profesorId: String,
         review: Review,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        onSuccess()
+    }
+
+    override fun syncReviewsCount(
+        profesorId: String,
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
     ) {
