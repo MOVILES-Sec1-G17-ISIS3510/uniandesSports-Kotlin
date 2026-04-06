@@ -67,7 +67,7 @@ class ProfesorBuilder(private val id: String) {
             experiencia = this.experiencia,
             whatsapp = this.whatsapp,
             especialidad = this.especialidad,
-            disponibilidad = "A convenir",
+            disponibilidad = "To be agreed",
             rating = 5.0, // starts with perfect score technically
             totalReviews = 0,
             verified = false, // Must be verified by admin

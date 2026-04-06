@@ -41,7 +41,12 @@ import java.util.Locale
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.rotate
 import com.uniandes.sport.ui.components.FabMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun ProfesoresScreen(
     profesoresViewModel: ProfesoresViewModelInterface,
@@ -60,6 +65,17 @@ fun ProfesoresScreen(
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
 
     var userUid by remember { mutableStateOf<String?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = { 
+            isRefreshing = true
+            profesoresViewModel.refreshProfesores {
+                isRefreshing = false
+            }
+        }
+    )
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -96,12 +112,11 @@ fun ProfesoresScreen(
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding).pullRefresh(pullRefreshState)) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(MaterialTheme.colorScheme.background) // Light gray background
+                    .background(MaterialTheme.colorScheme.background)
             ) {
             // Sport Filter
             LazyRow(
@@ -211,6 +226,14 @@ fun ProfesoresScreen(
                     }
                 }
             }
+
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                contentColor = MaterialTheme.colorScheme.primary,
+                backgroundColor = MaterialTheme.colorScheme.surface
+            )
         }
     }
 
@@ -462,6 +485,7 @@ fun CoachDetailDialog(
 
     LaunchedEffect(profesor.id) {
         profesoresViewModel.fetchReviews(profesor.id)
+        profesoresViewModel.syncReviewsCount(profesor.id)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -543,7 +567,9 @@ fun CoachDetailDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("REVIEWS", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("REVIEWS", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
                         TextButton(onClick = onAddReview) {
                             Text("Add Review")
                         }
