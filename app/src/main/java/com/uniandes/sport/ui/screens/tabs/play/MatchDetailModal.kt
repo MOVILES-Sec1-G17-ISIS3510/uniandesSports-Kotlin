@@ -26,6 +26,8 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 fun MatchDetailModal(
     uiModel: EventUIModel,
     viewModel: PlayViewModelInterface,
+    isConnected: Boolean = true,
+    onNoConnection: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val event = uiModel.rawEvent
@@ -180,6 +182,10 @@ fun MatchDetailModal(
                             // Kick button for organizers
                             if (currentUserId == event.createdBy && member.userId != currentUserId) {
                                 IconButton(onClick = {
+                                    if (!isConnected) {
+                                        onNoConnection()
+                                        return@IconButton
+                                    }
                                     viewModel.kickMember(event.id, member.userId)
                                 }) {
                                     Icon(Icons.Default.PersonRemove, contentDescription = "Kick", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
@@ -194,6 +200,11 @@ fun MatchDetailModal(
                 // Join Button
                 Button(
                     onClick = {
+                        if (!isConnected) {
+                            onNoConnection()
+                            return@Button
+                        }
+
                         if (currentUserId != null) {
                             isLoading = true
                             viewModel.joinEvent(event.id, currentUserId, 
@@ -204,7 +215,7 @@ fun MatchDetailModal(
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    enabled = !isAlreadyJoined && !isFull && !isLoading,
+                    enabled = !isAlreadyJoined && !isFull && !isLoading && isConnected,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
                         disabledContainerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -214,6 +225,7 @@ fun MatchDetailModal(
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                     } else {
                         val buttonText = when {
+                            !isConnected -> "NO CONNECTION"
                             isAlreadyJoined -> "ALREADY JOINED ✓"
                             isFull -> "MATCH FULL"
                             else -> "JOIN MATCH"
