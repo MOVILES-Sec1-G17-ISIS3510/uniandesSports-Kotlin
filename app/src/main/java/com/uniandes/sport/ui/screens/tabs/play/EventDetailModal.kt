@@ -23,7 +23,7 @@ import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
 @Composable
-fun MatchDetailModal(
+fun EventDetailModal(
     uiModel: EventUIModel,
     viewModel: PlayViewModelInterface,
     onDismiss: () -> Unit
@@ -127,7 +127,7 @@ fun MatchDetailModal(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Description
-                Text("ABOUT THIS MATCH", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("ABOUT THIS Event", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -198,7 +198,7 @@ fun MatchDetailModal(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (isAlreadyJoined) {
-                        // LEAVE MATCH button
+                        // LEAVE Event button
                         Button(
                             onClick = { showConfirmLeave = true },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -211,10 +211,10 @@ fun MatchDetailModal(
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("LEAVE MATCH", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("LEAVE Event", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
 
-                        // CANCEL MATCH button (Owners only)
+                        // CANCEL Event button (Owners only)
                         if (currentUserId == event.createdBy) {
                             OutlinedButton(
                                 onClick = { showConfirmCancel = true },
@@ -228,11 +228,11 @@ fun MatchDetailModal(
                             ) {
                                 Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("CANCEL MATCH FOR EVERYONE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+                                Text("CANCEL Event FOR EVERYONE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
                             }
                         }
                     } else {
-                        // JOIN MATCH button
+                        // JOIN Event button
                         Button(
                             onClick = {
                                 if (currentUserId != null) {
@@ -256,9 +256,9 @@ fun MatchDetailModal(
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                             } else {
                                 if (isFull) {
-                                    Text("MATCH FULL", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("Event FULL", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 } else {
-                                    Text("JOIN MATCH", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("JOIN Event", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -270,7 +270,7 @@ fun MatchDetailModal(
 
     if (showConfirmLeave) {
         PremiumActionDialog(
-            title = "Leave this match?",
+            title = "Leave this Event?",
             description = "You'll be removed from the participants list. You can join again later if there's space.",
             confirmLabel = "YES, LEAVE",
             isDestructive = true,
@@ -296,8 +296,8 @@ fun MatchDetailModal(
 
     if (showConfirmCancel) {
         PremiumActionDialog(
-            title = "CANCEL MATCH?",
-            description = "This will notify all participants and remove the match forever. This action cannot be undone.",
+            title = "CANCEL Event?",
+            description = "This will notify all participants and remove the Event forever. This action cannot be undone.",
             confirmLabel = "YES, CANCEL IT",
             isDestructive = true,
             onConfirm = {
@@ -391,3 +391,4 @@ private fun getSportIconAndColor(sport: String): Pair<ImageVector, Color> {
         else -> Icons.Default.Sports to Color.Gray
     }
 }
+
