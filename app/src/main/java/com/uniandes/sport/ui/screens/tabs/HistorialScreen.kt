@@ -7,8 +7,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.viewmodels.retos.RetosViewModelInterface
+import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import java.util.Date
@@ -26,10 +29,14 @@ import java.util.Date
 @Composable
 fun HistorialScreen(
     viewModel: RetosViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel::class.java),
+    playViewModel: PlayViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.play.FirestorePlayViewModel::class.java),
     onNavigate: (String) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit = { onNavigate("back") }
 ) {
     val retos by viewModel.retos.collectAsState()
+    val finishedEvents by playViewModel.finishedEvents.collectAsState()
+    val joinedEventIds by playViewModel.joinedEventIds.collectAsState()
+    val myReviewsByEventId by playViewModel.myReviewsByEventId.collectAsState()
     val uid = Firebase.auth.currentUser?.uid ?: ""
     
     // Filter for challenges I participated in and are finished or completed
@@ -38,6 +45,14 @@ fun HistorialScreen(
         val isExpired = (reto.endDate?.toDate()?.time ?: 0) < Date().time
         val isCompleted = (reto.progressByUser[uid] ?: 0.0) >= 1.0
         isParticipant && (isExpired || isCompleted)
+    }
+
+    val finishedOpenMatches = finishedEvents
+        .filter { joinedEventIds.contains(it.id) }
+        .sortedByDescending { it.scheduledAt }
+
+    LaunchedEffect(finishedOpenMatches) {
+        playViewModel.fetchMyReviewsForEvents(finishedOpenMatches.map { it.id })
     }
 
     Scaffold(
@@ -53,7 +68,7 @@ fun HistorialScreen(
         },
         containerColor = Color(0xFFF8F9FA)
     ) { padding ->
-        if (finishedChallenges.isEmpty()) {
+        if (finishedChallenges.isEmpty() && finishedOpenMatches.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.History, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
@@ -67,8 +82,82 @@ fun HistorialScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (finishedOpenMatches.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "OPEN MATCHES HISTORY",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    items(finishedOpenMatches, key = { it.id }) { event ->
+                        OpenMatchHistoryCard(
+                            event = event,
+                            review = myReviewsByEventId[event.id]?.text
+                        )
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                if (finishedChallenges.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "CHALLENGE HISTORY",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
                 items(finishedChallenges) { reto ->
                     HistoryCard(reto, uid)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review: String?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SportIconBox(event.sport, size = 40.dp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(event.title, fontWeight = FontWeight.Bold)
+                    val dateLabel = event.scheduledAt?.toDate()?.toString()?.take(16) ?: "Unknown date"
+                    Text(dateLabel, fontSize = 12.sp, color = Color.Gray)
+                }
+                ChallengeBadge("FINISHED", Color(0xFFE3F2FD), Color(0xFF1565C0))
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val message = if (review.isNullOrBlank()) {
+                        "No review saved yet"
+                    } else {
+                        review
+                    }
+                    Text(message, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

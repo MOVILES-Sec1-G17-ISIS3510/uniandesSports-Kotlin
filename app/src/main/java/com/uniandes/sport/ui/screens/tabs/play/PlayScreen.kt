@@ -1,13 +1,19 @@
 package com.uniandes.sport.ui.screens.tabs.play
 
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -26,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
@@ -40,7 +47,9 @@ fun PlayScreen(
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
+    val inProgressEvents by viewModel.inProgressEvents.collectAsState()
     val finishedEvents by viewModel.finishedEvents.collectAsState()
+    val myReviewsByEventId by viewModel.myReviewsByEventId.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
@@ -51,6 +60,7 @@ fun PlayScreen(
     var showAllJoinedMatches by remember { mutableStateOf(false) }
     var showAllFinishedMatches by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    var reviewEvent by remember { mutableStateOf<com.uniandes.sport.models.Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
@@ -117,6 +127,11 @@ fun PlayScreen(
         }
     }
 
+    LaunchedEffect(inProgressEvents, finishedEvents) {
+        val ids = (inProgressEvents + finishedEvents).map { it.id }.distinct()
+        viewModel.fetchMyReviewsForEvents(ids)
+    }
+
     if (selectedEventUIModel != null) {
         MatchDetailModal(
             uiModel = selectedEventUIModel!!,
@@ -124,6 +139,33 @@ fun PlayScreen(
             onDismiss = {
                 selectedEventUIModel = null
                 viewModel.refreshEvents()
+            }
+        )
+    }
+
+    if (reviewEvent != null) {
+        val existingReview = myReviewsByEventId[reviewEvent!!.id]
+        ReviewDialog(
+            event = reviewEvent!!,
+            existingReview = existingReview,
+            viewModel = viewModel,
+            onDismiss = { reviewEvent = null },
+            onSubmit = { text, rating, attendanceByUserId, source, onDone ->
+                viewModel.submitReview(
+                    eventId = reviewEvent!!.id,
+                    reviewText = text,
+                    rating = rating,
+                    attendanceByUserId = attendanceByUserId,
+                    source = source,
+                    onSuccess = {
+                        android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
+                        onDone(true)
+                    },
+                    onError = { e ->
+                        android.widget.Toast.makeText(context, "Could not save review: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        onDone(false)
+                    }
+                )
             }
         )
     }
@@ -181,6 +223,34 @@ fun PlayScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            if (inProgressEvents.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "IN PROGRESS NOW",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Matches started less than 1 hour ago",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                items(inProgressEvents, key = { it.id }) { event ->
+                    val uiModel = EventUIAdapter.toUIModel(event)
+                    MatchCard(
+                        uiModel = uiModel,
+                        badgeText = "IN PROGRESS",
+                        reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                        onReviewClick = { reviewEvent = event },
+                        onMatchClick = { onMatchSelected(event) }
+                    )
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -367,6 +437,8 @@ fun PlayScreen(
                             uiModel = uiModel,
                             highlighted = false,
                             badgeText = "FINISHED",
+                            reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                            onReviewClick = { reviewEvent = event },
                             onMatchClick = { onMatchSelected(event) }
                         )
                     }
@@ -504,6 +576,8 @@ private fun JoinedMatchListCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     countdownText: String,
     urgency: CountdownUrgency,
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val event = uiModel.rawEvent
@@ -558,6 +632,18 @@ private fun JoinedMatchListCard(
                     fontWeight = FontWeight.Bold,
                     color = urgencyText
                 )
+            }
+
+            if (onReviewClick != null) {
+                TextButton(
+                    onClick = onReviewClick,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(reviewLabel, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -729,6 +815,8 @@ fun MatchCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     highlighted: Boolean = false,
     badgeText: String? = null,
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
     onMatchClick: () -> Unit = {}
 ) {
     val event = uiModel.rawEvent
@@ -796,9 +884,264 @@ fun MatchCard(
                         )
                     }
                 }
+
+                if (onReviewClick != null) {
+                    TextButton(
+                        onClick = onReviewClick,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(reviewLabel, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             
             Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = MaterialTheme.colorScheme.outline)
         }
     }
+}
+
+@Composable
+private fun ReviewDialog(
+    event: com.uniandes.sport.models.Event,
+    existingReview: com.uniandes.sport.models.OpenMatchReview?,
+    viewModel: PlayViewModelInterface,
+    onDismiss: () -> Unit,
+    onSubmit: (text: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onDone: (Boolean) -> Unit) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var reviewText by remember(existingReview?.text) { mutableStateOf(existingReview?.text.orEmpty()) }
+    var rating by remember(existingReview?.rating) { mutableIntStateOf(existingReview?.rating ?: 0) }
+    var submitting by remember { mutableStateOf(false) }
+    var inputSource by remember { mutableStateOf(existingReview?.source ?: "text") }
+    var members by remember { mutableStateOf<List<com.uniandes.sport.models.MatchMember>>(emptyList()) }
+    var loadingMembers by remember { mutableStateOf(true) }
+    val attendanceByUserId = remember { mutableStateMapOf<String, Boolean>() }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(event.id, existingReview?.attendanceByUserId) {
+        loadingMembers = true
+        viewModel.fetchEventMembersOnce(
+            eventId = event.id,
+            onSuccess = { list ->
+                members = list
+                attendanceByUserId.clear()
+                list.forEach { member ->
+                    attendanceByUserId[member.userId] = existingReview?.attendanceByUserId?.get(member.userId) ?: false
+                }
+                loadingMembers = false
+            },
+            onError = {
+                members = emptyList()
+                loadingMembers = false
+            }
+        )
+    }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+            if (spoken.isNotBlank()) {
+                reviewText = spoken
+                inputSource = "microphone"
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Match review",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Rate the match", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            (1..5).forEach { star ->
+                                FilledIconButton(
+                                    onClick = { rating = star },
+                                    modifier = Modifier.size(34.dp),
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "Star $star",
+                                        tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (rating == 0) "Select" else "$rating/5",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Your review", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
+                                    }
+                                    try {
+                                        speechLauncher.launch(intent)
+                                    } catch (_: Exception) {
+                                        android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Voice")
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = reviewText,
+                            onValueChange = {
+                                reviewText = it
+                                inputSource = "text"
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 7,
+                            placeholder = { Text("Tell us what happened in this match") }
+                        )
+
+                        if (inputSource == "microphone") {
+                            AssistChip(onClick = {}, label = { Text("Voice input") })
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Attendance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            if (loadingMembers) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            }
+                        }
+
+                        if (!loadingMembers && members.isEmpty()) {
+                            Text("No members found for this match", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        members.forEach { member ->
+                            val checked = attendanceByUserId[member.userId] == true
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    attendanceByUserId[member.userId] = !checked
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (checked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { value -> attendanceByUserId[member.userId] = value }
+                                    )
+                                    Text(
+                                        text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (member.userId == viewModel.currentUserId) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = reviewText.isNotBlank() && rating in 1..5 && !submitting,
+                onClick = {
+                    submitting = true
+                    onSubmit(reviewText, rating, attendanceByUserId.toMap(), inputSource) { success ->
+                        submitting = false
+                        if (success) onDismiss()
+                    }
+                }
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!submitting) onDismiss() }) {
+                Text("Cancel")
+            }
+        }
+    )
 }
