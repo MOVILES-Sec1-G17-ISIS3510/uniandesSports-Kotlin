@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
+import com.uniandes.sport.ui.components.rememberNetworkConnectivityState
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -62,6 +63,9 @@ fun PlayScreen(
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     var reviewEvent by remember { mutableStateOf<com.uniandes.sport.models.Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isConnected by rememberNetworkConnectivityState()
+    var connectivityInitialized by remember { mutableStateOf(false) }
+    var wasDisconnected by remember { mutableStateOf(false) }
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -132,10 +136,35 @@ fun PlayScreen(
         viewModel.fetchMyReviewsForEvents(ids)
     }
 
+    LaunchedEffect(isConnected) {
+        if (!connectivityInitialized) {
+            connectivityInitialized = true
+            if (!isConnected) {
+                android.widget.Toast.makeText(context, "No connection", android.widget.Toast.LENGTH_SHORT).show()
+                wasDisconnected = true
+            }
+            return@LaunchedEffect
+        }
+
+        if (!isConnected) {
+            if (!wasDisconnected) {
+                android.widget.Toast.makeText(context, "No connection", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            wasDisconnected = true
+        } else if (wasDisconnected) {
+            android.widget.Toast.makeText(context, "Connected again", android.widget.Toast.LENGTH_SHORT).show()
+            wasDisconnected = false
+        }
+    }
+
     if (selectedEventUIModel != null) {
         MatchDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
+            isConnected = isConnected,
+            onNoConnection = {
+                android.widget.Toast.makeText(context, "No connection", android.widget.Toast.LENGTH_SHORT).show()
+            },
             onDismiss = {
                 selectedEventUIModel = null
                 viewModel.refreshEvents()
@@ -176,6 +205,16 @@ fun PlayScreen(
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
             onCreate = { title, location, description, date, skillLevel, maxParticipants, dialogOnSuccess, dialogOnError ->
+                if (!isConnected) {
+                    dialogOnError(Exception("No connection"))
+                    android.widget.Toast.makeText(
+                        context,
+                        "No connection",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@CreateMatchDialog
+                }
+
                 viewModel.createEvent(
                     title = title,
                     description = description,
@@ -517,7 +556,17 @@ fun PlayScreen(
                     }
                     
                     OutlinedButton(
-                        onClick = { showCreateDialog = true },
+                        onClick = {
+                            if (!isConnected) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "No connection",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                return@OutlinedButton
+                            }
+                            showCreateDialog = true
+                        },
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
