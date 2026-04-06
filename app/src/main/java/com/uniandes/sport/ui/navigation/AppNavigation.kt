@@ -21,7 +21,8 @@ fun AppNavigation(
     startTabIndex: Int = 0,
     pendingOpenMatchEventId: String? = null,
     onOpenMatchConsumed: () -> Unit = {},
-    onPageChanged: (Int) -> Unit = {}
+    onPageChanged: (Int) -> Unit = {},
+    searchQuery: String = ""
 ) {
     NavHost(
         navController = navController,
@@ -65,7 +66,8 @@ fun AppNavigation(
                 pendingOpenMatchEventId = pendingOpenMatchEventId,
                 onOpenMatchConsumed = onOpenMatchConsumed,
                 onPageChanged = onPageChanged,
-                onNavigate = { route -> navController.navigate(route) }
+                onNavigate = { route -> navController.navigate(route) },
+                searchQuery = searchQuery
             )
         }
         

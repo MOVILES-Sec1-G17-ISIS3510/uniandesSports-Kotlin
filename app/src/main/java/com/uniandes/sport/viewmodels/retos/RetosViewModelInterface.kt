@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 // aqui desimos que datos tiene y que puede aser
 interface RetosViewModelInterface {
     val retos: StateFlow<List<Reto>>
+    val activeChallenges: StateFlow<List<Reto>>
+    val exploreChallenges: StateFlow<List<Reto>>
     val userChallenges: StateFlow<Map<String, UserChallenge>> // retoid -> userchallenge
     val isLoading: StateFlow<Boolean>
     
@@ -18,6 +20,10 @@ interface RetosViewModelInterface {
     val selectedType: StateFlow<String>
     // filtro por deporte (all, soccer, etc)
     val selectedSport: StateFlow<String>
+    
+    // TACTICA: Búsqueda con Debounce
+    val searchQuery: StateFlow<String>
+    fun setSearchQuery(query: String)
 
     fun setTypeFilter(type: String)
     fun setSportFilter(sport: String)

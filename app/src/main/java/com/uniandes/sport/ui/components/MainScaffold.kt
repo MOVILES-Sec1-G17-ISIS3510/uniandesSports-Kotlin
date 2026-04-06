@@ -47,11 +47,13 @@ fun MainScaffold(
     val context = LocalContext.current
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
     var lastBackPressTime by remember { mutableStateOf(0L) }
     var showBackToast by remember { mutableStateOf(false) }
     
     // Core screens list for BottomBar syncing
-    val coreScreens = listOf(Screen.Home, Screen.Retos, Screen.Play, Screen.Comunidades, Screen.Profesores)
+    val coreScreens = listOf(Screen.Home, Screen.Challenges, Screen.Play, Screen.Comunidades, Screen.Profesores)
 
     // Update activeTabPageIndex when navigation occurs (e.g. back button or direct navigate)
     LaunchedEffect(navBackStackEntry) {
@@ -124,7 +126,12 @@ fun MainScaffold(
                         currentRoute = currentRoute, 
                         onProfileClick = { navController.navigate(Screen.Perfil.route) },
                         themeMode = themeMode,
-                        onThemeChange = onThemeChange
+                        onThemeChange = onThemeChange,
+                        isSearchActive = isSearchActive,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        onToggleSearch = { isSearchActive = !isSearchActive; if(!isSearchActive) searchQuery = "" },
+                        onHistoryClick = { navController.navigate(Screen.Historial.route) } // Or a new History screen
                     )
                 }
             },
@@ -153,7 +160,8 @@ fun MainScaffold(
                 modifier = Modifier.padding(innerPadding),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page
-                }
+                },
+                searchQuery = searchQuery
             )
         }
     }
@@ -165,7 +173,12 @@ fun TopAppBarDynamic(
     currentRoute: String, 
     onProfileClick: () -> Unit,
     themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit
+    onThemeChange: (ThemeMode) -> Unit,
+    isSearchActive: Boolean = false,
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
+    onToggleSearch: () -> Unit = {},
+    onHistoryClick: () -> Unit = {}
 ) {
     var showThemeMenu by remember { mutableStateOf(false) }
 
@@ -229,7 +242,7 @@ fun TopAppBarDynamic(
 
     val title = when (currentRoute) {
         Screen.Home.route -> "USports"
-        Screen.Retos.route -> "Challenges"
+        Screen.Challenges.route -> "Challenges"
         Screen.Play.route -> "Play"
         Screen.Comunidades.route -> "Communities"
         Screen.Profesores.route -> "Coaches"
@@ -243,7 +256,7 @@ fun TopAppBarDynamic(
     
     val subtitle = when (currentRoute) {
         Screen.Home.route -> ""
-        Screen.Retos.route -> "COMPETE AND IMPROVE"
+        Screen.Challenges.route -> "COMPETE AND IMPROVE"
         Screen.Play.route -> "FIND YOUR NEXT MATCH"
         Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
         Screen.Profesores.route -> "LEARN FROM EXPERTS"
@@ -270,11 +283,30 @@ fun TopAppBarDynamic(
             }
         },
         actions = {
-            if (currentRoute == Screen.Retos.route) {
-                IconButton(onClick = { /* TODO */ }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+            if (currentRoute == Screen.Challenges.route) {
+                if (isSearchActive) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        modifier = Modifier.width(180.dp).padding(end = 8.dp),
+                        placeholder = { Text("Search...", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent
+                        )
+                    )
                 }
-                IconButton(onClick = { /* TODO: Challenge history */ }) {
+                IconButton(onClick = onToggleSearch) {
+                    Icon(
+                        if (isSearchActive) Icons.Default.Close else Icons.Default.Search, 
+                        contentDescription = "Search"
+                    )
+                }
+                IconButton(onClick = onHistoryClick) {
                     Icon(Icons.Default.EventNote, contentDescription = "History")
                 }
             }
@@ -314,7 +346,7 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
     ) {
         val items = listOf(
             Screen.Home to Icons.Default.Home,
-            Screen.Retos to Icons.Default.EmojiEvents,
+            Screen.Challenges to Icons.Default.EmojiEvents,
             Screen.Play to playIconsList[playIconIndex],
             Screen.Comunidades to Icons.Default.Group,
             Screen.Profesores to Icons.Default.School

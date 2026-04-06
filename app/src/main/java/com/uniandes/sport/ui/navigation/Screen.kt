@@ -2,7 +2,7 @@ package com.uniandes.sport.ui.navigation
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
-    object Retos : Screen("retos")
+    object Challenges : Screen("challenges")
     object Play : Screen("play")
     object Comunidades : Screen("social")
     object Profesores : Screen("profesores")

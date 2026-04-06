@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.util.Log
 import com.google.firebase.Timestamp
+import kotlinx.coroutines.flow.*
+import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 
 // viewmodel de firestore para retos de verdad
 class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
@@ -32,6 +35,35 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     private val _creationStatus = MutableStateFlow("IDLE")
     override val creationStatus: StateFlow<String> = _creationStatus.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    override val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val debouncedSearchQuery = _searchQuery
+        .debounce(300L)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), "")
+
+    override val activeChallenges: StateFlow<List<Reto>> = combine(
+        _retos,
+        debouncedSearchQuery
+    ) { list, query ->
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        list.filter { it.participants.contains(uid) && it.status == "active" }
+            .filter { it.title.contains(query, ignoreCase = true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    override val exploreChallenges: StateFlow<List<Reto>> = combine(
+        _retos,
+        debouncedSearchQuery,
+        _selectedType,
+        _selectedSport
+    ) { list, query, type, sport ->
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        list.filter { !it.participants.contains(uid) }
+            .filter { if (type == "All") true else it.type.equals(type, ignoreCase = true) }
+            .filter { if (sport == "All Sports") true else it.sport.equals(sport, ignoreCase = true) }
+            .filter { it.title.contains(query, ignoreCase = true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     init {
         // bamos a traer los retos apenas carge
         fetchRetos()
@@ -43,6 +75,10 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
 
     override fun setSportFilter(sport: String) {
         _selectedSport.value = sport
+    }
+
+    override fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     override fun fetchRetos() {
@@ -104,7 +140,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         val user = auth.currentUser
         
         if (user == null) {
-            _creationStatus.value = "ERROR: No estas logueado carnal"
+            _creationStatus.value = "ERROR: You are not logged in"
             return
         }
         
