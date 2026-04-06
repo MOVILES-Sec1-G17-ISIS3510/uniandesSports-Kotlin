@@ -1,5 +1,6 @@
 package com.uniandes.sport.viewmodels.play
 
+import com.uniandes.sport.models.OpenMatchReview
 import com.uniandes.sport.models.Event
 import kotlinx.coroutines.flow.StateFlow
 
@@ -11,11 +12,13 @@ interface PlayViewModelInterface {
     val members: StateFlow<List<com.uniandes.sport.models.MatchMember>>
     val selectedSport: StateFlow<String?>
     val joinedEventIds: StateFlow<Set<String>>
+    val myReviewsByEventId: StateFlow<Map<String, OpenMatchReview>>
     val currentUserId: String?
     
     fun setSportFilter(sport: String?)
     fun fetchEvents()
     fun refreshEvents()
+    fun fetchMyReviewsForEvents(eventIds: List<String>)
     fun fetchMembers(eventId: String)
     fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun createEvent(title: String, description: String, location: String, sport: String, modality: String, scheduledAt: java.util.Date, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit)

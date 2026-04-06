@@ -47,6 +47,7 @@ fun PlayScreen(
     val events by viewModel.events.collectAsState()
     val inProgressEvents by viewModel.inProgressEvents.collectAsState()
     val finishedEvents by viewModel.finishedEvents.collectAsState()
+    val myReviewsByEventId by viewModel.myReviewsByEventId.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
@@ -122,6 +123,11 @@ fun PlayScreen(
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
             onOpenMatchConsumed()
         }
+    }
+
+    LaunchedEffect(events, inProgressEvents, finishedEvents) {
+        val ids = (events + inProgressEvents + finishedEvents).map { it.id }.distinct()
+        viewModel.fetchMyReviewsForEvents(ids)
     }
 
     if (selectedEventUIModel != null) {
@@ -231,6 +237,8 @@ fun PlayScreen(
                     MatchCard(
                         uiModel = uiModel,
                         badgeText = "IN PROGRESS",
+                        reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                        onReviewClick = { reviewEvent = event },
                         onMatchClick = { onMatchSelected(event) }
                     )
                 }
@@ -325,6 +333,8 @@ fun PlayScreen(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
                                     urgency = urgency,
+                                    reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                                    onReviewClick = { reviewEvent = event },
                                     onClick = { onMatchSelected(event) }
                                 )
                             }
@@ -394,6 +404,8 @@ fun PlayScreen(
                         val uiModel = EventUIAdapter.toUIModel(event)
                         MatchCard(
                             uiModel = uiModel,
+                            reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                            onReviewClick = { reviewEvent = event },
                             onMatchClick = { onMatchSelected(event) }
                         )
                     }
@@ -422,6 +434,7 @@ fun PlayScreen(
                             uiModel = uiModel,
                             highlighted = false,
                             badgeText = "FINISHED",
+                            reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
                             onReviewClick = { reviewEvent = event },
                             onMatchClick = { onMatchSelected(event) }
                         )
@@ -560,6 +573,8 @@ private fun JoinedMatchListCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     countdownText: String,
     urgency: CountdownUrgency,
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val event = uiModel.rawEvent
@@ -614,6 +629,18 @@ private fun JoinedMatchListCard(
                     fontWeight = FontWeight.Bold,
                     color = urgencyText
                 )
+            }
+
+            if (onReviewClick != null) {
+                TextButton(
+                    onClick = onReviewClick,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(reviewLabel, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -785,6 +812,7 @@ fun MatchCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     highlighted: Boolean = false,
     badgeText: String? = null,
+    reviewLabel: String = "Write review",
     onReviewClick: (() -> Unit)? = null,
     onMatchClick: () -> Unit = {}
 ) {
@@ -862,7 +890,7 @@ fun MatchCard(
                     ) {
                         Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Write review", fontWeight = FontWeight.Bold)
+                        Text(reviewLabel, fontWeight = FontWeight.Bold)
                     }
                 }
             }

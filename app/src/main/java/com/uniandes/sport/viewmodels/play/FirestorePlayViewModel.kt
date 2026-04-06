@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.models.Event
+import com.uniandes.sport.models.OpenMatchReview
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
 import com.uniandes.sport.patterns.event.SportFilterStrategy
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val db = FirebaseFirestore.getInstance()
@@ -38,6 +40,9 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
     private val _joinedEventIds = MutableStateFlow<Set<String>>(emptySet())
     override val joinedEventIds: StateFlow<Set<String>> = _joinedEventIds.asStateFlow()
+
+    private val _myReviewsByEventId = MutableStateFlow<Map<String, OpenMatchReview>>(emptyMap())
+    override val myReviewsByEventId: StateFlow<Map<String, OpenMatchReview>> = _myReviewsByEventId.asStateFlow()
 
     private var joinedEventsListener: ListenerRegistration? = null
 
@@ -98,6 +103,43 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
     }
 
+    override fun fetchMyReviewsForEvents(eventIds: List<String>) {
+        val uid = currentUserId ?: run {
+            _myReviewsByEventId.value = emptyMap()
+            return
+        }
+
+        val distinctIds = eventIds.distinct()
+        if (distinctIds.isEmpty()) {
+            _myReviewsByEventId.value = emptyMap()
+            return
+        }
+
+        viewModelScope.launch {
+            val result = mutableMapOf<String, OpenMatchReview>()
+            distinctIds.forEach { eventId ->
+                try {
+                    val doc = db.collection("events")
+                        .document(eventId)
+                        .collection("reviews")
+                        .document(uid)
+                        .get()
+                        .await()
+
+                    if (doc.exists()) {
+                        val review = doc.toObject(OpenMatchReview::class.java)
+                        if (review != null) {
+                            result[eventId] = review
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PlayVM", "Error loading review for event $eventId", e)
+                }
+            }
+            _myReviewsByEventId.value = result
+        }
+    }
+
     override fun setSportFilter(sport: String?) {
         _selectedSport.value = sport
         currentFilterStrategy = if (sport != null) {
@@ -143,20 +185,37 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         }
 
         val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        val uid = user?.uid
+        if (uid.isNullOrBlank()) {
+            onError(IllegalStateException("User not authenticated"))
+            return
+        }
         val payload = mapOf(
             "eventId" to eventId,
-            "userId" to (user?.uid ?: "anonymous"),
+            "userId" to uid,
             "userEmail" to (user?.email ?: ""),
             "text" to text,
             "source" to source,
-            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
         db.collection("events")
             .document(eventId)
             .collection("reviews")
-            .add(payload)
-            .addOnSuccessListener { onSuccess() }
+            .document(uid)
+            .set(payload, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                _myReviewsByEventId.value = _myReviewsByEventId.value + (
+                    eventId to OpenMatchReview(
+                        eventId = eventId,
+                        userId = uid,
+                        userEmail = user.email ?: "",
+                        text = text,
+                        source = source
+                    )
+                )
+                onSuccess()
+            }
             .addOnFailureListener { e -> onError(e as? Exception ?: Exception(e.message)) }
     }
 
