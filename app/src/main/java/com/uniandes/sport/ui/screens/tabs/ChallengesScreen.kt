@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.flow.*
 import com.uniandes.sport.models.*
 import com.uniandes.sport.viewmodels.retos.RetosViewModelInterface
 import androidx.compose.ui.window.Dialog
@@ -42,36 +44,27 @@ import com.google.firebase.ktx.Firebase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RetosScreen(
+fun ChallengesScreen(
     viewModel: RetosViewModelInterface,
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface,
     onNavigate: (String) -> Unit
 ) {
-    val retos by viewModel.retos.collectAsState()
+    val activeChallenges by viewModel.activeChallenges.collectAsState()
+    val exploreChallenges by viewModel.exploreChallenges.collectAsState()
     val selectedType by viewModel.selectedType.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
     
     var showDialog by remember { mutableStateOf(false) }
+    val currentUserId = Firebase.auth.currentUser?.uid ?: "no_user"
     
-    // bamos a traer el id del usuario ke esta logueado de verdad
-    val currentUserId = com.google.firebase.ktx.Firebase.auth.currentUser?.uid ?: "no_user"
-    
-    // bamos a ber si se creo el reto para tirar el toast
     val creationStatus by viewModel.creationStatus.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(creationStatus) {
         if (creationStatus.startsWith("ERROR:")) {
-            android.widget.Toast.makeText(context, "fallo: ${creationStatus.removePrefix("ERROR: ")}", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(context, "Failed: ${creationStatus.removePrefix("ERROR: ")}", android.widget.Toast.LENGTH_LONG).show()
         }
-    }
-
-    val filteredRetos = retos.filter { reto ->
-        val typeMatch = if (selectedType.equals("All", ignoreCase = true)) true 
-                        else reto.type.trim().equals(selectedType.trim(), ignoreCase = true)
-        val sportMatch = if (selectedSport.equals("All Sports", ignoreCase = true)) true 
-                         else reto.sport.trim().equals(selectedSport.trim(), ignoreCase = true)
-        typeMatch && sportMatch
     }
 
     Scaffold(
@@ -82,67 +75,105 @@ fun RetosScreen(
                 contentColor = MaterialTheme.colorScheme.onTertiary,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "nuevo reto")
+                Icon(Icons.Default.Add, contentDescription = "New Challenge")
             }
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFF8F9FA))
+                .background(Color(0xFFF8F9FA)),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // tabs de arriba
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val types = listOf("All", "Individual", "Team")
-                types.forEach { type ->
-                    FilterTab(
-                        text = type,
-                        selected = selectedType.equals(type, ignoreCase = true),
-                        onClick = { viewModel.setTypeFilter(type) }
-                    )
+            // --- SECTION: ACTIVE CHALLENGES ---
+            if (activeChallenges.isNotEmpty()) {
+                item {
+                    SectionHeader(title = "MY ACTIVE CHALLENGES", subtitle = "You are doing great!")
                 }
-            }
-
-            // chips de deportes
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                val sports = listOf("All Sports", "Soccer", "Running", "Calisthenics", "Tennis")
-                items(sports) { sport ->
-                    SportChip(
-                        text = sport,
-                        selected = selectedSport.equals(sport, ignoreCase = true),
-                        onClick = { 
-                            viewModel.setSportFilter(sport) 
-                            logViewModel.log(
-                                screen = "RetosScreen",
-                                action = "SPORT_FILTER_APPLIED",
-                                params = mapOf("sport_category" to sport)
+                item {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    ) {
+                        items(activeChallenges) { reto ->
+                            ActiveChallengeCard(
+                                reto = reto,
+                                currentUserId = currentUserId,
+                                onClick = { /* Navigate to detail */ }
                             )
                         }
-                    )
+                    }
                 }
             }
 
-            // lista de retos
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(filteredRetos) { reto ->
-                    ChallengeCard(
-                        reto = reto,
-                        currentUserId = currentUserId
-                    )
+            // --- SECTION: EXPLORE NEW CHALLENGES ---
+            item {
+                SectionHeader(title = "EXPLORE NEW CHALLENGES", subtitle = "Find your next goal")
+            }
+
+            // STICKY-LIKE FILTERS
+            item {
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                    // Type Tabs
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("All", "Individual", "Team").forEach { type ->
+                            FilterTab(
+                                text = type,
+                                selected = selectedType.equals(type, ignoreCase = true),
+                                onClick = { viewModel.setTypeFilter(type) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Sport Chips
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val sports = listOf("All Sports", "Soccer", "Running", "Calisthenics", "Tennis")
+                        items(sports) { sport ->
+                            SportChip(
+                                text = sport,
+                                selected = selectedSport.equals(sport, ignoreCase = true),
+                                onClick = { 
+                                    viewModel.setSportFilter(sport) 
+                                    logViewModel.log(
+                                        screen = "ChallengesScreen",
+                                        action = "SPORT_FILTER_APPLIED",
+                                        params = mapOf("sport_category" to sport)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isLoading && exploreChallenges.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            } else if (exploreChallenges.isEmpty()) {
+                item {
+                    EmptyDiscoveryState()
+                }
+            } else {
+                items(exploreChallenges) { reto ->
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        ExploreChallengeCard(
+                            reto = reto,
+                            onJoin = { viewModel.joinReto(reto.id, currentUserId) }
+                        )
+                    }
                 }
             }
         }
@@ -156,10 +187,7 @@ fun RetosScreen(
                 logViewModel.log(
                     screen = "RetosScreen",
                     action = "EVENT_REGISTERED",
-                    params = mapOf(
-                        "challenge_type" to newReto.type,
-                        "sport_category" to newReto.sport
-                    )
+                    params = mapOf("type" to newReto.type, "sport" to newReto.sport)
                 )
                 showDialog = false
             },
@@ -169,136 +197,41 @@ fun RetosScreen(
 }
 
 @Composable
+fun EmptyDiscoveryState() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("No challenges found", color = Color.Gray, fontWeight = FontWeight.Medium)
+        Text("Try changing filters or search query", color = Color.Gray, fontSize = 12.sp)
+    }
+}
+
+@Composable
 fun FilterTab(text: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
         color = if (selected) Color(0xFF0D1B3E) else Color(0xFFE9F1F5),
-        modifier = Modifier.height(40.dp).padding(horizontal = 4.dp)
+        modifier = Modifier.height(36.dp)
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 24.dp)) {
-            Text(text = text, color = if (selected) Color.White else Color(0xFF0D1B3E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text(text = text, color = if (selected) Color.White else Color(0xFF0D1B3E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }
 
 @Composable
 fun SportChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    AssistChip(
+    FilterChip(
+        selected = selected,
         onClick = onClick,
-        label = { Text(text, color = if (selected) Color.White else Color.Black) },
-        colors = AssistChipDefaults.assistChipColors(containerColor = if (selected) Color(0xFF43A047) else Color.White),
-        shape = RoundedCornerShape(12.dp),
-        border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = Color.LightGray),
-        leadingIcon = {
-            val icon = when (text) {
-                "Running" -> Icons.Default.DirectionsRun
-                "Soccer" -> Icons.Default.SportsSoccer
-                "Calisthenics" -> Icons.Default.FitnessCenter
-                "Tennis" -> Icons.Default.SportsTennis
-                else -> Icons.Default.FlashOn
-            }
-            Icon(icon, contentDescription = null, tint = if (selected) Color.White else Color.Gray)
-        }
+        label = { Text(text, fontSize = 12.sp) },
+        leadingIcon = if (selected) { { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) } } else null,
+        shape = RoundedCornerShape(12.dp)
     )
-}
-
-@Composable
-fun ChallengeCard(reto: Reto, currentUserId: String) {
-    val strategy = remember { DefaultProgressStrategy() }
-    val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
-    val progressPercent = strategy.getPercent(progressRaw)
-    
-    // calculamos los dias ke faltan de las fechas ke dio el user
-    val daysLeft = remember(reto.endDate) {
-        reto.endDate?.let {
-            val diff = it.toDate().time - Date().time
-            (diff / (1000 * 60 * 60 * 24)).coerceAtLeast(0).toInt()
-        } ?: 0
-    }
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFE3F2FD)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when(reto.sport.lowercase()) {
-                            "running" -> Icons.Default.DirectionsRun
-                            "soccer" -> Icons.Default.SportsSoccer
-                            "calisthenics" -> Icons.Default.FitnessCenter
-                            "tennis" -> Icons.Default.SportsTennis
-                            else -> Icons.Default.Sports
-                        },
-                        contentDescription = null,
-                        tint = Color(0xFF1976D2)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = reto.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Badge(text = reto.type.replaceFirstChar { it.uppercase() }, containerColor = Color(0xFFE3F2FD), contentColor = Color(0xFF1976D2))
-                        val diffColor = when(reto.difficulty.lowercase()) {
-                            "advanced" -> Color(0xFFFFEBEE)
-                            "intermediate" -> Color(0xFFFFF3E0)
-                            else -> Color(0xFFE8F5E9)
-                        }
-                        val diffText = when(reto.difficulty.lowercase()) {
-                            "advanced" -> Color(0xFFD32F2F)
-                            "intermediate" -> Color(0xFFEF6C00)
-                            else -> Color(0xFF2E7D32)
-                        }
-                        Badge(text = reto.difficulty.replaceFirstChar { it.uppercase() }, containerColor = diffColor, contentColor = diffText)
-                    }
-                }
-                
-                Text(text = "$progressPercent%", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Color(0xFF0D1B3E))
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                DetailItem(Icons.Default.TrackChanges, reto.goalLabel)
-                DetailItem(Icons.Default.AccessTime, "${daysLeft}d left")
-                DetailItem(Icons.Default.Groups, "${reto.participantsCount}")
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            LinearProgressIndicator(
-                progress = { progressRaw.toFloat() },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-                color = Color(0xFF00897B),
-                trackColor = Color(0xFFE0E0E0)
-            )
-        }
-    }
-}
-
-@Composable
-fun Badge(text: String, containerColor: Color, contentColor: Color) {
-    Surface(color = containerColor, shape = RoundedCornerShape(4.dp)) {
-        Text(text = text, color = contentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
-    }
-}
-
-@Composable
-fun DetailItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(text = text, fontSize = 12.sp, color = Color.Gray)
-    }
 }
 
 @Composable
@@ -322,7 +255,7 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("NEW CHALLENGE", fontWeight = FontWeight.Black, fontSize = 20.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "cerrar") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -357,7 +290,6 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("Cancel") }
                     Button(
                         onClick = {
-                            // usamos la fabrik para crear el reto con lo k puso el user
                             val creator: RetoCreator = if (type.lowercase() == "team") TeamRetoCreator() else IndividualRetoCreator()
                             try {
                                 val start = dateFormat.parse(startDateStr)
@@ -365,7 +297,6 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
                                 val newReto = creator.createReto(name, sport, difficulty, goalLabel, currentUserId, type, start, end)
                                 onCreate(newReto)
                             } catch (e: Exception) {
-                                // si puso mal la fecha pues le ponemso hoy
                                 val newReto = creator.createReto(name, sport, difficulty, goalLabel, currentUserId, type, Date(), Date())
                                 onCreate(newReto)
                             }

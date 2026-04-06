@@ -130,5 +130,3 @@ fun ClimaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Weather
 @Composable
 fun StravaScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Strava", onNavigate)
 
-@Composable
-fun HistorialScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("History", onNavigate)

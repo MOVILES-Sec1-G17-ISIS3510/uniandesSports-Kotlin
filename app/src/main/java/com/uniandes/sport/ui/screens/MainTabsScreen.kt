@@ -21,9 +21,10 @@ fun MainTabsScreen(
     pendingOpenMatchEventId: String? = null,
     onOpenMatchConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    searchQuery: String = ""
 ) {
-    val coreScreens = listOf(Screen.Home, Screen.Retos, Screen.Play, Screen.Comunidades, Screen.Profesores)
+    val coreScreens = listOf(Screen.Home, Screen.Challenges, Screen.Play, Screen.Comunidades, Screen.Profesores)
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { coreScreens.size })
 
     // Report page changes to sync with BottomBar
@@ -45,10 +46,16 @@ fun MainTabsScreen(
     ) { page ->
         when (coreScreens[page]) {
             Screen.Home -> HomeScreen(onNavigate = onNavigate)
-            Screen.Retos -> {
+            Screen.Challenges -> {
                 val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-                RetosScreen(
+                
+                // Update search query in VM
+                LaunchedEffect(searchQuery) {
+                    retosViewModel.setSearchQuery(searchQuery)
+                }
+
+                ChallengesScreen(
                     viewModel = retosViewModel,
                     logViewModel = logViewModel,
                     onNavigate = onNavigate

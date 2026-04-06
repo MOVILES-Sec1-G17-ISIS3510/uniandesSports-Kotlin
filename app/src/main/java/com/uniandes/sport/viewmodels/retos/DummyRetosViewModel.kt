@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.*
+import kotlinx.coroutines.flow.*
+import androidx.lifecycle.viewModelScope
 
 // viewmodel dummy actualizado con timestamps de firebase
 class DummyRetosViewModel : ViewModel(), RetosViewModelInterface {
@@ -29,6 +31,17 @@ class DummyRetosViewModel : ViewModel(), RetosViewModelInterface {
     private val _creationStatus = MutableStateFlow("IDLE")
     override val creationStatus: StateFlow<String> = _creationStatus.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    override val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    override val activeChallenges: StateFlow<List<Reto>> = combine(_retos, _searchQuery) { list, query ->
+        list.filter { it.title.contains(query, ignoreCase = true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    override val exploreChallenges: StateFlow<List<Reto>> = combine(_retos, _searchQuery) { list, query ->
+        list.filter { it.title.contains(query, ignoreCase = true) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     private val currentUserId = "irHfuQbI4DZ0fUwAqkNbcSVvjNW2"
 
     init {
@@ -41,6 +54,10 @@ class DummyRetosViewModel : ViewModel(), RetosViewModelInterface {
 
     override fun setSportFilter(sport: String) {
         _selectedSport.value = sport
+    }
+
+    override fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     override fun fetchRetos() {
