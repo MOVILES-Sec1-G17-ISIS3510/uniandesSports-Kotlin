@@ -346,11 +346,11 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
     val openWhatsApp = {
         if (!hasNetworkConnection(context)) {
             showNoConnectionToast(context)
-            return@let
+        } else {
+            val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}?text=Hi ${profesor.nombre}, I'm interested in your classes!"
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            context.startActivity(intent)
         }
-        val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}?text=Hi ${profesor.nombre}, I'm interested in your classes!"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        context.startActivity(intent)
     }
 
     Card(
