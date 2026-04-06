@@ -2,6 +2,7 @@ package com.uniandes.sport.viewmodels.play
 
 import com.uniandes.sport.models.OpenMatchReview
 import com.uniandes.sport.models.Event
+import com.uniandes.sport.models.MatchMember
 import kotlinx.coroutines.flow.StateFlow
 
 interface PlayViewModelInterface {
@@ -19,9 +20,10 @@ interface PlayViewModelInterface {
     fun fetchEvents()
     fun refreshEvents()
     fun fetchMyReviewsForEvents(eventIds: List<String>)
+    fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
     fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun createEvent(title: String, description: String, location: String, sport: String, modality: String, scheduledAt: java.util.Date, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit)
     fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
-    fun submitReview(eventId: String, reviewText: String, source: String = "text", onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
+    fun submitReview(eventId: String, reviewText: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String = "text", onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
 }

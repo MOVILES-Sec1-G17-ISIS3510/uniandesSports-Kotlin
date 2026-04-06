@@ -142,13 +142,18 @@ fun PlayScreen(
     }
 
     if (reviewEvent != null) {
+        val existingReview = myReviewsByEventId[reviewEvent!!.id]
         ReviewDialog(
             event = reviewEvent!!,
+            existingReview = existingReview,
+            viewModel = viewModel,
             onDismiss = { reviewEvent = null },
-            onSubmit = { text, source, onDone ->
+            onSubmit = { text, rating, attendanceByUserId, source, onDone ->
                 viewModel.submitReview(
                     eventId = reviewEvent!!.id,
                     reviewText = text,
+                    rating = rating,
+                    attendanceByUserId = attendanceByUserId,
                     source = source,
                     onSuccess = {
                         android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
@@ -899,13 +904,38 @@ fun MatchCard(
 @Composable
 private fun ReviewDialog(
     event: com.uniandes.sport.models.Event,
+    existingReview: com.uniandes.sport.models.OpenMatchReview?,
+    viewModel: PlayViewModelInterface,
     onDismiss: () -> Unit,
-    onSubmit: (text: String, source: String, onDone: (Boolean) -> Unit) -> Unit
+    onSubmit: (text: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onDone: (Boolean) -> Unit) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var reviewText by remember { mutableStateOf("") }
+    var reviewText by remember(existingReview?.text) { mutableStateOf(existingReview?.text.orEmpty()) }
+    var rating by remember(existingReview?.rating) { mutableIntStateOf(existingReview?.rating ?: 0) }
     var submitting by remember { mutableStateOf(false) }
     var inputSource by remember { mutableStateOf("text") }
+    var members by remember { mutableStateOf<List<com.uniandes.sport.models.MatchMember>>(emptyList()) }
+    var loadingMembers by remember { mutableStateOf(true) }
+    val attendanceByUserId = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(event.id, existingReview?.attendanceByUserId) {
+        loadingMembers = true
+        viewModel.fetchEventMembersOnce(
+            eventId = event.id,
+            onSuccess = { list ->
+                members = list
+                attendanceByUserId.clear()
+                list.forEach { member ->
+                    attendanceByUserId[member.userId] = existingReview?.attendanceByUserId?.get(member.userId) ?: false
+                }
+                loadingMembers = false
+            },
+            onError = {
+                members = emptyList()
+                loadingMembers = false
+            }
+        )
+    }
 
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -929,6 +959,26 @@ private fun ReviewDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Rating", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    (1..5).forEach { star ->
+                        IconButton(
+                            onClick = { rating = star },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "Star $star",
+                                tint = if (star <= rating) Color(0xFFFFB300) else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = reviewText,
                     onValueChange = {
@@ -942,6 +992,37 @@ private fun ReviewDialog(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Attendance", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                if (loadingMembers) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else if (members.isEmpty()) {
+                    Text("No members found for this match", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        members.forEach { member ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val current = attendanceByUserId[member.userId] ?: false
+                                        attendanceByUserId[member.userId] = !current
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = attendanceByUserId[member.userId] == true,
+                                    onCheckedChange = { checked -> attendanceByUserId[member.userId] = checked }
+                                )
+                                Text(
+                                    text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+
                     OutlinedButton(
                         onClick = {
                             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -969,10 +1050,10 @@ private fun ReviewDialog(
         },
         confirmButton = {
             Button(
-                enabled = reviewText.isNotBlank() && !submitting,
+                enabled = reviewText.isNotBlank() && rating in 1..5 && !submitting,
                 onClick = {
                     submitting = true
-                    onSubmit(reviewText, inputSource) { success ->
+                    onSubmit(reviewText, rating, attendanceByUserId.toMap(), inputSource) { success ->
                         submitting = false
                         if (success) onDismiss()
                     }

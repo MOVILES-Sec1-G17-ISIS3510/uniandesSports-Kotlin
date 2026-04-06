@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.models.Event
+import com.uniandes.sport.models.MatchMember
 import com.uniandes.sport.models.OpenMatchReview
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
@@ -140,6 +141,20 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         }
     }
 
+    override fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit) {
+        db.collection("events")
+            .document(eventId)
+            .collection("members")
+            .orderBy("joinedAt")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                onSuccess(snapshot.toObjects(MatchMember::class.java))
+            }
+            .addOnFailureListener { e ->
+                onError(e as? Exception ?: Exception(e.message))
+            }
+    }
+
     override fun setSportFilter(sport: String?) {
         _selectedSport.value = sport
         currentFilterStrategy = if (sport != null) {
@@ -177,10 +192,14 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             .sortedByDescending { it.scheduledAt }
     }
 
-    override fun submitReview(eventId: String, reviewText: String, source: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    override fun submitReview(eventId: String, reviewText: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val text = reviewText.trim()
         if (text.isBlank()) {
             onError(IllegalArgumentException("Review text cannot be empty"))
+            return
+        }
+        if (rating !in 1..5) {
+            onError(IllegalArgumentException("Rating must be between 1 and 5"))
             return
         }
 
@@ -195,6 +214,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             "userId" to uid,
             "userEmail" to (user?.email ?: ""),
             "text" to text,
+            "rating" to rating,
+            "attendanceByUserId" to attendanceByUserId,
             "source" to source,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
@@ -211,6 +232,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                         userId = uid,
                         userEmail = user.email ?: "",
                         text = text,
+                        rating = rating,
+                        attendanceByUserId = attendanceByUserId,
                         source = source
                     )
                 )
