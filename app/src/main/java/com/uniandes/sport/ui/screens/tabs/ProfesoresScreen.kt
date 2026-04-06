@@ -101,7 +101,7 @@ fun ProfesoresScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .background(Color(0xFFF9FAFB)) // Light gray background
+                    .background(MaterialTheme.colorScheme.background) // Light gray background
             ) {
             // Sport Filter
             LazyRow(
@@ -112,15 +112,15 @@ fun ProfesoresScreen(
                     val isSelected = selectedFilter == dep
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF3F4F6)) else null,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant) else null,
                         shadowElevation = if (isSelected) 4.dp else 1.dp,
                         modifier = Modifier.clickable { selectedFilter = dep }
                     ) {
                         Text(
                             text = if (dep == "All") "All Coaches" else dep,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            color = if (isSelected) Color.White else Color.Gray,
+                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -142,7 +142,7 @@ fun ProfesoresScreen(
                                 .padding(32.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("No coaches found for this sport", color = Color.Gray)
+                            Text("No coaches found for this sport", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 } else {
@@ -172,7 +172,7 @@ fun ProfesoresScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         FabMenuItem(
-                            text = "Agendar Clase",
+                            text = "Book Class",
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
@@ -180,13 +180,13 @@ fun ProfesoresScreen(
                                 if (firstProfId != null) {
                                     onNavigate("book_class/$firstProfId")
                                 } else {
-                                    android.widget.Toast.makeText(context, "No hay profesores disponibles", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "No coaches available", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
                         if (isCurrentUserCoach) {
                             FabMenuItem(
-                                text = "Mi Panel de Profe",
+                                text = "My Coach Dashboard",
                                 icon = Icons.Default.Dashboard,
                                 onClick = { 
                                     isFabExpanded = false
@@ -194,7 +194,7 @@ fun ProfesoresScreen(
                                     try {
                                         onNavigate(targetDash)
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Error Nav: ${e.message}", Toast.LENGTH_LONG).show()
+                                        android.widget.Toast.makeText(context, "Nav Error: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             )
@@ -318,7 +318,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
 
     Card(
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -348,7 +348,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                             modifier = Modifier
                                 .size(24.dp)
                                 .offset(x = 6.dp, y = 6.dp)
-                                .background(Color.White, CircleShape)
+                                .background(MaterialTheme.colorScheme.surface, CircleShape)
                         )
                     }
                 }
@@ -358,7 +358,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                         text = profesor.nombre,
                         fontWeight = FontWeight.Black,
                         fontSize = 16.sp,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "${profesor.deporte} • ${profesor.precio}",
@@ -382,15 +382,15 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                         } else {
                             Row(
                                 Modifier
-                                    .background(Color(0xFFE5E7EB), RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(text = "New", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                                Text(text = "New", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "${profesor.totalReviews} reviews", fontSize = 11.sp, color = Color.Gray)
+                        Text(text = "${profesor.totalReviews} reviews", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -402,7 +402,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFF9FAFB))
+                    .background(MaterialTheme.colorScheme.background)
                     .padding(14.dp)
             ) {
                 Column {
@@ -410,16 +410,16 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AccountBalance, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("${profesor.experiencia} exp.", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.DarkGray)
+                            Text("${profesor.experiencia} exp.", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFFF97316), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("#${profesor.rankInSport} in ${profesor.deporte}", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.DarkGray)
+                            Text("#${profesor.rankInSport} in ${profesor.deporte}", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
-                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFFE5E7EB))
-                    Text(text = "Specialty: ${profesor.especialidad}", fontSize = 12.sp, color = Color.Gray)
+                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                    Text(text = "Specialty: ${profesor.especialidad}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -467,7 +467,7 @@ fun CoachDetailDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
         ) {
             LazyColumn(modifier = Modifier.padding(20.dp)) {
@@ -483,14 +483,14 @@ fun CoachDetailDialog(
                                 }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                                    Text("New Coach", fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 14.sp)
+                                    Text("New Coach", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                                 }
                             }
-                            Text("${profesor.totalReviews} reviews", fontSize = 12.sp, color = Color.Gray)
+                            Text("${profesor.totalReviews} reviews", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(
                             onClick = onDismiss,
-                            modifier = Modifier.background(Color(0xFFF3F4F6), CircleShape).size(32.dp)
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(32.dp)
                         ) {
                             Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
                         }
@@ -554,7 +554,7 @@ fun CoachDetailDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFFF3F4F6))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .padding(12.dp)
                             ) {
                                 Column {
@@ -563,7 +563,7 @@ fun CoachDetailDialog(
                                         Spacer(Modifier.width(8.dp))
                                         Icon(Icons.Default.Star, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(12.dp))
                                     }
-                                    Text(review.fecha, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+                                    Text(review.fecha, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
                                     Text(review.comentario, fontSize = 12.sp)
                                 }
                             }
@@ -582,8 +582,8 @@ fun CoachDetailDialog(
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                            modifier = Modifier.weight(1f).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp)),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface),
+                            modifier = Modifier.weight(1f).border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("Contact")
@@ -610,15 +610,15 @@ fun StatBox(label: String, value: String, modifier: Modifier = Modifier, isNumbe
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF3F4F6))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp)
     ) {
         Column(horizontalAlignment = if (isNumber) Alignment.CenterHorizontally else Alignment.Start) {
             if (isNumber) {
                 Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
-                Text(label.uppercase(), fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text(label.uppercase(), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
             } else {
-                Text(label.uppercase(), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text(label.uppercase(), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
                 Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
@@ -633,29 +633,29 @@ fun AddReviewDialog(profesor: Profesor, onDismiss: () -> Unit, onSubmit: (Int, S
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("ADD REVIEW", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(Modifier.height(16.dp))
                 
-                Text("Rating", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                Text("Rating", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 Row(modifier = Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     (1..5).forEach { i ->
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(if (i <= rating) Color(0xFFFEF3C7) else Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                                .background(if (i <= rating) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                                 .clickable { rating = i },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Star, null, tint = if (i <= rating) Color(0xFFFBBF24) else Color.Gray, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Star, null, tint = if (i <= rating) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
                 
-                Text("Comment", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                Text("Comment", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
                     value = comment,
                     onValueChange = { comment = it },
@@ -668,7 +668,7 @@ fun AddReviewDialog(profesor: Profesor, onDismiss: () -> Unit, onSubmit: (Int, S
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6), contentColor = Color.Black),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -702,7 +702,7 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
         ) {
             LazyColumn(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -713,9 +713,9 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
                 
                 // Sport Dropdown
                 item {
-                    Text("Sport", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                    Text("Sport", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                     Box(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F4F6)).clickable { expanded = true }.padding(16.dp)
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { expanded = true }.padding(16.dp)
                     ) {
                         Text(deporte)
                         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -728,27 +728,27 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
 
                 // Price
                 item {
-                    Text("Price (e.g. $30/hour)", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                    Text("Price (e.g. $30/hour)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(value = precio, onValueChange = { precio = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                 }
 
                 // Experience
                 item {
-                     Text("Experience (e.g. 5 years)", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                     Text("Experience (e.g. 5 years)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                      OutlinedTextField(value = experiencia, onValueChange = { experiencia = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                 }
                 
                 // Specialty
                 item {
-                     Text("Specialty (e.g. Tactics)", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                     Text("Specialty (e.g. Tactics)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                      OutlinedTextField(value = especialidad, onValueChange = { especialidad = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                 }
 
                 // WhatsApp
                 item {
-                    Text("WhatsApp (include country code)", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                    Text("WhatsApp (include country code)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(value = whatsapp, onValueChange = { whatsapp = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    Text("Used by students to contact you.", fontSize = 10.sp, color = Color.Gray, modifier = Modifier.padding(top=4.dp))
+                    Text("Used by students to contact you.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top=4.dp))
                 }
 
                 item {
@@ -756,7 +756,7 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(
                             onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6), contentColor = Color.Black),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {

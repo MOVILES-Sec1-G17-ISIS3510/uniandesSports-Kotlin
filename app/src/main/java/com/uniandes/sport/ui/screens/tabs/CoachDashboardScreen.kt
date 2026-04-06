@@ -64,7 +64,7 @@ fun CoachDashboardScreen(
                             "${(profesor?.deporte ?: "Sport").uppercase()} DASHBOARD",
                             fontSize = 11.sp, 
                             fontWeight = FontWeight.Bold,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             letterSpacing = 1.sp
                         )
                     }
@@ -79,7 +79,7 @@ fun CoachDashboardScreen(
                         Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { 
-                        android.widget.Toast.makeText(context, "¡Editar Perfil Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
+                        android.widget.Toast.makeText(context, "Edit Profile Coming Soon!", android.widget.Toast.LENGTH_SHORT).show() 
                     }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit profile", tint = MaterialTheme.colorScheme.primary)
                     }
@@ -91,7 +91,7 @@ fun CoachDashboardScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         if (profesor == null) {
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
@@ -125,7 +125,7 @@ fun CoachDashboardScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "INGRESOS ESTIMADOS", 
+                        "ESTIMATED REVENUE", 
                         color = Color.White.copy(alpha = 0.7f), 
                         fontSize = 11.sp, 
                         fontWeight = FontWeight.Black, 
@@ -144,13 +144,13 @@ fun CoachDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("SESIONES", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("SESSIONS", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
-                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(Color.White.copy(alpha = 0.2f)))
+                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("PRÓXIMO PAGO", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("FIN DE MES", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("NEXT PAYOUT", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("MONTH END", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
@@ -158,10 +158,10 @@ fun CoachDashboardScreen(
 
             // Quick Stats
             Text(
-                "RESUMEN DE RENDIMIENTO", 
+                "PERFORMANCE OVERVIEW", 
                 fontWeight = FontWeight.Black, 
                 fontSize = 13.sp, 
-                color = Color.Gray, 
+                color = MaterialTheme.colorScheme.onSurfaceVariant, 
                 letterSpacing = 1.sp
             )
             
@@ -174,7 +174,7 @@ fun CoachDashboardScreen(
                     modifier = Modifier.weight(1f)
                 )
                 DashboardStat(
-                    title = "Alumnos",
+                    title = "Students",
                     value = if (profesor.sessionsDelivered == 0) "0" else (profesor.totalReviews).toString(), 
                     icon = Icons.Default.Groups,
                     iconColor = Color(0xFF3B82F6),
@@ -183,7 +183,7 @@ fun CoachDashboardScreen(
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 DashboardStat(
-                    title = "Total Sesiones",
+                    title = "Total Sessions",
                     value = profesor.sessionsDelivered.toString(),
                     icon = Icons.Default.TrendingUp,
                     iconColor = Color(0xFF10B981),
@@ -201,10 +201,10 @@ fun CoachDashboardScreen(
             // Manage Schedule Action
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth().clickable { 
-                    android.widget.Toast.makeText(context, "¡Gestor de Horarios Próximamente!", android.widget.Toast.LENGTH_SHORT).show() 
+                    android.widget.Toast.makeText(context, "Schedule Manager Coming Soon!", android.widget.Toast.LENGTH_SHORT).show() 
                 }
             ) {
                 Row(
@@ -221,8 +221,8 @@ fun CoachDashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
-                            Text("Gestionar Horario", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.Black)
-                            Text("Configura tu disponibilidad", fontSize = 12.sp, color = Color.Gray)
+                            Text("Manage Schedule", fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Set your availability", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Icon(
@@ -241,7 +241,7 @@ fun CoachDashboardScreen(
 fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Color, modifier: Modifier = Modifier) {
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
     ) {
@@ -254,10 +254,10 @@ fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Co
                     Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(16.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Text(title.uppercase(), color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                Text(title.uppercase(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.Black)
+            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

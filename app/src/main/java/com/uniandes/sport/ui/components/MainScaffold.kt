@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,12 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import android.widget.Toast
 import com.uniandes.sport.ui.navigation.Screen
 import com.uniandes.sport.ui.navigation.AppNavigation
 import com.uniandes.sport.ui.theme.ThemeMode
@@ -33,17 +36,21 @@ fun MainScaffold(
     pendingOpenMatchEventId: String? = null,
     onOpenMatchConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeChange: (ThemeMode) -> Unit = {}
+    onThemeChange: (ThemeMode) -> Unit = {},
+    onExitApp: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
     val isMainTabsRoute = fullRoute.startsWith("main_tabs")
     val playTabIndex = 2
+    val context = LocalContext.current
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var lastBackPressTime by remember { mutableStateOf(0L) }
+    var showBackToast by remember { mutableStateOf(false) }
     
     // Core screens list for BottomBar syncing
     val coreScreens = listOf(Screen.Home, Screen.Challenges, Screen.Play, Screen.Comunidades, Screen.Profesores)
@@ -67,10 +74,48 @@ fun MainScaffold(
         }
     }
 
+    // Reset toast visibility and back press time after 2 seconds
+    LaunchedEffect(showBackToast) {
+        if (showBackToast) {
+            kotlinx.coroutines.delay(2000)
+            lastBackPressTime = 0L
+            showBackToast = false
+        }
+    }
+
     // Determine the logical screen based on the active tab or the full route
     val currentRoute = when {
         fullRoute.startsWith("main_tabs") -> coreScreens[activeTabPageIndex].route
         else -> fullRoute
+    }
+
+    // Back gesture handler - TikTok style
+    BackHandler {
+        if (isMainTabsRoute) {
+            if (activeTabPageIndex == 0) {
+                // Estamos en HOME
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastBackPressTime < 2000) {
+                    // Segunda pulsación en menos de 2 segundos - salir
+                    onExitApp()
+                } else {
+                    // Primera pulsación - mostrar toast
+                    Toast.makeText(context, "Presiona de nuevo para salir", Toast.LENGTH_SHORT).show()
+                    lastBackPressTime = currentTime
+                    showBackToast = true
+                }
+            } else {
+                // Si no estamos en HOME, ir a HOME
+                navController.navigate("main_tabs/0") {
+                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        } else {
+            // Si estamos en otra pantalla (Perfil, Torneos, etc.), volver a HOME
+            navController.popBackStack("main_tabs/0", false)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
