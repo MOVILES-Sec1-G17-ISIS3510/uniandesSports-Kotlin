@@ -28,7 +28,7 @@ fun CreateMatchDialog(
     sport: String,
     modality: String,
     onDismiss: () -> Unit,
-    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
+    onCreate: (title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var dateString by remember { mutableStateOf("") }
@@ -39,6 +39,8 @@ fun CreateMatchDialog(
     var maxParticipants by remember { mutableStateOf("10") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var shouldJoin by remember { mutableStateOf(true) }
+
     
     // --- Picker States ---
     val datePickerState = rememberDatePickerState()
@@ -427,7 +429,39 @@ fun CreateMatchDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Join as participant toggle
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("JOIN AS PARTICIPANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text("Include yourself in the match initial members", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = shouldJoin,
+                            onCheckedChange = { shouldJoin = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 if (errorMessage != null) {
+
                     Text(
                         text = errorMessage!!,
                         color = MaterialTheme.colorScheme.error,
@@ -468,6 +502,7 @@ fun CreateMatchDialog(
                             date, 
                             skillLevel, 
                             maxParticipants.toLongOrNull() ?: 10L,
+                            shouldJoin,
                             { isLoading = false },
                             { isLoading = false }
                         )

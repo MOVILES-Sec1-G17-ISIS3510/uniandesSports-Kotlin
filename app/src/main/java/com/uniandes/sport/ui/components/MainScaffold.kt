@@ -182,26 +182,56 @@ fun TopAppBarDynamic(
 ) {
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    if (currentRoute == Screen.Home.route) {
-        CenterAlignedTopAppBar(
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            navigationIcon = {
-                IconButton(onClick = onProfileClick) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
+    val title = when (currentRoute) {
+        Screen.Home.route -> "USPORTS"
+        Screen.Challenges.route -> "Challenges"
+        Screen.Play.route -> "Play"
+        Screen.Comunidades.route -> "Communities"
+        Screen.Profesores.route -> "Coaches"
+        Screen.Torneos.route -> "Tournaments"
+        Screen.Clima.route -> "Weather"
+        Screen.Strava.route -> "Strava"
+        Screen.Historial.route -> "History"
+        Screen.Perfil.route -> "Profile"
+        else -> ""
+    }
+    
+    val subtitle = when (currentRoute) {
+        Screen.Home.route -> "WELCOME BACK, ATHLETE"
+        Screen.Challenges.route -> "COMPETE AND IMPROVE"
+        Screen.Play.route -> "FIND YOUR NEXT MATCH"
+        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
+        Screen.Profesores.route -> "LEARN FROM EXPERTS"
+        Screen.Torneos.route -> "COMPETITIVE EVENTS"
+        Screen.Clima.route -> "TRAIN SMARTER"
+        Screen.Strava.route -> "PERFORMANCE INSIGHTS"
+        Screen.Historial.route -> "RECENT ACTIVITY"
+        Screen.Perfil.route -> "ACCOUNT SETTINGS"
+        else -> ""
+    }
+
+    TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onProfileClick) {
+                Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        title = {
+            Column {
+                if (subtitle.isNotEmpty()) {
+                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
                 }
-            },
-            title = {
-                Text(
-                    text = "USports",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
-                )
-            },
-            actions = {
+                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
+            }
+        },
+        actions = {
+            if (currentRoute == Screen.Home.route) {
                 Box {
                     IconButton(onClick = { showThemeMenu = true }) {
                         val themeIcon = when (themeMode) {
@@ -236,54 +266,9 @@ fun TopAppBarDynamic(
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
                 }
             }
-        )
-        return
-    }
-
-    val title = when (currentRoute) {
-        Screen.Home.route -> "USports"
-        Screen.Challenges.route -> "Challenges"
-        Screen.Play.route -> "Play"
-        Screen.Comunidades.route -> "Communities"
-        Screen.Profesores.route -> "Coaches"
-        Screen.Torneos.route -> "Tournaments"
-        Screen.Clima.route -> "Weather"
-        Screen.Strava.route -> "Strava"
-        Screen.Historial.route -> "History"
-        Screen.Perfil.route -> "Profile"
-        else -> ""
-    }
-    
-    val subtitle = when (currentRoute) {
-        Screen.Home.route -> ""
-        Screen.Challenges.route -> "COMPETE AND IMPROVE"
-        Screen.Play.route -> "FIND YOUR NEXT MATCH"
-        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
-        Screen.Profesores.route -> "LEARN FROM EXPERTS"
-        Screen.Torneos.route -> "COMPETITIVE EVENTS"
-        Screen.Clima.route -> "TRAIN SMARTER"
-        Screen.Strava.route -> "PERFORMANCE INSIGHTS"
-        Screen.Historial.route -> "RECENT ACTIVITY"
-        Screen.Perfil.route -> "ACCOUNT SETTINGS"
-        else -> ""
-    }
-
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        title = {
-            Column {
-                if (subtitle.isNotEmpty()) {
-                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
-                }
-                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
-            }
-        },
-        actions = {
+            
             if (currentRoute == Screen.Challenges.route) {
+
                 if (isSearchActive) {
                     OutlinedTextField(
                         value = searchQuery,
