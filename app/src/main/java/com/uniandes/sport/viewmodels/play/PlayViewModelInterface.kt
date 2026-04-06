@@ -8,6 +8,7 @@ interface PlayViewModelInterface {
     val isLoading: StateFlow<Boolean>
     val members: StateFlow<List<com.uniandes.sport.models.MatchMember>>
     val selectedSport: StateFlow<String?>
+    val joinedEventIds: StateFlow<Set<String>>
     val currentUserId: String?
     
     fun setSportFilter(sport: String?)

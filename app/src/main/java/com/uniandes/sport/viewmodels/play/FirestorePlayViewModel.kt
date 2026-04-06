@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
@@ -29,6 +30,11 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _selectedSport = MutableStateFlow<String?>(null)
     override val selectedSport: StateFlow<String?> = _selectedSport.asStateFlow()
 
+    private val _joinedEventIds = MutableStateFlow<Set<String>>(emptySet())
+    override val joinedEventIds: StateFlow<Set<String>> = _joinedEventIds.asStateFlow()
+
+    private var joinedEventsListener: ListenerRegistration? = null
+
     override val currentUserId: String?
         get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
 
@@ -46,7 +52,32 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                 _isLoading.value = loading
             }
         }
+        observeCurrentUserJoinedEvents()
         fetchEvents()
+    }
+
+    private fun observeCurrentUserJoinedEvents() {
+        val uid = currentUserId
+        if (uid.isNullOrBlank()) {
+            _joinedEventIds.value = emptySet()
+            return
+        }
+
+        joinedEventsListener?.remove()
+        joinedEventsListener = db.collectionGroup("members")
+            .whereEqualTo("userId", uid)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("PlayVM", "Error listening joined events: ${e.message}")
+                    return@addSnapshotListener
+                }
+
+                val joined = snapshot?.documents
+                    ?.mapNotNull { it.reference.parent.parent?.id }
+                    ?.toSet()
+                    ?: emptySet()
+                _joinedEventIds.value = joined
+            }
     }
 
     override fun fetchEvents() {
@@ -204,5 +235,10 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
         }.addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        joinedEventsListener?.remove()
     }
 }
