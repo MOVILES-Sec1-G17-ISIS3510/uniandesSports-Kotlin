@@ -20,21 +20,26 @@ import com.google.firebase.messaging.ktx.messaging
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
-        private const val CHANNEL_ID = "community_messages"
-        private const val CHANNEL_NAME = "Community Messages"
-        private const val CHANNEL_DESC = "Notifications for new community channel messages"
+        private const val CHANNEL_ID = "sports_notifications"
+        private const val CHANNEL_NAME = "Sports Notifications"
+        private const val CHANNEL_DESC = "Notifications for open matches and communities"
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        // If app is foreground and message includes only notification payload,
-        // this callback may still run depending on message type. We normalize both paths.
         val data = remoteMessage.data
-        val title = data["title"] ?: remoteMessage.notification?.title ?: "New message"
-        val body = data["body"] ?: remoteMessage.notification?.body ?: "You have a new message in your community"
+        val title = data["title"] ?: remoteMessage.notification?.title ?: "New update"
+        val body = data["body"] ?: remoteMessage.notification?.body ?: "Tap to view details"
+        val notificationType = data["type"] ?: ""
+        val eventId = data["eventId"] ?: ""
 
-        showLocalNotification(title, body)
+        showLocalNotification(
+            title = title,
+            body = body,
+            notificationType = notificationType,
+            eventId = eventId
+        )
     }
 
     override fun onNewToken(token: String) {
@@ -42,15 +47,25 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d("FCM", "New FCM token: $token")
         Firebase.messaging.subscribeToTopic("all")
             .addOnFailureListener { e -> Log.e("FCM", "Failed to subscribe to all topic", e) }
-
         persistTokenForCurrentUser(token)
     }
 
-    private fun showLocalNotification(title: String, body: String) {
+    private fun showLocalNotification(
+        title: String,
+        body: String,
+        notificationType: String,
+        eventId: String
+    ) {
         createNotificationChannelIfNeeded()
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            if (notificationType.isNotBlank()) {
+                putExtra(MainActivity.EXTRA_NOTIFICATION_TYPE, notificationType)
+            }
+            if (eventId.isNotBlank()) {
+                putExtra(MainActivity.EXTRA_EVENT_ID, eventId)
+            }
         }
 
         val pendingIntent = PendingIntent.getActivity(
