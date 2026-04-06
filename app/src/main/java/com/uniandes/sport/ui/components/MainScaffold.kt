@@ -29,6 +29,9 @@ import com.uniandes.sport.ui.theme.ThemeMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
+    initialTabIndex: Int = 0,
+    pendingOpenMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {}
 ) {
@@ -36,6 +39,7 @@ fun MainScaffold(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val fullRoute = navBackStackEntry?.destination?.route ?: "main_tabs/0"
     val isMainTabsRoute = fullRoute.startsWith("main_tabs")
+    val playTabIndex = 2
     
     var activeTabPageIndex by remember { mutableIntStateOf(0) }
     
@@ -47,6 +51,17 @@ fun MainScaffold(
         if (fullRoute.startsWith("main_tabs")) {
             val page = navBackStackEntry?.arguments?.getInt("initialPage") ?: 0
             activeTabPageIndex = page
+        }
+    }
+
+    // React to notification deep-links even when the app is already running.
+    LaunchedEffect(pendingOpenMatchEventId) {
+        if (!pendingOpenMatchEventId.isNullOrBlank()) {
+            navController.navigate("main_tabs/$playTabIndex") {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
         }
     }
 
@@ -87,6 +102,9 @@ fun MainScaffold(
         ) { innerPadding ->
             AppNavigation(
                 navController = navController, 
+                startTabIndex = initialTabIndex,
+                pendingOpenMatchEventId = pendingOpenMatchEventId,
+                onOpenMatchConsumed = onOpenMatchConsumed,
                 modifier = Modifier.padding(innerPadding),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page

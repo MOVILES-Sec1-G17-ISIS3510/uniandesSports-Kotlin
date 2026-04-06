@@ -18,11 +18,14 @@ import com.uniandes.sport.ui.screens.tabs.*
 fun AppNavigation(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    startTabIndex: Int = 0,
+    pendingOpenMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit = {}
 ) {
     NavHost(
         navController = navController,
-        startDestination = "main_tabs/0",
+        startDestination = "main_tabs/$startTabIndex",
         modifier = modifier,
         enterTransition = {
             slideInHorizontally(
@@ -59,6 +62,8 @@ fun AppNavigation(
             val initialPage = backStackEntry.arguments?.getInt("initialPage") ?: 0
             MainTabsScreen(
                 initialPage = initialPage,
+                pendingOpenMatchEventId = pendingOpenMatchEventId,
+                onOpenMatchConsumed = onOpenMatchConsumed,
                 onPageChanged = onPageChanged,
                 onNavigate = { route -> navController.navigate(route) }
             )

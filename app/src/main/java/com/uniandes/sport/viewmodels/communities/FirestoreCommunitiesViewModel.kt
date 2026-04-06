@@ -1,11 +1,15 @@
 package com.uniandes.sport.viewmodels.communities
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.ktx.messaging
 import com.uniandes.sport.data.local.CachedMemberEntity
 import com.uniandes.sport.data.local.CachedMembershipEntity
 import com.uniandes.sport.data.local.CommunitiesCacheDatabase
@@ -27,6 +31,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
 
     private val db = FirebaseFirestore.getInstance()
     private val cacheDao = CommunitiesCacheDatabase.getInstance(application).cacheDao()
+    private val topicPrefs = application.getSharedPreferences("fcm_topics", Context.MODE_PRIVATE)
 
     private val _communities = MutableStateFlow<List<Community>>(emptyList())
     override val communities: StateFlow<List<Community>> = _communities.asStateFlow()
@@ -61,6 +66,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private var activeCommunityId: String? = null
     private var activeChannelId: String? = null
     private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
+    private var channelMessagesListener: ListenerRegistration? = null
 
     init {
         viewModelScope.launch {
@@ -76,7 +82,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
             try {
                 // 1. Emit cached memberships first
                 val cachedIds = cacheDao.getMembershipIds(userId).toSet()
-                if (cachedIds.isNotEmpty()) _myCommunityIds.value = cachedIds
+                if (cachedIds.isNotEmpty()) {
+                    _myCommunityIds.value = cachedIds
+                    syncCommunityTopics(cachedIds)
+                }
 
                 // 2. Fetch from Firebase
                 val snapshot = db.collectionGroup("members")
@@ -89,6 +98,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 }.toSet()
 
                 _myCommunityIds.value = ids
+                syncCommunityTopics(ids)
 
                 // 3. Write back to Room
                 cacheDao.clearMemberships(userId)
@@ -232,6 +242,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 val newMember = CommunityMember(id = userId, userId = userId, displayName = displayName, role = "member", joinedAt = now)
                 cacheDao.upsertMembers(listOf(newMember.toEntity(communityId, now)))
 
+                val updatedMemberships = _myCommunityIds.value + communityId
+                _myCommunityIds.value = updatedMemberships
+                syncCommunityTopics(updatedMemberships)
+
                 loadCommunities()
                 loadCommunityDetails(communityId)
                 onSuccess()
@@ -295,6 +309,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 )
                 cacheDao.upsertCommunities(listOf(newCommunity.toEntity(now)))
                 cacheDao.upsertMemberships(listOf(CachedMembershipEntity(ownerId, communityRef.id, now)))
+
+                val updatedMemberships = _myCommunityIds.value + communityRef.id
+                _myCommunityIds.value = updatedMemberships
+                syncCommunityTopics(updatedMemberships)
 
                 loadCommunities()
                 onSuccess()
@@ -436,33 +454,54 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     override fun loadChannelMessages(communityId: String, channelId: String) {
         viewModelScope.launch {
             try {
+                val isDifferentChannel = communityId != activeCommunityId || channelId != activeChannelId
                 activeCommunityId = communityId
                 activeChannelId = channelId
+
+                if (isDifferentChannel) {
+                    oldestLoadedMessageSnapshot = null
+                }
+
+                channelMessagesListener?.remove()
+                channelMessagesListener = null
 
                 // 1. Emit Room cache immediately
                 val cached = loadCachedRecentMessages(communityId, channelId)
                 if (cached.isNotEmpty()) _channelMessages.value = cached
 
-                // 2. Fetch from Firebase
-                val snapshot = db.collection("communities").document(communityId)
+                // 2. Keep latest messages in real time
+                channelMessagesListener = db.collection("communities").document(communityId)
                     .collection("channels").document(channelId)
                     .collection("messages")
                     .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(20)
-                    .get()
-                    .await()
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e("FirestoreCommunities", "Realtime listener error for channel messages", error)
+                            return@addSnapshotListener
+                        }
 
-                oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
-                _hasMoreOldChannelMessages.value = snapshot.size() >= 20
+                        if (snapshot == null) return@addSnapshotListener
 
-                val messages = snapshot.documents.mapNotNull { doc ->
-                    val m = doc.toObject(ChannelMessage::class.java)
-                    m?.copy(id = doc.id)
-                }.reversed()
-                _channelMessages.value = messages
+                        oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
+                        _hasMoreOldChannelMessages.value = snapshot.size() >= 20
 
-                // 3. Write to Room
-                cacheRecentMessages(communityId, channelId, messages)
+                        val latestMessages = snapshot.documents.mapNotNull { doc ->
+                            val m = doc.toObject(ChannelMessage::class.java)
+                            m?.copy(id = doc.id)
+                        }.reversed()
+
+                        // Preserve already loaded older pages and update the latest window in place.
+                        val merged = (_channelMessages.value + latestMessages)
+                            .distinctBy { it.id }
+                            .sortedBy { it.createdAt }
+
+                        _channelMessages.value = merged
+
+                        viewModelScope.launch {
+                            cacheRecentMessages(communityId, channelId, merged)
+                        }
+                    }
 
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error loading channel messages", e)
@@ -561,7 +600,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 cacheDao.upsertChannelMessages(listOf(newMsg.toEntity(communityId, channelId, now)))
 
                 loadCommunityDetails(communityId)
-                loadChannelMessages(communityId, channelId)
                 onSuccess()
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error sending channel message", e)
@@ -625,7 +663,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     null
                 }.await()
 
-                loadChannelMessages(communityId, channelId)
                 onSuccess()
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error reacting to message", e)
@@ -728,5 +765,35 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun toCommunityTopic(communityId: String): String {
+        return "community_${communityId.replace(Regex("[^a-zA-Z0-9_-]"), "_")}".take(900)
+    }
+
+    private fun syncCommunityTopics(membershipIds: Set<String>) {
+        val targetTopics = membershipIds.map { toCommunityTopic(it) }.toSet()
+        val savedTopics = topicPrefs.getStringSet("community_topics", emptySet())?.toSet() ?: emptySet()
+
+        val toSubscribe = targetTopics - savedTopics
+        val toUnsubscribe = savedTopics - targetTopics
+
+        toSubscribe.forEach { topic ->
+            Firebase.messaging.subscribeToTopic(topic)
+                .addOnFailureListener { e -> Log.e("FirestoreCommunities", "Topic subscribe failed: $topic", e) }
+        }
+
+        toUnsubscribe.forEach { topic ->
+            Firebase.messaging.unsubscribeFromTopic(topic)
+                .addOnFailureListener { e -> Log.e("FirestoreCommunities", "Topic unsubscribe failed: $topic", e) }
+        }
+
+        topicPrefs.edit().putStringSet("community_topics", targetTopics.toMutableSet()).apply()
+    }
+
+    override fun onCleared() {
+        channelMessagesListener?.remove()
+        channelMessagesListener = null
+        super.onCleared()
     }
 }
