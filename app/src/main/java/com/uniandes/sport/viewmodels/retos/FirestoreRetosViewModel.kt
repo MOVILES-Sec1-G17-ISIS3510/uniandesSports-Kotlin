@@ -16,6 +16,8 @@ import com.google.firebase.auth.FirebaseAuth
 // viewmodel de firestore para retos de verdad
 class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     private val db = FirebaseFirestore.getInstance()
+    private var retosListener: com.google.firebase.firestore.ListenerRegistration? = null
+
 
     private val _retos = MutableStateFlow<List<Reto>>(emptyList())
     override val retos: StateFlow<List<Reto>> = _retos.asStateFlow()
@@ -82,38 +84,34 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     }
 
     override fun fetchRetos() {
+        if (retosListener != null) return // Already listening
+        
         _isLoading.value = true
-        // bamos a oir los cambios en tiempo real mejor
-        db.collection("challenges")
+        retosListener = db.collection("challenges")
             .addSnapshotListener { snapshot, e ->
+                _isLoading.value = false
                 if (e != null) {
                     Log.e("RetosVM", "fallo al oir los retos", e)
-                    _isLoading.value = false
                     return@addSnapshotListener
                 }
                 
                 if (snapshot != null) {
-                    val rawCount = snapshot.size()
                     val list = snapshot.mapNotNull { doc ->
                         try {
-                            val r = doc.toObject(Reto::class.java)
-                            if (r != null) {
-                                Log.d("RetosVM", "leido ok: ${doc.id} - ${r.title}")
-                                r.apply { id = doc.id }
-                            } else {
-                                Log.e("RetosVM", "doc ${doc.id} dio null al parsear")
-                                null
-                            }
+                            doc.toObject(Reto::class.java)?.apply { id = doc.id }
                         } catch (ex: Exception) {
                             Log.e("RetosVM", "error parseando ${doc.id}: ${ex.message}")
                             null
                         }
                     }
-                    Log.d("RetosVM", "Firestore dio $rawCount docs, pudimos leer ${list.size}")
                     _retos.value = list
                 }
-                _isLoading.value = false
             }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        retosListener?.remove()
     }
 
     override fun joinReto(retoId: String, userId: String) {
@@ -131,7 +129,28 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                 transaction.update(docRef, "progressByUser", progressMap)
             }
         }.addOnSuccessListener {
-            fetchRetos()
+            // fetchRetos() no hace falta pq tenemos snapshotListener
+        }
+    }
+
+    override fun leaveReto(retoId: String, userId: String) {
+        val docRef = db.collection("challenges").document(retoId)
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(docRef)
+            val participants = (snapshot.get("participants") as? List<String>)?.toMutableList() ?: mutableListOf()
+            val progressMap = (snapshot.get("progressByUser") as? Map<String, Double>)?.toMutableMap() ?: mutableMapOf()
+            
+            if (participants.contains(userId)) {
+                participants.remove(userId)
+                progressMap.remove(userId)
+                transaction.update(docRef, "participants", participants)
+                transaction.update(docRef, "participantsCount", participants.size)
+                transaction.update(docRef, "progressByUser", progressMap)
+            }
+        }.addOnSuccessListener {
+            // fetchRetos() no hace falta pq tenemos snapshotListener
+        }.addOnFailureListener { e ->
+            Log.e("RetosVM", "Fallo al abandonar el reto $retoId", e)
         }
     }
 
@@ -172,7 +191,6 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
             .addOnSuccessListener { 
                 Log.d("RetosVM", "RETO CREADO PERRO!! id: ${docRef.id}")
                 _creationStatus.value = "SUCCESS"
-                fetchRetos()
             }
             .addOnFailureListener { e ->
                 Log.e("RetosVM", "uy fallo feo al guardar en firestore", e)

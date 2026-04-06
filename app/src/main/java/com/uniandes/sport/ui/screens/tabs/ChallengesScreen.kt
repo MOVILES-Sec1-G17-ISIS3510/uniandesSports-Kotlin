@@ -56,6 +56,7 @@ fun ChallengesScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     
     var showDialog by remember { mutableStateOf(false) }
+    var selectedReto by remember { mutableStateOf<Reto?>(null) }
     val currentUserId = Firebase.auth.currentUser?.uid ?: "no_user"
     
     val creationStatus by viewModel.creationStatus.collectAsState()
@@ -93,15 +94,15 @@ fun ChallengesScreen(
                 }
                 item {
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier.padding(bottom = 24.dp)
                     ) {
                         items(activeChallenges) { reto ->
-                            ActiveChallengeCard(
+                            CircularChallengeItem(
                                 reto = reto,
                                 currentUserId = currentUserId,
-                                onClick = { /* Navigate to detail */ }
+                                onClick = { selectedReto = reto }
                             )
                         }
                     }
@@ -171,12 +172,32 @@ fun ChallengesScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         ExploreChallengeCard(
                             reto = reto,
-                            onJoin = { viewModel.joinReto(reto.id, currentUserId) }
+                            onJoin = { viewModel.joinReto(reto.id, currentUserId) },
+                            onClick = { selectedReto = reto }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (selectedReto != null) {
+        ChallengeDetailModal(
+            reto = selectedReto,
+            currentUserId = currentUserId,
+            onDismiss = { selectedReto = null },
+            onJoin = { 
+                selectedReto?.let { viewModel.joinReto(it.id, currentUserId) }
+            },
+            onLeave = {
+                selectedReto?.let { 
+                    viewModel.leaveReto(it.id, currentUserId)
+                }
+                selectedReto = null
+            }
+        )
+
+
     }
 
     if (showDialog) {
