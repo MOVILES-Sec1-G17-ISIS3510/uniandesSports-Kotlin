@@ -51,3 +51,80 @@ erDiagram
    - Guarda los canales de chat específicos de ese grupo (ej. General, Partidos).
 
 Esta estructura asegura que al cargar la pantalla principal (lista de comunidades), **solo traigas los datos básicos (la metadata)** de los grupos, y no el peso adicional de leer miles de posts o mensajes al mismo tiempo, lo que ahorra lecturas de base de datos (y dinero mensual en tu proyecto de Firebase). Solo se cargan los *posts* y *channels* cuando el usuario entra específicamente al detalle de una comunidad.
+
+---
+
+# Reglas Firestore (formato completo)
+
+```firestore
+rules_version = '2';
+service cloud.firestore {
+    match /databases/{database}/documents {
+    
+        match /profesores/{document=**} {
+            allow read, write: if true; 
+        }
+    
+        match /communities/{document=**} {
+            allow read, write: if true; 
+        }
+    
+
+        match /users/{userId} {
+            allow create: if request.auth != null && request.auth.uid == userId;
+            allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+        }
+    
+        match /events/{eventId} {
+            allow read: if true;
+      
+            allow create: if request.auth != null && request.resource.data.createdBy == request.auth.uid;
+      
+            allow update: if request.auth != null;
+      
+            allow delete: if request.auth != null && request.auth.uid == resource.data.createdBy;
+      
+            match /members/{memberId} {
+                allow read: if true;
+        
+                allow create, update: if request.auth != null && request.auth.uid == memberId;
+        
+                allow delete: if request.auth != null && 
+                                            (request.auth.uid == memberId || request.auth.uid == get(/databases/$(database)/documents/events/$(eventId)).data.createdBy);
+            }
+
+            match /reviews/{reviewUserId} {
+                allow read: if request.auth != null && request.auth.uid == reviewUserId;
+
+                allow create: if request.auth != null
+                                            && request.auth.uid == reviewUserId
+                                            && request.resource.data.userId == request.auth.uid
+                                            && request.resource.data.eventId == eventId;
+
+                allow update: if request.auth != null
+                                            && request.auth.uid == reviewUserId
+                                            && resource.data.userId == request.auth.uid
+                                            && request.resource.data.userId == resource.data.userId
+                                            && request.resource.data.eventId == resource.data.eventId;
+
+                allow delete: if request.auth != null && request.auth.uid == reviewUserId;
+            }
+        }
+    
+        match /coach_requests/{requestId} {
+            allow create: if request.auth != null;
+            allow read: if request.auth != null;
+        }
+
+        match /challenges/{challengeId} {
+            allow read: if true;
+            allow create: if request.auth != null && request.resource.data.createdBy == request.auth.uid;
+            allow update, delete: if request.auth != null;
+        }
+    }
+}
+```
+
+## Ruta de reviews de Open Matches
+
+`events/{eventId}/reviews/{userId}`

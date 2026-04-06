@@ -220,11 +220,19 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
-        db.collection("events")
+        val reviewRef = db.collection("events")
             .document(eventId)
             .collection("reviews")
             .document(uid)
-            .set(payload, com.google.firebase.firestore.SetOptions.merge())
+
+        db.runTransaction { transaction ->
+            val existing = transaction.get(reviewRef)
+            val data = payload.toMutableMap()
+            if (!existing.exists()) {
+                data["createdAt"] = com.google.firebase.firestore.FieldValue.serverTimestamp()
+            }
+            transaction.set(reviewRef, data, com.google.firebase.firestore.SetOptions.merge())
+        }
             .addOnSuccessListener {
                 _myReviewsByEventId.value = _myReviewsByEventId.value + (
                     eventId to OpenMatchReview(

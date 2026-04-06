@@ -30,7 +30,8 @@ import java.util.Date
 fun HistorialScreen(
     viewModel: RetosViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel::class.java),
     playViewModel: PlayViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.play.FirestorePlayViewModel::class.java),
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onNavigateBack: () -> Unit = { onNavigate("back") }
 ) {
     val retos by viewModel.retos.collectAsState()
     val finishedEvents by playViewModel.finishedEvents.collectAsState()
