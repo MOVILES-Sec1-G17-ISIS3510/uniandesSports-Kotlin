@@ -83,9 +83,16 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             .addOnSuccessListener { snapshot ->
                 val list = snapshot.mapNotNull { doc ->
                     try {
-                        doc.toObject(Profesor::class.java).apply { id = doc.id }
+                        val p = doc.toObject(Profesor::class.java).apply { id = doc.id }
+                        // Automated Database Migration + RAM fix
+                        if (p.disponibilidad == "A convenir") {
+                            p.disponibilidad = "To be agreed"
+                            doc.reference.update("disponibilidad", "To be agreed")
+                        }
+                        p
                     } catch (e: Exception) { null }
                 }
+
                 cachedProfesores = list
                 _profesores.value = list
                 onSuccess(list)
