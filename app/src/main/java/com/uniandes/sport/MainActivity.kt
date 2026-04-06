@@ -115,7 +115,8 @@ class MainActivity : ComponentActivity() {
                             onThemeChange = {
                                 themeMode.value = it
                                 saveThemeMode(it)
-                            }
+                            },
+                            onExitApp = { finishAffinity() }
                         )
                     }
                     // WallScreen logic unmodified
