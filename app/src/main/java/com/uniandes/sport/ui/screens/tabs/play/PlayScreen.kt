@@ -180,6 +180,12 @@ fun PlayScreen(
             viewModel = viewModel,
             onDismiss = { reviewEvent = null },
             onSubmit = { text, rating, attendanceByUserId, source, onDone ->
+                if (!isConnected) {
+                    android.widget.Toast.makeText(context, "No connection", android.widget.Toast.LENGTH_SHORT).show()
+                    onDone(false)
+                    return@ReviewDialog
+                }
+
                 viewModel.submitReview(
                     eventId = reviewEvent!!.id,
                     reviewText = text,

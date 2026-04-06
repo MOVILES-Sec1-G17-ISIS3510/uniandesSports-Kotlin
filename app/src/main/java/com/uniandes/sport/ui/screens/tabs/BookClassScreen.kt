@@ -26,7 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
 import com.uniandes.sport.viewmodels.booking.BookClassViewModel
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 
 // Opciones predefinidas
 val sports = listOf("Soccer", "Tennis", "Basketball", "Swimming", "Running")
@@ -41,6 +44,7 @@ fun BookClassScreen(
     onNavigateBack: () -> Unit = {},
     onOpenProfile: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val selectedSport = viewModel.selectedSport
     val selectedSkillLevel = viewModel.selectedSkillLevel
     val preferredSchedule = viewModel.preferredSchedule
@@ -283,6 +287,11 @@ fun BookClassScreen(
                 }
                 Button(
                     onClick = { 
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@Button
+                        }
+
                         // Analytics Engine: BQ3 (Most scheduled sport)
                         logViewModel.log(
                             screen = "BookClassScreen",

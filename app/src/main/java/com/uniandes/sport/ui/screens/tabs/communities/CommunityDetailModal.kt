@@ -96,6 +96,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +169,10 @@ fun CommunityDetailModal(
             onLoadMessages = { viewModel.loadChannelMessages(community.id, channel.id) },
             onLoadOlder = { viewModel.loadOlderChannelMessages() },
             onSend = { content ->
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@ChannelRoomScreen
+                }
                 val uid = currentUserId
                 if (uid == null) {
                     Toast.makeText(context, "Please log in to post", Toast.LENGTH_SHORT).show()
@@ -184,6 +190,10 @@ fun CommunityDetailModal(
                 }
             },
             onReact = { message, emoji ->
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@ChannelRoomScreen
+                }
                 val uid = currentUserId
                 if (uid == null) {
                     Toast.makeText(context, "Please log in to react", Toast.LENGTH_SHORT).show()
@@ -240,6 +250,11 @@ fun CommunityDetailModal(
             if (!userAlreadyMember) {
                 Button(
                     onClick = {
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@Button
+                        }
+
                         val uid = currentUserId
                         if (uid == null) {
                             Toast.makeText(context, "Please log in to join", Toast.LENGTH_SHORT).show()
@@ -346,6 +361,10 @@ fun CommunityDetailModal(
                     selectedPostForComments = selectedPostForComments,
                     postComments = postComments,
                     onPublishPost = { content, pinned ->
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@FeedTab
+                        }
                         viewModel.createAnnouncement(
                             communityId = community.id,
                             author = currentUserDisplayName.ifBlank { "Usuario" },
@@ -357,11 +376,19 @@ fun CommunityDetailModal(
                         )
                     },
                     onOpenComments = { post ->
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@FeedTab
+                        }
                         selectedPostForComments = post
                         viewModel.loadPostComments(community.id, post.id)
                     },
                     onCloseComments = { selectedPostForComments = null },
                     onSendComment = { text ->
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@FeedTab
+                        }
                         if (selectedPostForComments != null) {
                             val uid = currentUserId
                             if (uid == null) {
@@ -390,6 +417,10 @@ fun CommunityDetailModal(
                     isAdmin = isCurrentUserAdmin,
                     onCreateChannel = { showCreateChannelDialog = true },
                     onOpenChannel = { channel ->
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@ChannelsTab
+                        }
                         selectedChannel = channel
                         viewModel.loadChannelMessages(community.id, channel.id)
                     }
@@ -401,6 +432,10 @@ fun CommunityDetailModal(
                     currentUserId = currentUserId,
                     ownerId = community.ownerId,
                     onRemove = { member ->
+                        if (!hasNetworkConnection(context)) {
+                            showNoConnectionToast(context)
+                            return@MembersTab
+                        }
                         viewModel.removeMember(
                             communityId = community.id,
                             memberId = member.userId.ifBlank { member.id },
@@ -421,6 +456,10 @@ fun CommunityDetailModal(
         CreateChannelDialog(
             onDismiss = { showCreateChannelDialog = false },
             onCreate = { name, type ->
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@CreateChannelDialog
+                }
                 viewModel.createChannel(
                     communityId = community.id,
                     name = name,

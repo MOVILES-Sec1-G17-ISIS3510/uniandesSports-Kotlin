@@ -33,6 +33,8 @@ import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 
 @Composable
 fun CommunitiesMainScreen(
@@ -163,6 +165,10 @@ fun CommunitiesMainScreen(
 
         FloatingActionButton(
             onClick = {
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@FloatingActionButton
+                }
                 if (currentUserId == null) {
                     Toast.makeText(context, "Please log in to create a community", Toast.LENGTH_SHORT).show()
                     return@FloatingActionButton
@@ -195,6 +201,11 @@ fun CommunitiesMainScreen(
             CreateCommunityDialog(
                 onDismiss = { showCreateCommunityDialog = false },
                 onCreate = { name, type, sport, description ->
+                    if (!hasNetworkConnection(context)) {
+                        showNoConnectionToast(context)
+                        return@CreateCommunityDialog
+                    }
+
                     val uid = currentUserId
                     if (uid == null) {
                         Toast.makeText(context, "Please log in to create a community", Toast.LENGTH_SHORT).show()

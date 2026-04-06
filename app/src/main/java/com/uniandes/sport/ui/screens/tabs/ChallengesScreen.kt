@@ -28,6 +28,8 @@ import java.util.*
 import java.text.SimpleDateFormat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import com.uniandes.sport.ui.components.hasNetworkConnection
+import com.uniandes.sport.ui.components.showNoConnectionToast
 
 /**
  * RETOS FEATURE IMPLEMENTATION SUMMARY:
@@ -71,7 +73,13 @@ fun ChallengesScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDialog = true },
+                onClick = {
+                    if (!hasNetworkConnection(context)) {
+                        showNoConnectionToast(context)
+                        return@FloatingActionButton
+                    }
+                    showDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.tertiary,
                 contentColor = MaterialTheme.colorScheme.onTertiary,
                 shape = RoundedCornerShape(16.dp)
@@ -172,7 +180,13 @@ fun ChallengesScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         ExploreChallengeCard(
                             reto = reto,
-                            onJoin = { viewModel.joinReto(reto.id, currentUserId) },
+                            onJoin = {
+                                if (!hasNetworkConnection(context)) {
+                                    showNoConnectionToast(context)
+                                    return@ExploreChallengeCard
+                                }
+                                viewModel.joinReto(reto.id, currentUserId)
+                            },
                             onClick = { selectedReto = reto }
                         )
                     }
@@ -187,9 +201,17 @@ fun ChallengesScreen(
             currentUserId = currentUserId,
             onDismiss = { selectedReto = null },
             onJoin = { 
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@ChallengeDetailModal
+                }
                 selectedReto?.let { viewModel.joinReto(it.id, currentUserId) }
             },
             onLeave = {
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@ChallengeDetailModal
+                }
                 selectedReto?.let { 
                     viewModel.leaveReto(it.id, currentUserId)
                 }
@@ -204,6 +226,10 @@ fun ChallengesScreen(
         NewChallengeDialog(
             onDismiss = { showDialog = false },
             onCreate = { newReto ->
+                if (!hasNetworkConnection(context)) {
+                    showNoConnectionToast(context)
+                    return@NewChallengeDialog
+                }
                 viewModel.addReto(newReto)
                 logViewModel.log(
                     screen = "RetosScreen",

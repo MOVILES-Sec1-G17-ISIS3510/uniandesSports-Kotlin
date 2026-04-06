@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -52,6 +53,15 @@ fun rememberNetworkConnectivityState(): State<Boolean> {
     }
 
     return isConnected
+}
+
+fun hasNetworkConnection(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    return connectivityManager.isCurrentlyConnected()
+}
+
+fun showNoConnectionToast(context: Context) {
+    Toast.makeText(context, "No connection", Toast.LENGTH_SHORT).show()
 }
 
 private fun ConnectivityManager.isCurrentlyConnected(): Boolean {

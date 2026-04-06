@@ -215,7 +215,7 @@ fun MatchDetailModal(
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    enabled = !isAlreadyJoined && !isFull && !isLoading && isConnected,
+                    enabled = !isAlreadyJoined && !isFull && !isLoading,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
                         disabledContainerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -225,7 +225,6 @@ fun MatchDetailModal(
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                     } else {
                         val buttonText = when {
-                            !isConnected -> "NO CONNECTION"
                             isAlreadyJoined -> "ALREADY JOINED ✓"
                             isFull -> "MATCH FULL"
                             else -> "JOIN MATCH"
