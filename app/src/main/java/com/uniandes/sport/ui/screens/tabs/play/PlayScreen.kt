@@ -8,6 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,10 +25,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
@@ -34,13 +40,64 @@ fun PlayScreen(
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
+    val finishedEvents by viewModel.finishedEvents.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
+    val joinedEventIds by viewModel.joinedEventIds.collectAsState()
     
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var isPullRefreshing by remember { mutableStateOf(false) }
+    var showAllJoinedMatches by remember { mutableStateOf(false) }
+    var showAllFinishedMatches by remember { mutableStateOf(false) }
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+
+    val joinedEvents = remember(events, joinedEventIds) {
+        events.filter { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
+    }
+    val otherEvents = remember(events, joinedEventIds) {
+        events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
+    }
+    val visibleJoinedEvents = remember(joinedEvents, showAllJoinedMatches) {
+        if (showAllJoinedMatches) joinedEvents else joinedEvents.take(2)
+    }
+    val visibleFinishedEvents = remember(finishedEvents, showAllFinishedMatches) {
+        if (showAllFinishedMatches) finishedEvents else finishedEvents.take(2)
+    }
+
+    val onMatchSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
+        logViewModel.log(
+            screen = "PlayScreen",
+            action = "MATCH_VIEWED",
+            params = mapOf(
+                "sport_category" to event.sport,
+                "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
+                "max_capacity" to event.maxParticipants.toString()
+            )
+        )
+        selectedEventUIModel = EventUIAdapter.toUIModel(event)
+    }
+
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isPullRefreshing,
+        onRefresh = {
+            isPullRefreshing = true
+            viewModel.refreshEvents()
+        }
+    )
+
+    LaunchedEffect(isLoading, isPullRefreshing) {
+        if (isPullRefreshing && !isLoading) {
+            isPullRefreshing = false
+        }
+    }
 
     // If a deep-link asks to open a specific match, clear sport filter to avoid hiding it.
     LaunchedEffect(openMatchEventId) {
@@ -64,7 +121,10 @@ fun PlayScreen(
         MatchDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
-            onDismiss = { selectedEventUIModel = null }
+            onDismiss = {
+                selectedEventUIModel = null
+                viewModel.refreshEvents()
+            }
         )
     }
 
@@ -110,7 +170,12 @@ fun PlayScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .pullRefresh(pullRefreshState)
+    ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
@@ -124,14 +189,18 @@ fun PlayScreen(
                     SummaryCard(
                         modifier = Modifier.weight(1f),
                         title = "ACTIVE NOW",
-                        value = "24 PLAYERS",
+                        value = joinedEvents.size.toString(),
+                        subtitle = if (joinedEvents.isEmpty()) "You have no joined matches" else "Joined open matches",
+                        metric = "${joinedEvents.size} of ${events.size} total",
                         icon = Icons.Default.Bolt,
                         iconTint = Color(0xFFF5B041)
                     )
                     SummaryCard(
                         modifier = Modifier.weight(1f),
                         title = "OPEN MATCHES",
-                        value = "5 NEARBY",
+                        value = events.size.toString(),
+                        subtitle = if (otherEvents.isEmpty()) "No additional matches now" else "Ready to join nearby",
+                        metric = "${otherEvents.size} available to join",
                         icon = Icons.Default.EmojiEvents,
                         iconTint = Color(0xFF45B39D)
                     )
@@ -172,6 +241,56 @@ fun PlayScreen(
             }
 
             if (selectedSport == null) {
+                if (joinedEvents.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "MY OPEN MATCHES",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "You are already in these matches",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            visibleJoinedEvents.forEach { event ->
+                                val remainingMillis = remainingTimeMillis(event, nowMillis)
+                                val urgency = countdownUrgency(remainingMillis)
+
+                                JoinedMatchListCard(
+                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
+                                    urgency = urgency,
+                                    onClick = { onMatchSelected(event) }
+                                )
+                            }
+
+                            if (joinedEvents.size > 2) {
+                                TextButton(
+                                    onClick = { showAllJoinedMatches = !showAllJoinedMatches },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    val label = if (showAllJoinedMatches) {
+                                        "Show less"
+                                    } else {
+                                        "Show all (${joinedEvents.size})"
+                                    }
+                                    Text(label, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Section: Open Matches
                 item {
                     Row(
@@ -191,7 +310,7 @@ fun PlayScreen(
                             color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             Text(
-                                text = "${events.size} available",
+                                text = "${otherEvents.size} available",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontWeight = FontWeight.Medium,
@@ -207,33 +326,65 @@ fun PlayScreen(
                             CircularProgressIndicator()
                         }
                     }
-                } else if (events.isEmpty()) {
+                } else if (otherEvents.isEmpty()) {
                     item {
                         Text(
-                            "Not recent matches found. Create one!",
+                            if (joinedEvents.isNotEmpty()) "No additional open matches right now." else "Not recent matches found. Create one!",
                             modifier = Modifier.padding(16.dp),
                             color = Color.Gray
                         )
                     }
                 } else {
-                    items(events) { event ->
+                    items(otherEvents, key = { it.id }) { event ->
                         val uiModel = EventUIAdapter.toUIModel(event)
                         MatchCard(
                             uiModel = uiModel,
-                            onMatchClick = {
-                                // Analytics Engine: BQ6 (Available Capacity of interacted sports)
-                                logViewModel.log(
-                                    screen = "PlayScreen",
-                                    action = "MATCH_VIEWED",
-                                    params = mapOf(
-                                        "sport_category" to event.sport,
-                                        "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
-                                        "max_capacity" to event.maxParticipants.toString()
-                                    )
-                                )
-                                selectedEventUIModel = uiModel
-                            }
+                            onMatchClick = { onMatchSelected(event) }
                         )
+                    }
+                }
+
+                if (finishedEvents.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "FINISHED OPEN MATCHES",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Most recent completed matches",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    items(visibleFinishedEvents, key = { it.id }) { event ->
+                        val uiModel = EventUIAdapter.toUIModel(event)
+                        MatchCard(
+                            uiModel = uiModel,
+                            highlighted = false,
+                            badgeText = "FINISHED",
+                            onMatchClick = { onMatchSelected(event) }
+                        )
+                    }
+
+                    if (finishedEvents.size > 2) {
+                        item {
+                            TextButton(
+                                onClick = { showAllFinishedMatches = !showAllFinishedMatches },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val label = if (showAllFinishedMatches) {
+                                    "Show less"
+                                } else {
+                                    "Show all (${finishedEvents.size})"
+                                }
+                                Text(label, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             } else {
@@ -306,6 +457,109 @@ fun PlayScreen(
                 }
             }
         }
+
+        PullRefreshIndicator(
+            refreshing = isPullRefreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+private fun formatRemainingTime(event: com.uniandes.sport.models.Event, nowMillis: Long): String {
+    val targetMillis = event.scheduledAt?.toDate()?.time ?: return "TBD"
+    val remaining = (targetMillis - nowMillis).coerceAtLeast(0L)
+
+    val totalMinutes = remaining / 60000
+    val days = totalMinutes / (60 * 24)
+    val hours = (totalMinutes % (60 * 24)) / 60
+    val minutes = totalMinutes % 60
+
+    return when {
+        days > 0 -> "${days}d ${hours}h"
+        hours > 0 -> "${hours}h ${minutes}m"
+        else -> "${minutes}m"
+    }
+}
+
+private fun remainingTimeMillis(event: com.uniandes.sport.models.Event, nowMillis: Long): Long {
+    val targetMillis = event.scheduledAt?.toDate()?.time ?: return Long.MAX_VALUE
+    return (targetMillis - nowMillis).coerceAtLeast(0L)
+}
+
+private enum class CountdownUrgency { NORMAL, SOON, URGENT }
+
+private fun countdownUrgency(remainingMillis: Long): CountdownUrgency {
+    return when {
+        remainingMillis <= 60L * 60L * 1000L -> CountdownUrgency.URGENT
+        remainingMillis <= 3L * 60L * 60L * 1000L -> CountdownUrgency.SOON
+        else -> CountdownUrgency.NORMAL
+    }
+}
+
+@Composable
+private fun JoinedMatchListCard(
+    uiModel: com.uniandes.sport.patterns.event.EventUIModel,
+    countdownText: String,
+    urgency: CountdownUrgency,
+    onClick: () -> Unit
+) {
+    val event = uiModel.rawEvent
+    val (urgencyBackground, urgencyText, borderColor) = when (urgency) {
+        CountdownUrgency.URGENT -> Triple(Color(0xFFFFE3E0), Color(0xFFB71C1C), Color(0xFFE53935))
+        CountdownUrgency.SOON -> Triple(Color(0xFFFFF4E5), Color(0xFF8A4B00), Color(0xFFFF9800))
+        CountdownUrgency.NORMAL -> Triple(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        tonalElevation = 4.dp,
+        shadowElevation = 3.dp
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+                Icon(Icons.Default.ChevronRight, contentDescription = "View", tint = MaterialTheme.colorScheme.outline)
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = urgencyBackground
+            ) {
+                Text(
+                    text = countdownText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = urgencyText
+                )
+            }
+        }
     }
 }
 
@@ -314,35 +568,71 @@ fun SummaryCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
+    subtitle: String,
+    metric: String,
     icon: ImageVector,
     iconTint: Color
 ) {
     Surface(
-        modifier = modifier.height(90.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.height(132.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 1.dp
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        tonalElevation = 3.dp,
+        shadowElevation = 2.dp
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold
+                )
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(iconTint.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(14.dp))
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = iconTint.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = metric,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = iconTint,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -435,7 +725,12 @@ fun ModeButton(
 }
 
 @Composable
-fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchClick: () -> Unit = {}) {
+fun MatchCard(
+    uiModel: com.uniandes.sport.patterns.event.EventUIModel,
+    highlighted: Boolean = false,
+    badgeText: String? = null,
+    onMatchClick: () -> Unit = {}
+) {
     val event = uiModel.rawEvent
     
     val (icon, color) = when (event.sport.lowercase()) {
@@ -452,9 +747,10 @@ fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchCl
             .fillMaxWidth()
             .clickable { onMatchClick() },
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shadowElevation = 1.dp
+        color = if (highlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
+        border = if (highlighted) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)) else null,
+        tonalElevation = if (highlighted) 4.dp else 1.dp,
+        shadowElevation = if (highlighted) 3.dp else 1.dp
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -485,6 +781,21 @@ fun MatchCard(uiModel: com.uniandes.sport.patterns.event.EventUIModel, onMatchCl
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
+                if (!badgeText.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
             
             Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = MaterialTheme.colorScheme.outline)
