@@ -20,6 +20,7 @@ object EventFactory {
         modality: String,
         maxParticipants: Long,
         scheduledAt: Date,
+        finishedAt: Date? = null,
         metadata: Map<String, Any> = emptyMap()
     ): Event {
         val now = Timestamp.now()
@@ -34,6 +35,7 @@ object EventFactory {
             modality = modality,
             membersCount = 1,
             scheduledAt = Timestamp(scheduledAt),
+            finishedAt = finishedAt?.let { Timestamp(it) },
             sport = sport.lowercase(),
             status = "active",
             title = title

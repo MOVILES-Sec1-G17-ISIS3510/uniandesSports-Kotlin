@@ -38,23 +38,46 @@ fun CreateEventDialog(
     sport: String?,
     modality: String,
     onDismiss: () -> Unit,
-    onCreate: (sport: String, title: String, location: String, description: String, date: Date, skillLevel: String, maxParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
+    initialEvent: com.uniandes.sport.models.Event? = null,
+    onFinish: (sport: String, title: String, location: String, description: String, date: java.util.Date, endDate: java.util.Date?, skillLevel: String, maxParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var selectedSport by remember { mutableStateOf<String?>(null) }
+    var title by remember { mutableStateOf(initialEvent?.title ?: "") }
+    var selectedSport by remember { mutableStateOf<String?>(initialEvent?.sport ?: sport) }
     var isLocationSpecific by remember { mutableStateOf(true) }
     var customSportName by remember { mutableStateOf("") }
-    var dateString by remember { mutableStateOf("") }
-    var timeString by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var skillLevel by remember { mutableStateOf("Open (any level)") }
-    var maxParticipants by remember { mutableStateOf("10") }
+    // Helper to format date/time
+    val initialDateString = initialEvent?.scheduledAt?.toDate()?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: ""
+    val initialTimeString = initialEvent?.scheduledAt?.toDate()?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it) } ?: ""
+    val initialFinishTimeString = initialEvent?.finishedAt?.toDate()?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it) } ?: ""
+
+    var dateString by remember { mutableStateOf(initialDateString) }
+    var timeString by remember { mutableStateOf(initialTimeString) }
+    var finishTimeString by remember { mutableStateOf(initialFinishTimeString) }
+    
+    var location by remember { mutableStateOf(initialEvent?.location ?: "") }
+    var description by remember { mutableStateOf(initialEvent?.description ?: "") }
+    var skillLevel by remember { mutableStateOf(initialEvent?.metadata?.get("skillLevel") as? String ?: "Open (any level)") }
+    var maxParticipants by remember { mutableStateOf(initialEvent?.maxParticipants?.toString() ?: "10") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var shouldJoin by remember { mutableStateOf(true) }
+    var shouldJoin by remember { mutableStateOf(initialEvent == null) } // Only auto-join for new events
     var isCreatedSuccessfully by remember { mutableStateOf(false) }
     var createdMatchDate by remember { mutableStateOf<Date?>(null) }
+    
+    // Multi-day / Tournament support
+    var isMultiDay by remember { 
+        val event = initialEvent
+        val finishedAt = event?.finishedAt
+        mutableStateOf(event != null && finishedAt != null && 
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(event.scheduledAt?.toDate() ?: Date()) != 
+            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(finishedAt.toDate())) 
+    }
+    if (modality.lowercase() == "torneo" && initialEvent == null) {
+        SideEffect { isMultiDay = true }
+    }
+    var endDateString by remember { mutableStateOf(initialEvent?.finishedAt?.toDate()?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "") }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    
     val scrollState = rememberScrollState()
 
     val context = LocalContext.current
@@ -100,7 +123,22 @@ fun CreateEventDialog(
         is24Hour = false
     )
     var showTimePicker by remember { mutableStateOf(false) }
+    var showFinishTimePicker by remember { mutableStateOf(false) }
     var timePickerError by remember { mutableStateOf<String?>(null) }
+
+    val endDatePickerState = rememberDatePickerState(
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                return utcTimeMillis >= todayStart
+            }
+        }
+    )
+    
+    val finishTimePickerState = rememberTimePickerState(
+        initialHour = initialEvent?.finishedAt?.toDate()?.let { Calendar.getInstance().apply { time = it }.get(Calendar.HOUR_OF_DAY) } ?: (Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + 1),
+        initialMinute = initialEvent?.finishedAt?.toDate()?.let { Calendar.getInstance().apply { time = it }.get(Calendar.MINUTE) } ?: 0,
+        is24Hour = false
+    )
     
     var isSkillLevelExpanded by remember { mutableStateOf(false) }
     val skillLevels = listOf("Open (any level)", "Beginner", "Amateur", "Advanced", "Professional")
@@ -239,6 +277,72 @@ fun CreateEventDialog(
             }
         }
     }
+    
+    // --- Finish Time Picker Dialog ---
+    if (showFinishTimePicker) {
+        Dialog(onDismissRequest = { showFinishTimePicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier.width(IntrinsicSize.Min)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "SET FINISH TIME",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Start).padding(bottom = 12.dp)
+                    )
+                    
+                    TimePicker(state = finishTimePickerState)
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showFinishTimePicker = false }) { Text("Cancel") }
+                        TextButton(onClick = {
+                            val hour = String.format("%02d", finishTimePickerState.hour)
+                            val minute = String.format("%02d", finishTimePickerState.minute)
+                            finishTimeString = "$hour:$minute"
+                            showFinishTimePicker = false
+                        }) { Text("OK") }
+                    }
+                }
+            }
+        }
+    }
+    
+    // --- End Date Picker Dialog ---
+    if (showEndDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    endDatePickerState.selectedDateMillis?.let { millis ->
+                        val cal = Calendar.getInstance().apply { 
+                            timeZone = TimeZone.getTimeZone("UTC")
+                            timeInMillis = millis 
+                        }
+                        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                        }
+                        endDateString = sdf.format(cal.time)
+                    }
+                    showEndDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = endDatePickerState)
+        }
+    }
 
     // --- Exit Confirmation Dialog ---
     if (showExitConfirmation) {
@@ -262,11 +366,11 @@ fun CreateEventDialog(
     }
 
     Dialog(
-        onDismissRequest = { /* Controlled by explicit button */ },
+        onDismissRequest = { handleDismiss() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnClickOutside = false,
-            dismissOnBackPress = false
+            dismissOnBackPress = true
         )
     ) {
         Surface(
@@ -314,7 +418,7 @@ fun CreateEventDialog(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Titles
-                Text("CREATE ${modality.uppercase()}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                Text(if (initialEvent != null) "EDIT EVENT" else "CREATE ${modality.uppercase()}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                 val subtitleDescription = when (modality.lowercase()) {
                     "casual" -> "Relaxed play without strict competition."
                     "amateur" -> "Competitive play for enthusiasts."
@@ -421,9 +525,10 @@ fun CreateEventDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Date & Time Section
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
-                        FormLabel("Date")
+                        FormLabel("Start Date")
                         Box(modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }) {
                             OutlinedTextField(
                                 value = dateString,
@@ -444,7 +549,7 @@ fun CreateEventDialog(
                         }
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        FormLabel("Time")
+                        FormLabel("Start Time")
                         Box(modifier = Modifier.fillMaxWidth().clickable { showTimePicker = true }) {
                             OutlinedTextField(
                                 value = timeString,
@@ -452,8 +557,93 @@ fun CreateEventDialog(
                                 modifier = Modifier.fillMaxWidth().height(56.dp),
                                 readOnly = true,
                                 enabled = false,
-                                placeholder = { Text("--:--", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                placeholder = { Text("Start Time", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                                 trailingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Multi-day Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        .clickable { isMultiDay = !isMultiDay }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isMultiDay) Icons.Default.EventAvailable else Icons.Default.Event,
+                            contentDescription = null,
+                            tint = if (isMultiDay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Multi-day / Tournament", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Event spans multiple days", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Switch(
+                        checked = isMultiDay,
+                        onCheckedChange = { isMultiDay = it },
+                        thumbContent = if (isMultiDay) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+                        } else null
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (isMultiDay) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            FormLabel("End Date")
+                            Box(modifier = Modifier.fillMaxWidth().clickable { showEndDatePicker = true }) {
+                                OutlinedTextField(
+                                    value = endDateString,
+                                    onValueChange = { },
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                    readOnly = true,
+                                    enabled = false,
+                                    placeholder = { Text("dd/mm/aaaa", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                    trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    
+                    Column(modifier = Modifier.weight(if (isMultiDay) 1f else 1.5f)) {
+                        FormLabel("Finish Time")
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showFinishTimePicker = true }) {
+                            OutlinedTextField(
+                                value = finishTimeString,
+                                onValueChange = { },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                readOnly = true,
+                                enabled = false,
+                                placeholder = { Text("End Time", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                trailingIcon = { Icon(Icons.Default.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
@@ -671,40 +861,52 @@ fun CreateEventDialog(
                                  (selectedSport != "other" || customSportName.isNotBlank()) &&
                                  (!isLocationSpecific || location.isNotBlank()) &&
                                  dateString.isNotBlank() && 
-                                 timeString.isNotBlank()
+                                 timeString.isNotBlank() &&
+                                 (!isMultiDay || endDateString.isNotBlank())
 
                 Button(
                     onClick = {
                         val finalLocation = if (isLocationSpecific) location else "Open Location"
                         val finalSport = if (selectedSport == "other") customSportName else selectedSport!!
                         
-                        val date = try {
+                        val startDate = try {
                             val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
                             sdf.parse("$dateString $timeString") ?: Date()
                         } catch (e: Exception) {
                             Date()
                         }
                         
+                        val endDate = try {
+                            if (finishTimeString.isNotBlank()) {
+                                val targetDateStr = if (isMultiDay && endDateString.isNotBlank()) endDateString else dateString
+                                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                                sdf.parse("$targetDateStr $finishTimeString")
+                            } else null
+                        } catch (e: Exception) {
+                            null
+                        }
+                        
                         errorMessage = null
                         isLoading = true
 
-                        onCreate(
+                        onFinish(
                             finalSport,
                             title, 
                             finalLocation, 
                             description, 
-                            date, 
+                            startDate, 
+                            endDate,
                             skillLevel, 
                             maxParticipants.toLongOrNull() ?: 10L,
                             shouldJoin,
                             { 
                                 isLoading = false
-                                createdMatchDate = date
+                                createdMatchDate = startDate
                                 isCreatedSuccessfully = true
                             },
                             { e -> 
                                 isLoading = false 
-                                errorMessage = e.message ?: "Failed to create event"
+                                errorMessage = e.message ?: "Failed to save event"
                             }
                         )
                     },
@@ -720,7 +922,7 @@ fun CreateEventDialog(
                     if (isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                     } else {
-                        Text("Create Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text(if (initialEvent != null) "Save Changes" else "Create Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {

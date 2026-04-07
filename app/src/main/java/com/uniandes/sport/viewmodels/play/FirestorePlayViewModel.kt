@@ -10,7 +10,7 @@ import com.uniandes.sport.models.MatchMember
 import com.uniandes.sport.models.OpenMatchReview
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
-import com.uniandes.sport.patterns.event.SportFilterStrategy
+import com.uniandes.sport.patterns.event.MultiSportFilterStrategy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,8 +36,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _selectedSport = MutableStateFlow<String?>(null)
-    override val selectedSport: StateFlow<String?> = _selectedSport.asStateFlow()
+    private val _selectedSports = MutableStateFlow<Set<String>>(emptySet())
+    override val selectedSports: StateFlow<Set<String>> = _selectedSports.asStateFlow()
 
     private val _joinedEventIds = MutableStateFlow<Set<String>>(emptySet())
     override val joinedEventIds: StateFlow<Set<String>> = _joinedEventIds.asStateFlow()
@@ -155,14 +155,32 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             }
     }
 
-    override fun setSportFilter(sport: String?) {
-        _selectedSport.value = sport
-        currentFilterStrategy = if (sport != null) {
-            SportFilterStrategy(sport)
+    override fun toggleSportFilter(sport: String) {
+        val current = _selectedSports.value
+        val normalized = sport.lowercase()
+        val next = if (current.contains(normalized)) {
+            current - normalized
+        } else {
+            current + normalized
+        }
+        _selectedSports.value = next
+        
+        currentFilterStrategy = if (next.isNotEmpty()) {
+            MultiSportFilterStrategy(next)
         } else {
             AllActiveEventsStrategy()
         }
         applyCurrentStrategy()
+        updateInProgressEvents()
+        updateFinishedEvents()
+    }
+
+    override fun clearSportFilters() {
+        _selectedSports.value = emptySet()
+        currentFilterStrategy = AllActiveEventsStrategy()
+        applyCurrentStrategy()
+        updateInProgressEvents()
+        updateFinishedEvents()
     }
 
     private fun applyCurrentStrategy() {
@@ -172,11 +190,20 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private fun updateInProgressEvents() {
         val now = com.google.firebase.Timestamp.now()
         val oneHourAgo = com.google.firebase.Timestamp((now.seconds - 3600).coerceAtLeast(0L), now.nanoseconds)
+        val sports = _selectedSports.value
         _inProgressEvents.value = _rawEvents.value
             .filter {
-                it.status == "active" &&
-                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) <= now &&
-                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) >= oneHourAgo
+                val scheduledAt = it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)
+                val isSportMatch = sports.isEmpty() || sports.contains(it.sport.lowercase())
+                
+                val isInProgress = it.status == "active" &&
+                    scheduledAt <= now &&
+                    (
+                        (it.finishedAt != null && it.finishedAt!! > now) ||
+                        (it.finishedAt == null && scheduledAt >= oneHourAgo)
+                    )
+                
+                isInProgress && isSportMatch
             }
             .sortedByDescending { it.scheduledAt }
     }
@@ -184,10 +211,15 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private fun updateFinishedEvents() {
         val now = com.google.firebase.Timestamp.now()
         val oneHourAgo = com.google.firebase.Timestamp((now.seconds - 3600).coerceAtLeast(0L), now.nanoseconds)
+        val sports = _selectedSports.value
         _finishedEvents.value = _rawEvents.value
             .filter {
-                it.status == "active" &&
-                    (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) < oneHourAgo
+                val isSportMatch = sports.isEmpty() || sports.contains(it.sport.lowercase())
+                val isFinished = it.status == "finished" || 
+                                (it.finishedAt != null && it.finishedAt!! <= now) ||
+                                (it.finishedAt == null && (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) < oneHourAgo)
+                
+                it.status != "cancelled" && isFinished && isSportMatch
             }
             .sortedByDescending { it.scheduledAt }
     }
@@ -332,6 +364,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         sport: String,
         modality: String,
         scheduledAt: java.util.Date,
+        finishedAt: java.util.Date?,
         skillLevel: String,
         maxParticipants: Long,
         shouldJoin: Boolean,
@@ -355,6 +388,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                 modality = modality,
                 maxParticipants = maxParticipants,
                 scheduledAt = scheduledAt,
+                finishedAt = finishedAt,
                 metadata = mapOf("skillLevel" to skillLevel)
             )
             
@@ -396,6 +430,46 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             Log.e("PlayVM", "EXCEPTION in createEvent: ${e.message}")
             onError(e)
         }
+    }
+
+    override fun updateEvent(
+        eventId: String,
+        title: String,
+        description: String,
+        location: String,
+        sport: String,
+        scheduledAt: java.util.Date,
+        finishedAt: java.util.Date?,
+        skillLevel: String,
+        maxParticipants: Long,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val updates = mutableMapOf<String, Any>(
+            "title" to title,
+            "description" to description,
+            "location" to location,
+            "sport" to sport.lowercase(),
+            "scheduledAt" to com.google.firebase.Timestamp(scheduledAt),
+            "maxParticipants" to maxParticipants,
+            "metadata.skillLevel" to skillLevel,
+            "updatedAt" to com.google.firebase.Timestamp.now()
+        )
+        
+        if (finishedAt != null) {
+            updates["finishedAt"] = com.google.firebase.Timestamp(finishedAt)
+        } else {
+            updates["finishedAt"] = com.google.firebase.firestore.FieldValue.delete()
+        }
+
+        db.collection("events").document(eventId)
+            .update(updates)
+            .addOnSuccessListener {
+                com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
+                com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
+                onSuccess()
+            }
+            .addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
     }
 
     override fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {

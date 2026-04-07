@@ -26,9 +26,16 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 fun EventDetailModal(
     uiModel: EventUIModel,
     viewModel: PlayViewModelInterface,
+    onEditClick: (() -> Unit)? = null,
+    onReviewClick: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val event = uiModel.rawEvent
+    val now = java.util.Date()
+    val oneHourAgo = java.util.Date(now.time - 3600 * 1000)
+    val isFinished = event.status == "finished" || 
+                    (event.finishedAt != null && event.finishedAt!!.toDate().before(now)) ||
+                    (event.finishedAt == null && event.scheduledAt?.toDate()?.before(oneHourAgo) == true)
     val currentUserId = viewModel.currentUserId
     val members by viewModel.members.collectAsState()
     val isAlreadyJoined = currentUserId != null && members.any { it.userId == currentUserId }
@@ -181,7 +188,7 @@ fun EventDetailModal(
                             }
                             
                             // Kick button for organizers
-                            if (currentUserId == event.createdBy && member.userId != currentUserId) {
+                            if (!isFinished && currentUserId == event.createdBy && member.userId != currentUserId) {
                                 IconButton(onClick = {
                                     viewModel.kickMember(event.id, member.userId)
                                 }) {
@@ -197,17 +204,57 @@ fun EventDetailModal(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (isAlreadyJoined) {
+                    if (isFinished) {
+                        if (isAlreadyJoined) {
+                            Button(
+                                onClick = { onReviewClick?.invoke(); onDismiss() },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary,
+                                    contentColor = MaterialTheme.colorScheme.onTertiary
+                                )
+                            ) {
+                                Icon(Icons.Default.RateReview, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("WRITE REVIEW", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text(
+                                "This event has already finished.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        }
+                    } else if (isAlreadyJoined) {
+                        // EDIT Button (Owners only)
+                        if (currentUserId == event.createdBy) {
+                            Button(
+                                onClick = { onEditClick?.invoke(); onDismiss() },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary
+                                )
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("EDIT EVENT", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         // LEAVE Event button
-                        Button(
+                        OutlinedButton(
                             onClick = { showConfirmLeave = true },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(16.dp),
                             enabled = !isLoading,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFE74C3C), // Strong Red
-                                contentColor = Color.White
-                            )
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFE74C3C)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE74C3C).copy(alpha = 0.5f))
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -216,19 +263,17 @@ fun EventDetailModal(
 
                         // CANCEL Event button (Owners only)
                         if (currentUserId == event.createdBy) {
-                            OutlinedButton(
+                            TextButton(
                                 onClick = { showConfirmCancel = true },
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 enabled = !isLoading,
-                                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFE74C3C).copy(alpha = 0.6f)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color(0xFFE74C3C)
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color(0xFFE74C3C).copy(alpha = 0.7f)
                                 )
                             ) {
-                                Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("CANCEL Event FOR EVERYONE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+                                Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("CANCEL Event FOR EVERYONE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
                             }
                         }
                     } else {
