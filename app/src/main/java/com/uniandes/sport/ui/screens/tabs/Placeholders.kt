@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.uniandes.sport.ui.theme.ArchivoFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,12 +30,16 @@ fun SimplePlaceholderScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black, fontFamily = ArchivoFamily))
                         Text(
                             "FEATURE PREVIEW",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp, 
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp,
+                                fontFamily = ArchivoFamily
+                            ),
+                            color = MaterialTheme.colorScheme.secondary // Teal
                         )
                     }
                 },
@@ -58,7 +63,7 @@ fun SimplePlaceholderScreen(
                 }
             )
         },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -69,9 +74,11 @@ fun SimplePlaceholderScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "COMING SOON", 
-                    fontWeight = FontWeight.Black, 
-                    fontSize = 24.sp, 
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontFamily = ArchivoFamily,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    )
                 )
                 Text(
                     "$title is currently under development",

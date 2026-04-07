@@ -237,7 +237,7 @@ fun PlayScreen(
                     text = "EXPLORE BY SPORT",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary // Navy Blue (#012567)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 LazyRow(
@@ -309,7 +309,7 @@ fun PlayScreen(
                         subtitle = if (joinedEvents.isEmpty()) "You have no joined events" else "Joined open events",
                         metric = "${joinedEvents.size} of ${events.size} total",
                         icon = Icons.Default.Bolt,
-                        iconTint = Color(0xFFF5B041)
+                        iconTint = Color(0xFF2F8C89) // Brand Teal (#2F8C89)
                     )
                     SummaryCard(
                         modifier = Modifier.weight(1f),
@@ -318,7 +318,7 @@ fun PlayScreen(
                         subtitle = if (otherEvents.isEmpty()) "No additional events now" else "Ready to join nearby",
                         metric = "${otherEvents.size} available to join",
                         icon = Icons.Default.EmojiEvents,
-                        iconTint = Color(0xFF45B39D)
+                        iconTint = Color(0xFF2F8C89) // Brand Teal (#2F8C89)
                     )
                 }
             }
@@ -714,8 +714,7 @@ fun SummaryCard(
 
             Text(
                 value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.displayMedium, // Now Bebas Neue
                 color = MaterialTheme.colorScheme.onSurface
             )
 

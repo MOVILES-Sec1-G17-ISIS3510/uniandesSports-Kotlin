@@ -38,7 +38,7 @@ fun SectionHeader(title: String, subtitle: String) {
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -47,7 +47,7 @@ fun SectionHeader(title: String, subtitle: String) {
 fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit) {
     val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
     val progressPercent = (progressRaw * 100).toInt()
-    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary // Teal
 
     Column(
         modifier = Modifier
@@ -80,7 +80,7 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE0F2F1)),
+                    .background(MaterialTheme.colorScheme.primaryContainer), // Mint Green
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -92,7 +92,7 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
                         else -> Icons.Default.FlashOn
                     },
                     contentDescription = null,
-                    tint = Color(0xFF00796B),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer, // Navy Blue
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -157,7 +157,7 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
 @Composable
 fun SportIconBox(sport: String, size: Dp) {
     Box(
-        modifier = Modifier.size(size).clip(RoundedCornerShape(size/4)).background(Color(0xFFE0F2F1)),
+        modifier = Modifier.size(size).clip(RoundedCornerShape(size/4)).background(MaterialTheme.colorScheme.primaryContainer), // Mint Green
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -169,7 +169,7 @@ fun SportIconBox(sport: String, size: Dp) {
                 else -> Icons.Default.FlashOn
             },
             contentDescription = null,
-            tint = Color(0xFF00796B),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer, // Navy Blue
             modifier = Modifier.size(size * 0.6f)
         )
     }
