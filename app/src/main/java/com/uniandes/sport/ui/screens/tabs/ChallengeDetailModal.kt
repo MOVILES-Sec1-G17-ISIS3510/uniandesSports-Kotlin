@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.uniandes.sport.models.Reto
+import com.uniandes.sport.ui.components.SportIconBox
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -61,7 +62,7 @@ fun ChallengeDetailModal(
                         .height(200.dp)
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color(0xFF00796B), Color(0xFF004D40))
+                                listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
                             )
                         )
                 ) {
@@ -118,7 +119,7 @@ fun ChallengeDetailModal(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Text("CHALLENGE INFO", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, color = Color.Gray))
+                    Text("CHALLENGE INFO", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant))
                     
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -139,7 +140,7 @@ fun ChallengeDetailModal(
                             onClick = { showConfirmLeave = true },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE74C3C))
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -213,13 +214,13 @@ fun InfoCard(label: String, value: String, icon: androidx.compose.ui.graphics.ve
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F7F9))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, null, modifier = Modifier.size(20.dp), tint = Color(0xFF00796B))
+            Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-            Text(value, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color(0xFF004D40))
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 16.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -231,15 +232,15 @@ fun DetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: Stri
         modifier = Modifier.padding(vertical = 12.dp)
     ) {
         Box(
-            modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFE0F2F1)),
+            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, modifier = Modifier.size(18.dp), tint = Color(0xFF00796B))
+            Icon(icon, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(label, fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
