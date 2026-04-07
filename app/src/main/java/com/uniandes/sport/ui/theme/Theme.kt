@@ -42,17 +42,17 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = SecondaryUniandes,
     onPrimaryContainer = PrimaryUniandes,
-    secondary = TertiaryUniandes,
+    secondary = TertiaryUniandes, // Teal for CTAs
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF1F5F9),
-    onSecondaryContainer = Color(0xFF64748B),
-    tertiary = TertiaryUniandes,
+    secondaryContainer = SecondaryUniandes, // Mint Green for tags/chips
+    onSecondaryContainer = PrimaryUniandes,
+    tertiary = TertiaryUniandes, // Teal for CTAs
     background = BackgroundLight,
     surface = BackgroundLight,
-    surfaceVariant = MutedLight,
+    surfaceVariant = MutedLight, // Gray for inactive/dividers
     onBackground = ForegroundLight,
     onSurface = ForegroundLight,
-    onSurfaceVariant = Color(0xFF64748B)
+    onSurfaceVariant = MutedForegroundLight // Gray for metadata
 )
 
 enum class ThemeMode {

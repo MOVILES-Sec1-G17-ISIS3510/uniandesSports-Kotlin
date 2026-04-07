@@ -28,6 +28,7 @@ import android.widget.Toast
 import com.uniandes.sport.ui.navigation.Screen
 import com.uniandes.sport.ui.navigation.AppNavigation
 import com.uniandes.sport.ui.theme.ThemeMode
+import com.uniandes.sport.ui.theme.ArchivoFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,9 +226,24 @@ fun TopAppBarDynamic(
         title = {
             Column {
                 if (subtitle.isNotEmpty()) {
-                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.tertiary)
+                    Text(
+                        text = subtitle, 
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp, 
+                            letterSpacing = 2.sp, 
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = ArchivoFamily // Explicitly use Archivo
+                        ), 
+                        color = MaterialTheme.colorScheme.secondary // Teal
+                    )
                 }
-                Text(text = title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black))
+                Text(
+                    text = title, 
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        fontFamily = ArchivoFamily // Explicitly use Archivo
+                    )
+                )
             }
         },
         actions = {
@@ -341,9 +357,9 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
             val selected = currentRoute == screen.route
             NavigationBarItem(
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = if (screen == Screen.Play) Color.White else MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = if (screen == Screen.Play) Color.Transparent else MaterialTheme.colorScheme.secondary,
+                    selectedIconColor = MaterialTheme.colorScheme.primary, // Navy Blue
+                    selectedTextColor = MaterialTheme.colorScheme.primary, // Navy Blue
+                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer, // Mint Green for general tabs
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ),
@@ -353,7 +369,7 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
                             modifier = Modifier
                                 .size(50.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)),
+                                .background(if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f)), // Teal for Play FAB
                             contentAlignment = Alignment.Center
                         ) {
                             androidx.compose.animation.Crossfade(
