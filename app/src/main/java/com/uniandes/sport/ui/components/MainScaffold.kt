@@ -212,11 +212,6 @@ fun TopAppBarDynamic(
     }
 
     TopAppBar(
-        navigationIcon = {
-            IconButton(onClick = onProfileClick) {
-                Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
-            }
-        },
         colors = TopAppBarDefaults.topAppBarColors(
 
             containerColor = MaterialTheme.colorScheme.surface,

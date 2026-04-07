@@ -46,7 +46,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-@OptIn(ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfesoresScreen(
     profesoresViewModel: ProfesoresViewModelInterface,
@@ -109,21 +109,46 @@ fun ProfesoresScreen(
             ) {
                 items(deportes) { dep ->
                     val isSelected = selectedFilter == dep
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant) else null,
-                        shadowElevation = if (isSelected) 4.dp else 1.dp,
-                        modifier = Modifier.clickable { selectedFilter = dep }
-                    ) {
-                        Text(
-                            text = if (dep == "All") "All Coaches" else dep,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                    
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedFilter = dep },
+                        label = { Text(if (dep == "All") "All Coaches" else dep, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
+                        leadingIcon = {
+                            if (dep == "All") {
+                                Surface(
+                                    modifier = Modifier.size(24.dp),
+                                    shape = CircleShape,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Sports, 
+                                            contentDescription = null, 
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                com.uniandes.sport.ui.components.SportIconBox(sport = dep, size = 24.dp)
+                            }
+                        },
+                        shape = CircleShape,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = Color.Transparent,
+                            selectedBorderColor = MaterialTheme.colorScheme.secondary
                         )
-                    }
+                    )
                 }
             }
 
@@ -350,20 +375,10 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
             // Header
             Row(verticalAlignment = Alignment.Top) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.secondary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = profesor.nombre.split(" ").joinToString("") { it.take(1) },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 20.sp
-                        )
-                    }
+                    com.uniandes.sport.ui.components.SportIconBox(
+                        sport = profesor.deporte,
+                        size = 64.dp
+                    )
                     if (profesor.verified) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,

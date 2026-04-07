@@ -244,25 +244,32 @@ fun PlayScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
-                    val categories = listOf(
-                        "soccer" to Icons.Default.SportsSoccer,
-                        "basketball" to Icons.Default.SportsBasketball,
-                        "tennis" to Icons.Default.SportsTennis,
-                        "calisthenics" to Icons.Default.FitnessCenter,
-                        "running" to Icons.Default.DirectionsRun
-                    )
+                    val categories = listOf("soccer", "basketball", "tennis", "calisthenics", "running")
                     
-                    items(categories) { (name, icon) ->
+                    items(categories) { name ->
                         val isSelected = selectedSport == name
                         FilterChip(
                             selected = isSelected,
                             onClick = { viewModel.setSportFilter(if (isSelected) null else name) },
-                            label = { Text(name.replaceFirstChar { it.uppercase() }) },
-                            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            label = { Text(name.replaceFirstChar { it.uppercase() }, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
+                            leadingIcon = { 
+                                com.uniandes.sport.ui.components.SportIconBox(
+                                    sport = name, 
+                                    size = 24.dp
+                                ) 
+                            },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                                selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                                selectedLabelColor = Color.White,
+                                selectedLeadingIconColor = Color.White,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = Color.Transparent,
+                                selectedBorderColor = MaterialTheme.colorScheme.secondary
                             )
                         )
                     }
@@ -616,21 +623,27 @@ private fun JoinedEventListCard(
         tonalElevation = 4.dp,
         shadowElevation = 3.dp
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = event.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-                Icon(Icons.Default.ChevronRight, contentDescription = "View", tint = MaterialTheme.colorScheme.outline)
-            }
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
+            
+            Spacer(modifier = Modifier.width(14.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(Icons.Default.ChevronRight, contentDescription = "View", tint = MaterialTheme.colorScheme.outline)
+                }
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -666,6 +679,7 @@ private fun JoinedEventListCard(
             }
         }
     }
+}
 }
 
 @Composable
@@ -838,15 +852,6 @@ fun EventCard(
     onEventClick: () -> Unit = {}
 ) {
     val event = uiModel.rawEvent
-    
-    val (icon, color) = when (event.sport.lowercase()) {
-        "fútbol", "futbol", "soccer" -> Icons.Default.SportsSoccer to Color(0xFF2ECC71)
-        "basketball", "baloncesto" -> Icons.Default.SportsBasketball to Color(0xFFE67E22)
-        "tennis", "tenis" -> Icons.Default.SportsTennis to Color(0xFFF1C40F)
-        "calistenia", "calisthenics" -> Icons.Default.FitnessCenter to Color(0xFF9B59B6)
-        "running", "correr" -> Icons.Default.DirectionsRun to Color(0xFFE74C3C)
-        else -> Icons.Default.Sports to Color.Gray
-    }
 
     Surface(
         modifier = Modifier
@@ -862,15 +867,7 @@ fun EventCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(color),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = event.sport, tint = Color.White)
-            }
+            com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
             
             Spacer(modifier = Modifier.width(16.dp))
             

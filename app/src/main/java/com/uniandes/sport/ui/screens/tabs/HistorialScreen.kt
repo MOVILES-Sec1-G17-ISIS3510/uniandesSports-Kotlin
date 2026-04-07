@@ -24,6 +24,8 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import java.util.Date
+import com.uniandes.sport.ui.components.SportIconBox
+import com.uniandes.sport.ui.components.ChallengeBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,14 +68,14 @@ fun HistorialScreen(
                 }
             )
         },
-        containerColor = Color(0xFFF8F9FA)
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         if (finishedChallenges.isEmpty() && finishedOpenMatches.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.History, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                    Icon(Icons.Default.History, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("No completed challenges yet", color = Color.Gray)
+                    Text("No completed challenges yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -127,7 +129,7 @@ fun HistorialScreen(
 private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review: String?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -135,11 +137,11 @@ private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review:
                 SportIconBox(event.sport, size = 40.dp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(event.title, fontWeight = FontWeight.Bold)
+                    Text(event.title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     val dateLabel = event.scheduledAt?.toDate()?.toString()?.take(16) ?: "Unknown date"
-                    Text(dateLabel, fontSize = 12.sp, color = Color.Gray)
+                    Text(dateLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ChallengeBadge("FINISHED", Color(0xFFE3F2FD), Color(0xFF1565C0))
+                ChallengeBadge("FINISHED", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
             }
 
             Surface(
@@ -169,20 +171,20 @@ fun HistoryCard(reto: com.uniandes.sport.models.Reto, uid: String) {
     val progress = (reto.progressByUser[uid] ?: 0.0) * 100
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             SportIconBox(reto.sport, size = 40.dp)
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(reto.title, fontWeight = FontWeight.Bold)
-                Text("Result: ${progress.toInt()}%", fontSize = 12.sp, color = if (progress >= 100) Color(0xFF4CAF50) else Color.Gray)
+                Text(reto.title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("Result: ${progress.toInt()}%", fontSize = 12.sp, color = if (progress >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (progress >= 100) {
-                ChallengeBadge("COMPLETED", Color(0xFFE8F5E9), Color(0xFF2E7D32))
+                ChallengeBadge("COMPLETED", Color(0xFFE8F5E9).copy(alpha = 0.8f), Color(0xFF2E7D32))
             } else {
-                ChallengeBadge("EXPIRED", Color(0xFFFFEBEE), Color(0xFFD32F2F))
+                ChallengeBadge("EXPIRED", Color(0xFFFFEBEE).copy(alpha = 0.8f), Color(0xFFD32F2F))
             }
         }
     }
