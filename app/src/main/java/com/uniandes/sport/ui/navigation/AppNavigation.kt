@@ -68,8 +68,8 @@ fun AppNavigation(
             val initialPage = backStackEntry.arguments?.getInt("initialPage") ?: 0
             MainTabsScreen(
                 initialPage = initialPage,
-                pendingOpenEventId = pendingOpenEventId,
-                onOpenEventConsumed = onOpenEventConsumed,
+                pendingOpenEventId = pendingOpenMatchEventId,
+                onOpenEventConsumed = onOpenMatchConsumed,
                 onPageChanged = onPageChanged,
                 onNavigate = { route -> navController.navigate(route) },
                 searchQuery = searchQuery,

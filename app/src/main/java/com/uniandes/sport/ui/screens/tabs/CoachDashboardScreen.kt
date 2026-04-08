@@ -137,7 +137,7 @@ fun CoachDashboardScreen(
                 ) {
                     Text(
                         "ESTIMATED REVENUE", 
-                        color = Color.White.copy(alpha = 0.7f), 
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), 
                         fontSize = 11.sp, 
                         fontWeight = FontWeight.Black, 
                         letterSpacing = 1.5.sp
@@ -145,7 +145,7 @@ fun CoachDashboardScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         formattedIngresos, 
-                        color = Color.White, 
+                        color = MaterialTheme.colorScheme.onPrimary, 
                         fontSize = 42.sp, 
                         fontWeight = FontWeight.Black
                     )
@@ -155,13 +155,13 @@ fun CoachDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("SESSIONS", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("SESSIONS", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(profesor.sessionsDelivered.toString(), color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
-                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)))
+                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("NEXT PAYOUT", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("MONTH END", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("NEXT PAYOUT", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("MONTH END", color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }

@@ -131,24 +131,10 @@ fun CoachProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(contentAlignment = Alignment.BottomEnd) {
-                            Box(
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        androidx.compose.ui.graphics.Brush.linearGradient(
-                                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = profesor.nombre.split(" ").joinToString("") { it.take(1) },
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = androidx.compose.ui.graphics.Color.White
-                                )
-                            }
+                            com.uniandes.sport.ui.components.SportIconBox(
+                                sport = profesor.deporte,
+                                size = 100.dp
+                            )
                             if (profesor.verified) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
@@ -156,7 +142,7 @@ fun CoachProfileScreen(
                                     tint = Color(0xFF3B82F6),
                                     modifier = Modifier
                                         .size(32.dp)
-                                        .background(Color.White, CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface, CircleShape)
                                         .padding(2.dp)
                                 )
                             }
@@ -404,7 +390,7 @@ fun AddReviewDialog(profesor: Profesor, onDismiss: () -> Unit, onSubmit: (Int, S
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(if (i <= rating) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                .background(if (i <= rating) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                                 .clickable { rating = i },
                             contentAlignment = Alignment.Center
                         ) {

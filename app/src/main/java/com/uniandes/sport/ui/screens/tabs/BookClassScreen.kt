@@ -134,14 +134,14 @@ fun BookClassScreen(
                     Icon(
                         Icons.Default.Info, 
                         contentDescription = null, 
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         "Booking Request",
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         fontSize = 16.sp
                     )
                 }
