@@ -56,7 +56,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 enum class ThemeMode {
-    LIGHT, DARK, SYSTEM
+    LIGHT, DARK, SYSTEM, AUTO
 }
 
 // Global state for theme
@@ -72,7 +72,7 @@ fun UniandesSportsKotlinTheme(
     val darkTheme = when (themeMode) {
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.SYSTEM, ThemeMode.AUTO -> isSystemInDarkTheme()
     }
 
     val colorScheme = when {

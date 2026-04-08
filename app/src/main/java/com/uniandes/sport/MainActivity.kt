@@ -31,9 +31,18 @@ import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.ui.theme.UniandesSportsKotlinTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.MutableState
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.content.Context
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var firebaseAnalytics: FirebaseAnalytics
+    private lateinit var sensorManager: SensorManager
+    private var lightSensor: Sensor? = null
+    private lateinit var themeModeState: MutableState<ThemeMode>
 
     private val themePrefsName = "app_prefs"
     private val themePrefsKey = "theme_mode"
@@ -83,10 +92,14 @@ class MainActivity : ComponentActivity() {
         askNotificationPermission()
         syncCurrentUserFcmToken()
         val initialThemeMode = loadThemeMode()
+        themeModeState = mutableStateOf(initialThemeMode)
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+
         setContent {
-            val themeMode = remember { mutableStateOf(initialThemeMode) }
+            val themeMode = themeModeState.value
             
-            UniandesSportsKotlinTheme(themeMode = themeMode.value) {
+            UniandesSportsKotlinTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
                 val authViewModel = FirebaseAuthViewModel()
                 val tweetsViewModel = FirestoreTweetsViewModel()
@@ -115,9 +128,9 @@ class MainActivity : ComponentActivity() {
                             onOpenMatchConsumed = { pendingOpenMatchEventIdState.value = null },
                             pendingCoachRequest = pendingCoachRequestState.value,
                             onCoachRequestConsumed = { pendingCoachRequestState.value = false },
-                            themeMode = themeMode.value,
+                            themeMode = themeModeState.value,
                             onThemeChange = {
-                                themeMode.value = it
+                                themeModeState.value = it
                                 saveThemeMode(it)
                             },
                             onExitApp = { finishAffinity() }
@@ -196,6 +209,39 @@ class MainActivity : ComponentActivity() {
             pendingCoachRequestState.value = true
             Log.d("FCM_NAV", "Coach request received, triggering navigation")
         }
+    }
+    override fun onResume() {
+        super.onResume()
+        lightSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_LIGHT) {
+            val lux = event.values[0]
+            val currentMode = loadThemeMode() // Check the stored preference
+            
+            // Only apply sensor logic if the user has selected AUTO mode
+            if (currentMode == ThemeMode.AUTO) {
+                // Hysteresis logic to prevent flickering
+                // Thresholds: < 10 lux for DARK, > 25 lux for LIGHT
+                if (lux < 10f && themeModeState.value != ThemeMode.DARK) {
+                    themeModeState.value = ThemeMode.DARK
+                } else if (lux > 25f && themeModeState.value != ThemeMode.LIGHT) {
+                    themeModeState.value = ThemeMode.LIGHT
+                }
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not needed for this implementation
     }
 }
 

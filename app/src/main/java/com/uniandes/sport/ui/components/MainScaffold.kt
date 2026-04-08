@@ -265,6 +265,7 @@ fun TopAppBarDynamic(
                             ThemeMode.LIGHT -> Icons.Default.LightMode
                             ThemeMode.DARK -> Icons.Default.DarkMode
                             ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                            ThemeMode.AUTO -> Icons.Default.BrightnessAuto
                         }
                         Icon(themeIcon, contentDescription = "Theme options")
                     }
@@ -286,6 +287,11 @@ fun TopAppBarDynamic(
                             text = { Text("Dark Theme") },
                             onClick = { onThemeChange(ThemeMode.DARK); showThemeMenu = false },
                             leadingIcon = { Icon(Icons.Default.DarkMode, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Auto (Sensor)") },
+                            onClick = { onThemeChange(ThemeMode.AUTO); showThemeMenu = false },
+                            leadingIcon = { Icon(Icons.Default.BrightnessAuto, null) }
                         )
                     }
                 }
