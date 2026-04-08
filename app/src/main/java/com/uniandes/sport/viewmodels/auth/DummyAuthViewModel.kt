@@ -68,8 +68,11 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
         }
     }
 
-    override fun login(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit) {
-        register(onSuccess, onFailure)
+    override fun login(onSuccess: (result: User, isNewUser: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
+        register(
+            onSuccess = { onSuccess(it, false) },
+            onFailure = onFailure
+        )
     }
 
     override fun loginWithGoogleIdToken(
@@ -98,8 +101,8 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
         onSuccess()
     }
 
-    override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
-        onSuccess(false)
+    override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean, isNewUser: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
+        onSuccess(false, false)
     }
 
     override fun recoverPassword(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
