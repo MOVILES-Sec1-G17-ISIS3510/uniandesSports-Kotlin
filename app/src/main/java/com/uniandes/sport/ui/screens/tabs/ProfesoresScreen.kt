@@ -246,7 +246,7 @@ fun ProfesoresScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 20.dp, bottom = 20.dp),
                 containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = Color.White,
+                contentColor = Color.Black,
                 shape = CircleShape
             ) {
                 val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
@@ -325,24 +325,10 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
             // Header
             Row(verticalAlignment = Alignment.Top) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                androidx.compose.ui.graphics.Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = profesor.nombre.split(" ").joinToString("") { it.take(1) },
-                            color = androidx.compose.ui.graphics.Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 20.sp
-                        )
-                    }
+                    com.uniandes.sport.ui.components.SportIconBox(
+                        sport = profesor.deporte,
+                        size = 64.dp
+                    )
                     if (profesor.verified) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
@@ -374,13 +360,13 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                         if (profesor.totalReviews > 0) {
                             Row(
                                 Modifier
-                                    .background(Color(0xFFFEF3C7), RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(Icons.Default.Star, contentDescription = "Star", tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(text = String.format(Locale.US, "%.1f", profesor.rating), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
+                                Text(text = String.format(Locale.US, "%.1f", profesor.rating), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                             }
                         } else {
                             Row(
@@ -405,7 +391,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     .padding(14.dp)
             ) {
                 Column {
@@ -443,7 +429,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                     modifier = Modifier.size(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6F4EA), contentColor = Color(0xFF25D366))
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(24.dp))
                 }

@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
             val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
             if (!eventId.isNullOrBlank()) {
                 initialTabState.value = PLAY_TAB_INDEX
-                pendingOpenEventIdState.value = eventId
+                pendingOpenMatchEventIdState.value = eventId
             }
         } else if (notificationType == "coach_request") {
             // Redirigir a la pestaña de Profesores (Dashboard del Coach)

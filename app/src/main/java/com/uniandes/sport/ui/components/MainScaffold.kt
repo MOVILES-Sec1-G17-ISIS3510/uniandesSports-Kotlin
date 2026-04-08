@@ -67,8 +67,8 @@ fun MainScaffold(
     }
 
     // React to notification deep-links even when the app is already running.
-    LaunchedEffect(pendingOpenEventId) {
-        if (!pendingOpenEventId.isNullOrBlank()) {
+    LaunchedEffect(pendingOpenMatchEventId) {
+        if (!pendingOpenMatchEventId.isNullOrBlank()) {
             navController.navigate("main_tabs/$playTabIndex") {
                 popUpTo(navController.graph.startDestinationId) { saveState = true }
                 launchSingleTop = true
