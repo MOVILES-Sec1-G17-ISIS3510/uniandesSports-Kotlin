@@ -89,10 +89,11 @@ fun HistorialScreen(
                 if (finishedOpenMatches.isNotEmpty()) {
                     item {
                         Text(
-                            text = "OPEN MATCHES HISTORY",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = "Historical match registry",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
 
@@ -111,10 +112,11 @@ fun HistorialScreen(
                 if (finishedChallenges.isNotEmpty()) {
                     item {
                         Text(
-                            text = "CHALLENGE HISTORY",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = "Historical challenge registry",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
                 }

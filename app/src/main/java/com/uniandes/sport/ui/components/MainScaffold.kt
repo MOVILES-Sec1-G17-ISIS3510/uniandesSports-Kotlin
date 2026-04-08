@@ -300,30 +300,8 @@ fun TopAppBarDynamic(
                 }
             }
             
+            // Removed in-appbar search for Challenges to use the new dedicated Search Modal
             if (currentRoute == Screen.Challenges.route) {
-
-                if (isSearchActive) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        modifier = Modifier.width(180.dp).padding(end = 8.dp),
-                        placeholder = { Text("Search...", fontSize = 12.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent
-                        )
-                    )
-                }
-                IconButton(onClick = onToggleSearch) {
-                    Icon(
-                        if (isSearchActive) Icons.Default.Close else Icons.Default.Search, 
-                        contentDescription = "Search"
-                    )
-                }
                 IconButton(onClick = onHistoryClick) {
                     Icon(Icons.Default.EventNote, contentDescription = "History")
                 }
@@ -420,39 +398,6 @@ fun BottomNavigationBar(navController: NavHostController, currentRoute: String?,
                     onTabClick(index)
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun FabMenuItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End,
-        modifier = Modifier.clickable { onClick() }
-    ) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp,
-            modifier = Modifier.padding(end = 12.dp)
-        ) {
-            Text(
-                text = text.uppercase(),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp,
-            modifier = Modifier.size(48.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(imageVector = icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
-            }
         }
     }
 }
