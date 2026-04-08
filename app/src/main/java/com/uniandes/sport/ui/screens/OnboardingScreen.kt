@@ -36,11 +36,11 @@ fun OnboardingScreen(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text(text = "Aviso", fontWeight = FontWeight.Bold) },
+            title = { Text(text = "Notice", fontWeight = FontWeight.Bold) },
             text = { Text(dialogMessage) },
             confirmButton = {
                 TextButton(onClick = { showDialog = false }) {
-                    Text("Aceptar")
+                    Text("OK")
                 }
             },
             shape = RoundedCornerShape(16.dp),
@@ -62,14 +62,14 @@ fun OnboardingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Casi listos...",
+                text = "Almost there...",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.Black
             )
             
             Text(
-                text = "Completa estos datos para mejorar tu experiencia",
+                text = "Complete these details to improve your experience",
                 fontSize = 14.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
@@ -85,17 +85,26 @@ fun OnboardingScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Show dynamically obtained Name and Email
+                    if (authViewModel.fullName.isNotBlank()) {
+                        Text(text = authViewModel.fullName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                    if (authViewModel.email.isNotBlank()) {
+                        Text(text = authViewModel.email, color = Color.Gray, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+
                     CustomOutlinedTextField(
                         value = authViewModel.program,
                         onValueChange = { authViewModel.program = it },
-                        label = "Programa (Ej. Ing. de Sistemas)",
+                        label = "Program (e.g. Systems Engineering)",
                         icon = Icons.Default.School
                     )
 
                     CustomOutlinedTextField(
                         value = authViewModel.semester,
                         onValueChange = { authViewModel.semester = it },
-                        label = "Semestre (Ej. 8)",
+                        label = "Semester (e.g. 8)",
                         icon = Icons.Default.FormatListNumbered,
                         keyboardType = KeyboardType.Number
                     )
@@ -103,7 +112,7 @@ fun OnboardingScreen(
                     CustomOutlinedTextField(
                         value = authViewModel.mainSport,
                         onValueChange = { authViewModel.mainSport = it },
-                        label = "Deporte Principal",
+                        label = "Main Sport",
                         icon = Icons.Default.Sports
                     )
 
@@ -112,7 +121,7 @@ fun OnboardingScreen(
                     Button(
                         onClick = {
                             if (authViewModel.program.isBlank() || authViewModel.semester.isBlank() || authViewModel.mainSport.isBlank()) {
-                                dialogMessage = "Por favor completa todos los campos"
+                                dialogMessage = "Please complete all fields"
                                 showDialog = true
                                 return@Button
                             }
@@ -143,7 +152,7 @@ fun OnboardingScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
                             Text(
-                                text = "Finalizar Registro",
+                                text = "Complete Registration",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )

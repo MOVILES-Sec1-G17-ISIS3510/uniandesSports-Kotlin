@@ -43,12 +43,12 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 private fun googleErrorMessage(statusCode: Int): String {
     return when (statusCode) {
-        GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Inicio de sesión cancelado."
-        GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS -> "Ya hay un inicio de sesión en curso. Inténtalo de nuevo en unos segundos."
-        CommonStatusCodes.NETWORK_ERROR -> "Error de red al iniciar sesión con Google. Revisa tu conexión."
-        CommonStatusCodes.DEVELOPER_ERROR -> "Configuración inválida de Google Sign-In (error 10). Verifica SHA-1/SHA-256 en Firebase, el Web client ID y vuelve a descargar google-services.json."
-        CommonStatusCodes.INTERNAL_ERROR -> "Error interno de Google Sign-In. Intenta de nuevo."
-        else -> "No se pudo iniciar sesión con Google (código $statusCode)."
+        GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Sign in cancelled."
+        GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS -> "Sign in already in progress. Try again in a few seconds."
+        CommonStatusCodes.NETWORK_ERROR -> "Network error during Google Sign-In. Check your connection."
+        CommonStatusCodes.DEVELOPER_ERROR -> "Invalid Google Sign-In config (error 10). Check SHA-1/SHA-256 and Web client ID."
+        CommonStatusCodes.INTERNAL_ERROR -> "Internal Google Sign-In error. Try again."
+        else -> "Could not sign in with Google (code $statusCode)."
     }
 }
 
@@ -98,7 +98,7 @@ fun AuthScreen(
 
             if (idToken.isNullOrBlank()) {
                 isGoogleLoading = false
-                dialogMessage = "No se pudo obtener un token válido de Google."
+                dialogMessage = "Could not get a valid Google token."
                 showDialog = true
                 return@rememberLauncherForActivityResult
             }
@@ -137,9 +137,9 @@ fun AuthScreen(
 
     LaunchedEffect(Unit) {
         authViewModel.isUserLoggedIn(
-            onSuccess = { isLogged ->
+            onSuccess = { isLogged, isNewUser ->
                 if (isLogged) {
-                    onLoginSuccess(false)
+                    onLoginSuccess(isNewUser)
                 }
             },
             onFailure = { exception ->
@@ -151,11 +151,11 @@ fun AuthScreen(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text(text = "Aviso", fontWeight = FontWeight.Bold) },
+            title = { Text(text = "Notice", fontWeight = FontWeight.Bold) },
             text = { Text(dialogMessage) },
             confirmButton = {
                 TextButton(onClick = { showDialog = false }) {
-                    Text("Aceptar")
+                    Text("OK")
                 }
             },
             shape = RoundedCornerShape(16.dp),
@@ -208,14 +208,14 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(18.dp))
             
             Text(
-                text = if (isLoginMode) "¡Bienvenido de vuelta!" else "Únete a UniandesSports",
+                text = if (isLoginMode) "Welcome back!" else "Join UniandesSports",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.Black
             )
             
             Text(
-                text = if (isLoginMode) "Ingresa para continuar" else "Crea tu cuenta ahora",
+                text = if (isLoginMode) "Sign in to continue" else "Create your account now",
                 fontSize = 14.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
@@ -236,21 +236,21 @@ fun AuthScreen(
                         CustomOutlinedTextField(
                             value = authViewModel.fullName,
                             onValueChange = { authViewModel.fullName = it },
-                            label = "Nombre Completo",
+                            label = "Full Name",
                             icon = Icons.Default.Person
                         )
 
                         CustomOutlinedTextField(
                             value = authViewModel.program,
                             onValueChange = { authViewModel.program = it },
-                            label = "Programa (Ej. Ing. de Sistemas)",
+                            label = "Program (e.g. Systems Engineering)",
                             icon = Icons.Default.School
                         )
 
                         CustomOutlinedTextField(
                             value = authViewModel.semester,
                             onValueChange = { authViewModel.semester = it },
-                            label = "Semestre (Ej. 8)",
+                            label = "Semester (e.g. 8)",
                             icon = Icons.Default.FormatListNumbered,
                             keyboardType = KeyboardType.Number
                         )
@@ -258,7 +258,7 @@ fun AuthScreen(
                         CustomOutlinedTextField(
                             value = authViewModel.mainSport,
                             onValueChange = { authViewModel.mainSport = it },
-                            label = "Deporte Principal",
+                            label = "Main Sport",
                             icon = Icons.Default.Sports
                         )
                     }
@@ -266,7 +266,7 @@ fun AuthScreen(
                     CustomOutlinedTextField(
                         value = authViewModel.email,
                         onValueChange = { authViewModel.email = it },
-                        label = "Correo Electrónico",
+                        label = "Email Address",
                         icon = Icons.Default.Email,
                         keyboardType = KeyboardType.Email
                     )
@@ -274,7 +274,7 @@ fun AuthScreen(
                     CustomOutlinedTextField(
                         value = authViewModel.password,
                         onValueChange = { authViewModel.password = it },
-                        label = "Contraseña",
+                        label = "Password",
                         icon = Icons.Default.Lock,
                         keyboardType = KeyboardType.Password,
                         isPassword = true,
@@ -319,8 +319,8 @@ fun AuthScreen(
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text(
-                            text = if (isLoginMode) "Ingresar" else "Crear Cuenta",
+                            Text(
+                                text = if (isLoginMode) "Sign In" else "Create Account",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -334,7 +334,7 @@ fun AuthScreen(
                                 if (isGoogleLoading) return@OutlinedButton
 
                                 if (googleSignInClient == null) {
-                                    dialogMessage = "Falta configurar google_web_client_id en strings.xml con el Web client ID de Firebase."
+                                    dialogMessage = "google_web_client_id is missing in strings.xml."
                                     showDialog = true
                                     return@OutlinedButton
                                 }
@@ -353,7 +353,7 @@ fun AuthScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             } else {
                                 Text(
-                                    text = "Continuar con Google",
+                                    text = "Continue with Google",
                                     color = Color(0xFF1F2937),
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp
@@ -372,12 +372,12 @@ fun AuthScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isLoginMode) "¿No tienes cuenta? " else "¿Ya tienes cuenta? ",
+                    text = if (isLoginMode) "Don't have an account? " else "Already have an account? ",
                     color = Color.Gray,
                     fontSize = 14.sp
                 )
                 Text(
-                    text = if (isLoginMode) "Regístrate" else "Ingresa aquí",
+                    text = if (isLoginMode) "Sign Up" else "Sign In",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
@@ -390,14 +390,14 @@ fun AuthScreen(
             TextButton(
                 onClick = {
                     if (authViewModel.email.isBlank()) {
-                        dialogMessage = "Por favor ingresa tu correo electrónico para recuperar la contraseña"
+                        dialogMessage = "Please enter your email to recover your password"
                         showDialog = true
                         return@TextButton
                     }
                     authViewModel.recoverPassword(
                         onSuccess = {
                             logViewModel.log(screenName, "PASSWORD_RECOVERED")
-                            dialogMessage = "Contraseña de recuperación enviada a tu correo"
+                            dialogMessage = "Password recovery link sent to your email"
                             showDialog = true
                         },
                         onFailure = { exception ->
@@ -408,7 +408,7 @@ fun AuthScreen(
                     )
                 }
             ) {
-                Text("¿Olvidaste tu contraseña?", color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text("Forgot your password?", color = Color.Gray, fontWeight = FontWeight.Medium)
             }
             
             Spacer(modifier = Modifier.height(32.dp))
