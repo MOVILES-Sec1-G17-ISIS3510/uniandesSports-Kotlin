@@ -188,6 +188,8 @@ fun PlayScreen(
             onSubmit = { text, rating, participated, source, onDone ->
                 viewModel.submitTrack(
                     eventId = trackEventLocal.id,
+                    sport = trackEventLocal.sport,
+                    scheduledAt = trackEventLocal.scheduledAt,
                     text = text,
                     rating = rating,
                     participated = participated,
