@@ -140,6 +140,10 @@ fun AiReviewDialog(
                             Text("Try Again")
                         }
                     }
+                    is AiReviewState.PoseFeedback -> {
+                        // This dialog handles track text, pose feedback is handled in PoseAnalysisDialog.
+                        // We add this to make the 'when' exhaustive.
+                    }
                 }
             }
         }

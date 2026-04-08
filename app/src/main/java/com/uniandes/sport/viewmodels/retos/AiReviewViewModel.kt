@@ -12,6 +12,7 @@ sealed class AiReviewState {
     object Idle : AiReviewState()
     object Loading : AiReviewState()
     data class Success(val advancedChallengesCount: Int, val message: String) : AiReviewState()
+    data class PoseFeedback(val feedback: String) : AiReviewState()
     data class Error(val error: String) : AiReviewState()
 }
 
@@ -122,6 +123,22 @@ class AiReviewViewModel(
         }
     }
     
+    fun analyzeCalisthenicsPose(base64Image: String) {
+        _uiState.value = AiReviewState.Loading
+        viewModelScope.launch {
+            try {
+                val feedback = analyzerStrategy.analyzePose(base64Image)
+                if (feedback != null) {
+                    _uiState.value = AiReviewState.PoseFeedback(feedback)
+                } else {
+                    _uiState.value = AiReviewState.Error("No se pudo obtener feedback de la IA.")
+                }
+            } catch (e: Exception) {
+                _uiState.value = AiReviewState.Error("Error analizando pose: ${e.message}")
+            }
+        }
+    }
+
     fun resetState() {
         _uiState.value = AiReviewState.Idle
     }

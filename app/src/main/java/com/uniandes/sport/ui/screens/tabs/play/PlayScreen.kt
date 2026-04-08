@@ -42,6 +42,7 @@ import com.uniandes.sport.ui.components.FabMenuItem
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.draw.rotate
+import com.uniandes.sport.ui.screens.PoseAnalysisDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
@@ -87,6 +88,7 @@ fun PlayScreen(
     var aiTrackEventId by remember { mutableStateOf<String?>(null) }
     var aiTrackOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
+    var showPoseDialog by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
@@ -160,10 +162,18 @@ fun PlayScreen(
             viewModel = viewModel,
             onEditClick = { editingEvent = selectedEventUIModel?.rawEvent },
             onReviewClick = { trackEvent = selectedEventUIModel?.rawEvent },
+            onPoseAnalysisClick = { showPoseDialog = true },
             onDismiss = {
                 selectedEventUIModel = null
                 viewModel.refreshEvents()
             }
+        )
+    }
+
+    if (showPoseDialog) {
+        PoseAnalysisDialog(
+            viewModel = aiViewModel,
+            onDismiss = { showPoseDialog = false }
         )
     }
 
