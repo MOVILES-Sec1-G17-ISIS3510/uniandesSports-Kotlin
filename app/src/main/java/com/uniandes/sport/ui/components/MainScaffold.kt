@@ -35,6 +35,8 @@ fun MainScaffold(
     initialTabIndex: Int = 0,
     pendingOpenMatchEventId: String? = null,
     onOpenMatchConsumed: () -> Unit = {},
+    pendingCoachRequest: Boolean = false,
+    onCoachRequestConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {},
     onExitApp: () -> Unit = {}
@@ -71,6 +73,19 @@ fun MainScaffold(
                 launchSingleTop = true
                 restoreState = true
             }
+            onOpenMatchConsumed()
+        }
+    }
+
+    // React to coach request notifications
+    LaunchedEffect(pendingCoachRequest) {
+        if (pendingCoachRequest) {
+            navController.navigate("main_tabs/4") {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            onCoachRequestConsumed()
         }
     }
 
