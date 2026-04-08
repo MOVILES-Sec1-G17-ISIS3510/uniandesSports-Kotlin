@@ -142,18 +142,7 @@ fun AuthScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        authViewModel.isUserLoggedIn(
-            onSuccess = { isLogged, isNewUser ->
-                if (isLogged) {
-                    onLoginSuccess(isNewUser)
-                }
-            },
-            onFailure = { exception ->
-                logViewModel.crash(screenName, exception)
-            }
-        )
-    }
+    // Redirection is now handled by SplashScreen for a smoother startup experience.
 
     if (showDialog) {
         AlertDialog(

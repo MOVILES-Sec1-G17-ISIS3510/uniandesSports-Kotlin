@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.uniandes.sport.ui.screens.AuthScreen
 import com.uniandes.sport.ui.screens.OnboardingScreen
+import com.uniandes.sport.ui.screens.SplashScreen
 import com.uniandes.sport.ui.screens.wallscreen.WallScreen
 import com.uniandes.sport.viewmodels.log.FirebaseLogViewModel
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -107,7 +108,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val storageViewModel = FirebaseStorageViewModel()
                 val logViewModel = FirebaseLogViewModel()
 
-                NavHost(navController = navController, startDestination = Routes.AUTH_SCREEN){
+                NavHost(navController = navController, startDestination = Routes.SPLASH_SCREEN){
+                    composable(Routes.SPLASH_SCREEN) {
+                        SplashScreen(
+                            navController = navController,
+                            authViewModel = authViewModel
+                        )
+                    }
                     composable(Routes.AUTH_SCREEN) {
                         AuthScreen(
                             navController = navController,
