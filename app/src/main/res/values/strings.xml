@@ -1,4 +1,5 @@
 <resources>
      <string name="app_name">USports</string>
     <string name="google_web_client_id">830196826026-pk3085q7vss8dck14ipiek0ree7a0cnm.apps.googleusercontent.com</string>
+    <string name="google_maps_key">AIzaSyCpX0RCpndtkbllGy0qtlova9YrAFxXz7E</string>
 </resources>
