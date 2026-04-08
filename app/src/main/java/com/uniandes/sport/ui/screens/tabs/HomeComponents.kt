@@ -254,9 +254,9 @@ fun MultiActionFAB(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (expanded) {
-            HomeFabItem("Sorpréndeme", Icons.Default.Casino) { onActionClick("surprise"); expanded = false }
-            HomeFabItem("Conectar Dispositivos", Icons.Default.Link) { onActionClick("connect"); expanded = false }
-            HomeFabItem("Agendar Partido", Icons.Default.CalendarToday) { onActionClick("schedule"); expanded = false }
+            HomeFabItem("Surprise Me", Icons.Default.Casino) { onActionClick("surprise"); expanded = false }
+            HomeFabItem("Connect Devices", Icons.Default.Link) { onActionClick("connect"); expanded = false }
+            HomeFabItem("Schedule Match", Icons.Default.CalendarToday) { onActionClick("schedule"); expanded = false }
         }
         FloatingActionButton(
             onClick = { expanded = !expanded },
