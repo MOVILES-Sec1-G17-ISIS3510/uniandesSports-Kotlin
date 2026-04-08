@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.screens.tabs.play
 
+import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,9 +27,21 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.CalendarContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.CameraPositionState
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.rememberCameraPositionState
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -144,6 +157,7 @@ fun CreateEventDialog(
     val skillLevels = listOf("Open (any level)", "Beginner", "Amateur", "Advanced", "Professional")
     
     var showExitConfirmation by remember { mutableStateOf(false) }
+    var showLocationPicker by remember { mutableStateOf(false) }
     
     val hasUnsavedData = title.isNotEmpty() || location.isNotEmpty() || description.isNotEmpty()
     
@@ -362,6 +376,16 @@ fun CreateEventDialog(
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    if (showLocationPicker) {
+        LocationPickerDialog(
+            onDismiss = { showLocationPicker = false },
+            onLocationSelected = { selectedLatLng ->
+                location = String.format(Locale.US, "Lat: %.5f, Lng: %.5f", selectedLatLng.latitude, selectedLatLng.longitude)
+                showLocationPicker = false
+            }
         )
     }
 
@@ -793,21 +817,45 @@ fun CreateEventDialog(
                 
                 if (isLocationSpecific) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = location,
-                        onValueChange = { location = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Where is it?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                        leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface
+                    if (modality.lowercase() == "training") {
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showLocationPicker = true }) {
+                            OutlinedTextField(
+                                value = location,
+                                onValueChange = { },
+                                modifier = Modifier.fillMaxWidth(),
+                                readOnly = true,
+                                enabled = false,
+                                placeholder = { Text("Where is it? Tap to pick on map", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                trailingIcon = { Icon(Icons.Default.Map, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledLeadingIconColor = MaterialTheme.colorScheme.primary,
+                                    disabledTrailingIconColor = MaterialTheme.colorScheme.primary,
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            )
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = location,
+                            onValueChange = { location = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Where is it?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                            leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface
+                            )
                         )
-                    )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -1004,6 +1052,139 @@ fun CreateEventDialog(
         }
     }
 }
+}
+
+@Composable
+private fun LocationPickerDialog(
+    onDismiss: () -> Unit,
+    onLocationSelected: (LatLng) -> Unit
+) {
+    val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val defaultLatLng = LatLng(4.6016, -74.0652) // Uniandes area fallback
+    val cameraPositionState = rememberCameraPositionState()
+
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasLocationPermission = granted
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasLocationPermission) {
+            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(defaultLatLng, 15f))
+    }
+
+    LaunchedEffect(hasLocationPermission) {
+        if (hasLocationPermission) {
+            fusedLocationClient.lastLocation
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        cameraPositionState.move(
+                            CameraUpdateFactory.newLatLngZoom(
+                                LatLng(location.latitude, location.longitude),
+                                16f
+                            )
+                        )
+                    }
+                }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.78f),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pick location",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Text(
+                    text = if (hasLocationPermission) {
+                        "Map starts at your location. Move the map and confirm."
+                    } else {
+                        "Location permission denied. You can still move the map manually."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    GoogleMap(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraPositionState = cameraPositionState,
+                        properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
+                        uiSettings = MapUiSettings(myLocationButtonEnabled = hasLocationPermission)
+                    )
+
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(36.dp)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            onLocationSelected(cameraPositionState.position.target)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Use this location")
+                    }
+                }
+            }
+        }
+    }
 }
 
 
