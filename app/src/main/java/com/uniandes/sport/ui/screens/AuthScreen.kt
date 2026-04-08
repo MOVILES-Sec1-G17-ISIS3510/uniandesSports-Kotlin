@@ -289,9 +289,9 @@ fun AuthScreen(
                         onClick = {
                             if (isLoginMode) {
                                 authViewModel.login(
-                                    onSuccess = {
+                                    onSuccess = { _, isNewUser ->
                                         logViewModel.log(screenName, "USER_LOGGED_IN")
-                                        onLoginSuccess(false)
+                                        onLoginSuccess(isNewUser)
                                     },
                                     onFailure = { exception ->
                                         dialogMessage = exception.message.toString()
@@ -301,7 +301,7 @@ fun AuthScreen(
                                 )
                             } else {
                                 authViewModel.register(
-                                    onSuccess = {
+                                    onSuccess = { _ ->
                                         logViewModel.log(screenName, "USER_REGISTERED")
                                         onLoginSuccess(false)
                                     },
