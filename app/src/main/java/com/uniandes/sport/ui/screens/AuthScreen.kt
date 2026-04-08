@@ -340,7 +340,19 @@ fun AuthScreen(
                                 }
 
                                 isGoogleLoading = true
-                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                googleSignInClient.signOut()
+                                    .addOnCompleteListener { task ->
+                                        if (!task.isSuccessful) {
+                                            isGoogleLoading = false
+                                            val exception = task.exception ?: Exception("Could not reset Google session.")
+                                            dialogMessage = exception.message ?: "Could not reset Google session."
+                                            showDialog = true
+                                            logViewModel.crash(screenName, exception)
+                                            return@addOnCompleteListener
+                                        }
+
+                                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                    }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
