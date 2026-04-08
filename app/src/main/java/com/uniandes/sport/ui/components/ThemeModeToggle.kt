@@ -31,7 +31,7 @@ fun ThemeModeToggle(
                 imageVector = when (themeMode) {
                     ThemeMode.LIGHT -> Icons.Default.LightMode
                     ThemeMode.DARK -> Icons.Default.DarkMode
-                    ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                    ThemeMode.SYSTEM, ThemeMode.AUTO -> Icons.Default.SettingsBrightness
                 },
                 contentDescription = "Theme options"
                 ,
