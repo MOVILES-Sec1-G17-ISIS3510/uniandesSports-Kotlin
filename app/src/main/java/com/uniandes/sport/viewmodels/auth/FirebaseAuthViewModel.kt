@@ -70,22 +70,14 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
             return
         }
 
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    val uid = auth.currentUser?.uid ?: ""
-                    val skeletonUser = User(
-                        uid = uid,
-                        email = email,
-                        fullName = fullName
-                    )
-                    // We NO LONGER save to Firestore here.
-                    // The document will be created in saveOnboardingData at the end of onboarding.
-                    onSuccess(skeletonUser)
-                } else {
-                    onFailure(task.exception ?: Exception("Could not create authentication account."))
-                }
-            }
+        // We NO LONGER create the Firebase Auth account here.
+        // We just validate the fields and store them in memory.
+        // The account will be created ONLY when saveOnboardingData is called at the end of onboarding.
+        val skeletonUser = User(
+            email = email,
+            fullName = fullName
+        )
+        onSuccess(skeletonUser)
     }
 
     override fun login(
@@ -180,29 +172,47 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
     }
 
     override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            onFailure(Exception("User not authenticated"))
-            return
+        viewModelScope.launch {
+            try {
+                // Determine if we need to create the Auth account first
+                var currentUser = auth.currentUser
+                if (currentUser == null) {
+                    // This is a new Email/Password user who just finished onboarding
+                    if (email.isBlank() || password.isBlank()) {
+                        onFailure(Exception("Email and password are missing for registration."))
+                        return@launch
+                    }
+                    val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+                    currentUser = authResult.user
+                }
+
+                if (currentUser == null) {
+                    onFailure(Exception("Could not authenticate user."))
+                    return@launch
+                }
+
+                val uid = currentUser.uid
+                val fullProfile = User(
+                    uid = uid,
+                    email = currentUser.email ?: email,
+                    fullName = if (fullName.isNotBlank()) fullName else (currentUser.displayName ?: ""),
+                    program = program,
+                    semester = semester.toIntOrNull() ?: 0,
+                    mainSport = mainSport,
+                    role = "athlete",
+                    createdAt = System.currentTimeMillis()
+                )
+
+                // Now create the Firestore document
+                db.collection("users").document(uid)
+                    .set(fullProfile)
+                    .await()
+
+                onSuccess()
+            } catch (e: Exception) {
+                onFailure(e)
+            }
         }
-
-        val uid = currentUser.uid
-        val fullProfile = User(
-            uid = uid,
-            email = currentUser.email ?: email,
-            fullName = if (fullName.isNotBlank()) fullName else (currentUser.displayName ?: ""),
-            program = program,
-            semester = semester.toIntOrNull() ?: 0,
-            mainSport = mainSport,
-            role = "athlete",
-            createdAt = System.currentTimeMillis()
-        )
-
-        // We use .set() instead of .update() because the document might not exist yet
-        db.collection("users").document(uid)
-            .set(fullProfile)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { e -> onFailure(e) }
     }
 
     override fun isUserLoggedIn(
