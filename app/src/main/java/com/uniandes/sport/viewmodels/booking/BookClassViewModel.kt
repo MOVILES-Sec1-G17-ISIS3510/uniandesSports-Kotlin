@@ -10,6 +10,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.uniandes.sport.models.BookingRequest
 import com.uniandes.sport.models.CoachingNotification
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -21,6 +24,25 @@ class BookClassViewModel : ViewModel() {
     var preferredSchedule by mutableStateOf("")
     var notes by mutableStateOf("")
     var isSubmitting by mutableStateOf(false)
+
+    private val _userBookings = MutableStateFlow<List<BookingRequest>>(emptyList())
+    val userBookings: StateFlow<List<BookingRequest>> = _userBookings.asStateFlow()
+
+    fun fetchUserBookings(userId: String) {
+        if (userId.isBlank()) return
+        db.collection("coach_requests")
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("BookClassVM", "Error fetching bookings", e)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val bookings = snapshot.toObjects(BookingRequest::class.java)
+                    _userBookings.value = bookings
+                }
+            }
+    }
 
     fun submitBooking(
         profesorId: String, 

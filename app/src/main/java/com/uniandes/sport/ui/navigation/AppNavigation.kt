@@ -71,7 +71,16 @@ fun AppNavigation(
                 pendingOpenEventId = pendingOpenMatchEventId,
                 onOpenEventConsumed = onOpenMatchConsumed,
                 onPageChanged = onPageChanged,
-                onNavigate = { route -> navController.navigate(route) },
+                onNavigate = { route -> 
+                    val tabRoute = when(route) {
+                        "challenges" -> "main_tabs/1"
+                        "play" -> "main_tabs/2"
+                        "social" -> "main_tabs/3"
+                        "coaches" -> "main_tabs/4"
+                        else -> route
+                    }
+                    navController.navigate(tabRoute) 
+                },
                 searchQuery = searchQuery,
                 modifier = Modifier.padding(innerPadding)
             )

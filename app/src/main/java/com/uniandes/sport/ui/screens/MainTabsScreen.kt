@@ -46,7 +46,17 @@ fun MainTabsScreen(
         userScrollEnabled = true
     ) { page ->
         when (coreScreens[page]) {
-            Screen.Home -> HomeScreen(onNavigate = onNavigate)
+            Screen.Home -> {
+                val authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = viewModel()
+                val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = viewModel()
+                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = viewModel()
+                HomeScreen(
+                    onNavigate = onNavigate,
+                    authViewModel = authViewModel,
+                    retosViewModel = retosViewModel,
+                    playViewModel = playViewModel
+                )
+            }
             Screen.Challenges -> {
                 val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
