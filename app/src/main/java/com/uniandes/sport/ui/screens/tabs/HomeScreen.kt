@@ -10,6 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +65,21 @@ fun HomeScreen(
     // Surprise State
     var showSurprise by remember { mutableStateOf(false) }
     var surpriseData by remember { mutableStateOf<SurpriseContent?>(null) }
+
+    // Pull Refresh State
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            // Sync all data sources
+            retosViewModel.fetchRetos()
+            playViewModel.fetchEvents()
+            bookingViewModel.fetchUserBookings(currentUserId)
+            // Simulating end of refresh
+            isRefreshing = false 
+        }
+    )
 
     // Logic: Separate joined vs available events
     val upcomingMatches = remember(allEvents, joinedIds) {
@@ -134,7 +153,7 @@ fun HomeScreen(
         bookingViewModel.fetchUserBookings(currentUserId)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -233,6 +252,14 @@ fun HomeScreen(
                 }
             }
         }
+
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            contentColor = MaterialTheme.colorScheme.primary,
+            backgroundColor = MaterialTheme.colorScheme.surface
+        )
 
         // Multi-Action FAB
         Box(modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp)) {
