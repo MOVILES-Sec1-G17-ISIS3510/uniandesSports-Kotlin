@@ -13,4 +13,5 @@ sealed class Screen(val route: String) {
     object Historial : Screen("historial")
     object CoachDashboard : Screen("coach_dashboard/{profesorId}")
     object BookClass : Screen("book_class/{profesorId}")
+    object CoachProfile : Screen("coach_profile/{profesorId}")
 }

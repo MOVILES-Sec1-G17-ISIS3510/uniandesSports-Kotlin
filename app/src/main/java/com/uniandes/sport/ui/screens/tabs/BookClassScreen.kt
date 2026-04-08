@@ -115,27 +115,33 @@ fun BookClassScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Header Info Card - simplified to only show "Booking Request"
-            Card(
+            // Header Info Card - premium style
+            Surface(
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                tonalElevation = 4.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                            )
+                        )
+                        .padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         Icons.Default.Info, 
                         contentDescription = null, 
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         "Booking Request",
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color.White,
                         fontSize = 16.sp
                     )
                 }
