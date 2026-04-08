@@ -45,16 +45,16 @@ import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.ui.theme.ThemeMode
 
-// private fun googleErrorMessage(statusCode: Int): String {
-//     return when (statusCode) {
-//         GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Sign in cancelled."
-//         GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS -> "Sign in already in progress. Try again in a few seconds."
-//         CommonStatusCodes.NETWORK_ERROR -> "Network error during Google Sign-In. Check your connection."
-//         CommonStatusCodes.DEVELOPER_ERROR -> "Invalid Google Sign-In config (error 10). Check SHA-1/SHA-256 and Web client ID."
-//         CommonStatusCodes.INTERNAL_ERROR -> "Internal Google Sign-In error. Try again."
-//         else -> "Could not sign in with Google (code $statusCode)."
-//     }
-// }
+private fun googleErrorMessage(statusCode: Int): String {
+    return when (statusCode) {
+        GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> "Sign in cancelled."
+        GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS -> "Sign in already in progress. Try again in a few seconds."
+        CommonStatusCodes.NETWORK_ERROR -> "Network error during Google Sign-In. Check your connection."
+        CommonStatusCodes.DEVELOPER_ERROR -> "Invalid Google Sign-In config (error 10). Check SHA-1/SHA-256 and Web client ID."
+        CommonStatusCodes.INTERNAL_ERROR -> "Internal Google Sign-In error. Try again."
+        else -> "Could not sign in with Google (code $statusCode)."
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
