@@ -142,7 +142,6 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 100.dp, start = 20.dp, end = 20.dp, top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Header etc. same as before
             item {
                 Column {
                     Text(
@@ -150,14 +149,15 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontFamily = ArchivoFamily,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     )
                     Text(
                         text = "YOUR SPORTS DASHBOARD",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.tertiary,
                         letterSpacing = 1.sp
                     )
                 }
@@ -166,12 +166,15 @@ fun HomeScreen(
             // Stats
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = Color(0xFFE67E22), modifier = Modifier.weight(1f))
-                    StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = Color(0xFF2ECC71), modifier = Modifier.weight(1f))
+                    val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
+                    StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
+                    
+                    val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
+                    StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
                 }
             }
 
-            // Actions
+            // Actions - Centered
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -182,7 +185,7 @@ fun HomeScreen(
                 }
             }
 
-            // Quick Activity
+            // Sections
             item {
                 SectionHeader(title = "Quick Activity", subtitle = "Suggested sessions you might like")
                 if (availableEvents.isEmpty()) {
@@ -194,7 +197,6 @@ fun HomeScreen(
                 }
             }
 
-            // Active Challenges
             item {
                 SectionHeader(title = "Active Challenges", onViewAll = { onNavigate("challenges") })
                 if (activeRetos.isEmpty()) {
@@ -209,7 +211,6 @@ fun HomeScreen(
                 }
             }
 
-            // Recommended
             item {
                 SectionHeader(title = "Recommended for You")
                 if (availableEvents.size <= 2) {
@@ -221,7 +222,6 @@ fun HomeScreen(
                 }
             }
 
-            // Upcoming
             item {
                 SectionHeader(title = "Upcoming Matches")
                 if (upcomingMatches.isEmpty()) {
@@ -235,13 +235,12 @@ fun HomeScreen(
         }
 
         // Multi-Action FAB
-        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
+        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp)) {
             MultiActionFAB(onActionClick = { action ->
                 when(action) {
                     "schedule" -> onNavigate("play")
                     "connect" -> onNavigate("strava")
                     "surprise" -> {
-                        // SURPRISE ME LOGIC
                         val randomMatch = availableEvents.filter { it.membersCount < it.maxParticipants }.randomOrNull()
                         val randomChallenge = allRetos.filter { reto -> !activeRetos.any { it.id == reto.id } }.randomOrNull()
                         
@@ -306,9 +305,9 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(sportColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(sportColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                 Icon(imageVector = when(event.sport.lowercase()) {
                     "running", "correr" -> Icons.Default.DirectionsRun
                     "soccer", "fútbol", "futbol" -> Icons.Default.SportsSoccer
@@ -319,14 +318,14 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
                     Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(" $timeStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(" ${event.location}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(" ${event.location}", fontSize = 13.sp, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
         }
@@ -340,21 +339,21 @@ fun RecommendedItemCard(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.width(200.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(modifier = Modifier.width(200.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Surface(color = sportColor.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
+            Surface(color = sportColor.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
                 Text(event.sport.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = sportColor)
             }
             Spacer(Modifier.height(12.dp))
-            Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1)
-            Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
+            Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1)
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(" $dateStr", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text("${event.maxParticipants - event.membersCount} spots", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                Text("${event.maxParticipants - event.membersCount} spots", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF10B981))
             }
         }
     }
@@ -366,18 +365,18 @@ fun UpcomingMatchItem(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFE7F5F5)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.CalendarToday, null, tint = Color(0xFF43817A))
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha=0.5f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(event.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(event.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(dateStr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary)
             }
-            Icon(Icons.Default.ChevronRight, null, tint = Color.LightGray)
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
@@ -386,4 +385,11 @@ private fun calculateDaysRemaining(endDate: com.google.firebase.Timestamp?): Int
     if (endDate == null) return 0
     val diff = endDate.seconds - (System.currentTimeMillis() / 1000)
     return (diff / (24 * 3600)).toInt().coerceAtLeast(0)
+}
+
+private fun androidx.compose.ui.graphics.Color.toArgb(): Int {
+    return (alpha * 255.0f + 0.5f).toInt() shl 24 or
+           (red * 255.0f + 0.5f).toInt() shl 16 or
+           (green * 255.0f + 0.5f).toInt() shl 8 or
+           (blue * 255.0f + 0.5f).toInt()
 }
