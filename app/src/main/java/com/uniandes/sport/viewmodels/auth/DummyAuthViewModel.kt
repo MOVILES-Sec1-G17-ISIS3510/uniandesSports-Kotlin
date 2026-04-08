@@ -74,7 +74,7 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
 
     override fun loginWithGoogleIdToken(
         idToken: String,
-        onSuccess: (result: User) -> Unit,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
         viewModelScope.launch {
@@ -88,9 +88,14 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
                     uid = "google-123",
                     email = if (email.isNotBlank()) email else "google.user@example.com",
                     fullName = if (fullName.isNotBlank()) fullName else "Google User"
-                )
+                ),
+                true // dummy logic simulates a new user
             )
         }
+    }
+
+    override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
+        onSuccess()
     }
 
     override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {

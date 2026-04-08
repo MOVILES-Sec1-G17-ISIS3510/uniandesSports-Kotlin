@@ -58,7 +58,13 @@ fun AuthScreen(
     authViewModel: AuthViewModelInterface,
     navController: NavController,
     logViewModel: LogViewModelInterface,
-    onLoginSuccess: () -> Unit = { navController.navigate(Routes.MAIN_TABS) }
+    onLoginSuccess: (isNewUser: Boolean) -> Unit = { isNewUser -> 
+        if (isNewUser) {
+            navController.navigate(Routes.ONBOARDING_SCREEN)
+        } else {
+            navController.navigate(Routes.MAIN_TABS)
+        }
+    }
 ) {
     val screenName = "AuthScreen"
     val context = LocalContext.current
@@ -99,10 +105,10 @@ fun AuthScreen(
 
             authViewModel.loginWithGoogleIdToken(
                 idToken = idToken,
-                onSuccess = {
+                onSuccess = { _, isNewUser ->
                     isGoogleLoading = false
                     logViewModel.log(screenName, "USER_GOOGLE_LOGGED_IN")
-                    onLoginSuccess()
+                    onLoginSuccess(isNewUser)
                 },
                 onFailure = { exception ->
                     isGoogleLoading = false
@@ -133,7 +139,7 @@ fun AuthScreen(
         authViewModel.isUserLoggedIn(
             onSuccess = { isLogged ->
                 if (isLogged) {
-                    onLoginSuccess()
+                    onLoginSuccess(false)
                 }
             },
             onFailure = { exception ->
@@ -285,7 +291,7 @@ fun AuthScreen(
                                 authViewModel.login(
                                     onSuccess = {
                                         logViewModel.log(screenName, "USER_LOGGED_IN")
-                                        onLoginSuccess()
+                                        onLoginSuccess(false)
                                     },
                                     onFailure = { exception ->
                                         dialogMessage = exception.message.toString()
@@ -297,7 +303,7 @@ fun AuthScreen(
                                 authViewModel.register(
                                     onSuccess = {
                                         logViewModel.log(screenName, "USER_REGISTERED")
-                                        onLoginSuccess()
+                                        onLoginSuccess(false)
                                     },
                                     onFailure = { exception ->
                                         dialogMessage = exception.message.toString()

@@ -122,7 +122,7 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
 
     override fun loginWithGoogleIdToken(
         idToken: String,
-        onSuccess: (result: User) -> Unit,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -152,7 +152,7 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                         if (document != null && document.exists()) {
                             val userProfile = document.toObject(User::class.java)
                             if (userProfile != null) {
-                                onSuccess(userProfile)
+                                onSuccess(userProfile, false)
                                 return@addOnSuccessListener
                             }
                         }
@@ -160,14 +160,33 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                         val newProfile = fallbackUser
 
                         db.collection("users").document(uid).set(newProfile)
-                            .addOnSuccessListener { onSuccess(newProfile) }
+                            .addOnSuccessListener { onSuccess(newProfile, true) }
                             // Do not block login on profile write issues.
-                            .addOnFailureListener { onSuccess(fallbackUser) }
+                            .addOnFailureListener { onSuccess(fallbackUser, true) }
                     }
                     .addOnFailureListener {
-                        onSuccess(fallbackUser)
+                        onSuccess(fallbackUser, true)
                     }
             }
+    }
+
+    override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            onFailure(Exception("Usuario no autenticado"))
+            return
+        }
+
+        val updates = mapOf(
+            "program" to program,
+            "semester" to (semester.toIntOrNull() ?: 0),
+            "mainSport" to mainSport
+        )
+
+        db.collection("users").document(uid)
+            .update(updates)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { e -> onFailure(e) }
     }
 
     override fun isUserLoggedIn(
