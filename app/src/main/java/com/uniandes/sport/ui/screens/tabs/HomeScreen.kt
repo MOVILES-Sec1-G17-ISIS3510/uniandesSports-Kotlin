@@ -51,7 +51,8 @@ fun HomeScreen(
     authViewModel: FirebaseAuthViewModel = viewModel(),
     retosViewModel: FirestoreRetosViewModel = viewModel(),
     playViewModel: FirestorePlayViewModel = viewModel(),
-    bookingViewModel: BookClassViewModel = viewModel()
+    bookingViewModel: BookClassViewModel = viewModel(),
+    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel()
 ) {
     val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
     var userName by remember { mutableStateOf("User") }
@@ -71,6 +72,20 @@ fun HomeScreen(
     // Surprise State
     var showSurprise by remember { mutableStateOf(false) }
     var surpriseData by remember { mutableStateOf<SurpriseContent?>(null) }
+
+    // Step Counter State
+    val currentSteps by stepViewModel.currentSteps.collectAsState()
+    val dailyGoal = stepViewModel.dailyGoal
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                stepViewModel.startTracking()
+            }
+        }
+    )
 
     // Pull Refresh State
     var isRefreshing by remember { mutableStateOf(false) }
@@ -159,7 +174,17 @@ fun HomeScreen(
             onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
             onFailure = { /* Fail silent */ }
         )
-        // Only initial fetches here
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val status = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACTIVITY_RECOGNITION)
+            if (status == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                stepViewModel.startTracking()
+            } else {
+                permissionLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+            }
+        } else {
+            stepViewModel.startTracking()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -211,6 +236,11 @@ fun HomeScreen(
                         HomeActionChip(Icons.Default.History, "History") { onNavigate("history") }
                     }
                 }
+            }
+
+            // Daily Step Challenge
+            item {
+                DailyStepChallenge(steps = currentSteps, goal = dailyGoal)
             }
 
             // Sections

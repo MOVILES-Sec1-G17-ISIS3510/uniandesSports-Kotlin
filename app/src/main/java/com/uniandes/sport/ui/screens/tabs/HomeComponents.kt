@@ -424,6 +424,47 @@ fun SurpriseDialog(
     )
 }
 
+@Composable
+fun DailyStepChallenge(
+    steps: Int,
+    goal: Int
+) {
+    val progress = (steps.toFloat() / goal.toFloat()).coerceIn(0f, 1f)
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Daily Goal", fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Text("Hit $goal steps today", fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 4.dp))
+                }
+                Text("${(progress * 100).toInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(16.dp))
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier.fillMaxWidth().height(10.dp).clip(CircleShape),
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+               Text("$steps steps", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+               Text("Goal: $goal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
 private fun androidx.compose.ui.graphics.Color.toArgb(): Int {
     return (alpha * 255.0f + 0.5f).toInt() shl 24 or
            (red * 255.0f + 0.5f).toInt() shl 16 or
