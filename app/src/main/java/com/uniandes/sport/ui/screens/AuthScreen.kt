@@ -16,7 +16,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Alignment.Companion.TopEnd
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,8 +40,10 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.uniandes.sport.R
 import com.uniandes.sport.Routes
+import com.uniandes.sport.ui.components.ThemeModeToggle
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
+import com.uniandes.sport.ui.theme.ThemeMode
 
 private fun googleErrorMessage(statusCode: Int): String {
     return when (statusCode) {
@@ -58,6 +62,8 @@ fun AuthScreen(
     authViewModel: AuthViewModelInterface,
     navController: NavController,
     logViewModel: LogViewModelInterface,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onLoginSuccess: (isNewUser: Boolean) -> Unit = { isNewUser -> 
         if (isNewUser) {
             navController.navigate(Routes.ONBOARDING_SCREEN)
@@ -194,7 +200,12 @@ fun AuthScreen(
                     painter = painterResource(id = R.mipmap.usports_logo),
                     contentDescription = "App Logo",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = 1.18f
+                            scaleY = 1.18f
+                        }
                 )
             }
             
@@ -289,6 +300,12 @@ fun AuthScreen(
                     Button(
                         onClick = {
                             if (isLoginMode) {
+                                if (authViewModel.email.isBlank() || authViewModel.password.isBlank()) {
+                                    dialogMessage = "Please enter your email and password"
+                                    showDialog = true
+                                    return@Button
+                                }
+
                                 authViewModel.login(
                                     onSuccess = { _, isNewUser ->
                                         logViewModel.log(screenName, "USER_LOGGED_IN")
@@ -301,6 +318,21 @@ fun AuthScreen(
                                     }
                                 )
                             } else {
+                                val missingFields = buildList {
+                                    if (authViewModel.fullName.isBlank()) add("full name")
+                                    if (authViewModel.program.isBlank()) add("program")
+                                    if (authViewModel.semester.isBlank()) add("semester")
+                                    if (authViewModel.mainSport.isBlank()) add("main sport")
+                                    if (authViewModel.email.isBlank()) add("email")
+                                    if (authViewModel.password.isBlank()) add("password")
+                                }
+
+                                if (missingFields.isNotEmpty()) {
+                                    dialogMessage = "Please complete: ${missingFields.joinToString(", ")}"
+                                    showDialog = true
+                                    return@Button
+                                }
+
                                 authViewModel.register(
                                     onSuccess = { _ ->
                                         logViewModel.log(screenName, "USER_REGISTERED")
@@ -432,6 +464,14 @@ fun AuthScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
         }
+
+        ThemeModeToggle(
+            themeMode = themeMode,
+            onThemeChange = onThemeChange,
+            modifier = Modifier
+                .align(TopEnd)
+                .padding(top = 16.dp, end = 16.dp)
+        )
     }
 }
 

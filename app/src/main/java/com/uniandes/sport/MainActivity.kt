@@ -98,6 +98,11 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
+                            themeMode = themeMode.value,
+                            onThemeChange = {
+                                themeMode.value = it
+                                saveThemeMode(it)
+                            },
                             onLoginSuccess = { isNewUser ->
                                 // Ensure token is saved for the authenticated user immediately after login/register.
                                 syncCurrentUserFcmToken()
@@ -112,6 +117,11 @@ class MainActivity : ComponentActivity() {
                         OnboardingScreen(
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
+                            themeMode = themeMode.value,
+                            onThemeChange = {
+                                themeMode.value = it
+                                saveThemeMode(it)
+                            },
                             onFinishOnboarding = {
                                 navController.navigate(Routes.MAIN_TABS) {
                                     popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }

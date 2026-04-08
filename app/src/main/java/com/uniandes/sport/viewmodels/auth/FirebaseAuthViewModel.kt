@@ -65,6 +65,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onSuccess: (result: User) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
+        if (fullName.isBlank() || program.isBlank() || semester.isBlank() || mainSport.isBlank() || email.isBlank() || password.isBlank()) {
+            onFailure(IllegalArgumentException("All registration fields are required."))
+            return
+        }
+
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -95,6 +100,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
+        if (email.isBlank() || password.isBlank()) {
+            onFailure(IllegalArgumentException("Email and password are required."))
+            return
+        }
+
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {

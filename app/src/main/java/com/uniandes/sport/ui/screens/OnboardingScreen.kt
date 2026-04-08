@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.uniandes.sport.ui.components.ThemeModeToggle
+import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
@@ -31,6 +33,8 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 fun OnboardingScreen(
     authViewModel: AuthViewModelInterface,
     logViewModel: LogViewModelInterface,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onFinishOnboarding: () -> Unit,
     onBackToLogin: () -> Unit
 ) {
@@ -198,6 +202,14 @@ fun OnboardingScreen(
                 }
             }
         }
+
+        ThemeModeToggle(
+            themeMode = themeMode,
+            onThemeChange = onThemeChange,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 16.dp)
+        )
     }
 }
 
@@ -551,7 +563,6 @@ private fun ProgramSearchField(
                     filteredPrograms.forEach { program ->
                         TextButton(
                             onClick = {
-                                color = MaterialTheme.colorScheme.onSurface,
                                 onValueChange(program)
                                 expanded = false
                             },
