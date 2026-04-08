@@ -23,13 +23,14 @@ fun AiReviewDialog(
     reviewText: String,
     eventId: String,
     viewModel: AiReviewViewModel,
+    oldAnalysis: Map<String, Double> = emptyMap(),
     onDismiss: () -> Unit
 ) {
     val uiState by viewModel.uiState
 
     LaunchedEffect(reviewText) {
         if (uiState is AiReviewState.Idle && reviewText.isNotBlank()) {
-            viewModel.analyzeReview(reviewText, eventId)
+            viewModel.analyzeReview(reviewText, eventId, oldAnalysis)
         }
     }
 

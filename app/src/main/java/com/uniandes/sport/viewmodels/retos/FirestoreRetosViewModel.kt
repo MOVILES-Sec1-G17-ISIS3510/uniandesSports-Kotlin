@@ -198,46 +198,58 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
             }
     }
 
-    override fun addProgressToChallenge(retoId: String, addedProgress: Double, reviewText: String, eventId: String) {
+    override fun syncChallengeProgress(
+        retoId: String,
+        oldProgress: Double,
+        newProgress: Double,
+        reviewText: String,
+        eventId: String
+    ) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         val docRef = db.collection("challenges").document(retoId)
-        val reviewLogRef = docRef.collection("reviews").document() // ID aleatorio para cada log
+        val delta = newProgress - oldProgress
+        
+        // Si el cambio es insignificante, no hacemos nada para ahorrar escrituras
+        if (Math.abs(delta) < 0.01) return
         
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             
-            // Verificamos si el usuario es participante (Seguridad restaurada)
+            // Verificamos si el usuario es participante
             val rawParticipants = snapshot.get("participants") as? List<*> ?: emptyList<Any>()
             val participants = rawParticipants.map { it.toString() }
             
             if (participants.contains(uid)) {
-                // Obtenemos el progreso actual de este usuario de forma segura
+                // Obtenemos el progreso actual del mapa global
                 val progressByUser = snapshot.get("progressByUser") as? Map<*, *>
-                val currentProgress = (progressByUser?.get(uid) as? Number)?.toDouble() ?: 0.0
+                val currentTotal = (progressByUser?.get(uid) as? Number)?.toDouble() ?: 0.0
                 
-                val increment = addedProgress
-                val newProgress = minOf(100.0, currentProgress + increment)
+                // Calculamos el nuevo total aplicando solo la diferencia
+                // Esto permite que si editamos una review de 30% a 20%, el total baje 10%
+                val newTotal = (currentTotal + delta).coerceIn(0.0, 100.0)
                 
-                // 1. Actualizar el progreso específico usando notación de punto (atómico)
-                transaction.update(docRef, "progressByUser.$uid", newProgress)
+                // 1. Actualización atómica del mapa
+                transaction.update(docRef, "progressByUser.$uid", newTotal)
                 transaction.update(docRef, "updatedAt", com.google.firebase.firestore.FieldValue.serverTimestamp())
                 
-                // 2. Crear el log en la sub-colección del reto para trazabilidad
+                // 2. Registrar el ajuste en el log (Audit Trail)
+                val reviewLogRef = docRef.collection("reviews").document()
                 val reviewLog = mapOf(
                     "userId" to uid,
                     "eventId" to eventId,
-                    "addedProgress" to addedProgress,
+                    "delta" to delta,
+                    "previousValue" to oldProgress,
+                    "newValue" to newProgress,
                     "reviewText" to reviewText,
+                    "type" to "SYNC_UPDATE",
                     "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                 )
                 transaction.set(reviewLogRef, reviewLog)
-            } else {
-                Log.w("RetosVM", "El usuario $uid no participa en el reto $retoId. Ignorando actualización.")
             }
         }.addOnSuccessListener {
-            Log.i("RetosVM", "Progreso sincronizado con éxito para reto: $retoId")
+            Log.i("RetosVM", "Sincronización exitosa: delta $delta aplicado a reto $retoId")
         }.addOnFailureListener { e ->
-            Log.e("RetosVM", "Fallo crítico al actualizar reto $retoId", e)
+            Log.e("RetosVM", "Error en sincronización de reto $retoId", e)
         }
     }
 }

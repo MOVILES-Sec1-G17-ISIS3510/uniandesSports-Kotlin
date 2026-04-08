@@ -24,7 +24,7 @@ class AiReviewViewModel(
     private val _uiState = mutableStateOf<AiReviewState>(AiReviewState.Idle)
     val uiState: State<AiReviewState> = _uiState
 
-    fun analyzeReview(reviewText: String, eventId: String) {
+    fun analyzeReview(reviewText: String, eventId: String, oldAnalysis: Map<String, Double> = emptyMap()) {
         _uiState.value = AiReviewState.Loading
         
         viewModelScope.launch {
@@ -39,29 +39,39 @@ class AiReviewViewModel(
                 return@launch
             }
 
-            // Delegamos en la estrategia elegida
+            // Delegamos en la estrategia elegida para obtener el NUEVO análisis
             val result = analyzerStrategy.analyzeReview(reviewText, activeChallenges)
             
             if (result.success) {
                 var advancedCount = 0
-                val progressMap = result.progressByChallengeId
+                val newProgressMap = result.progressByChallengeId
                 
-                // Actualizamos directamente (silenciosamente) en la base de datos
-                progressMap.forEach { (retoId, addedProgress) ->
-                    if (addedProgress > 0) {
-                        val retoTarget = activeChallenges.find { it.id == retoId }
-                        if (retoTarget != null) {
-                            advancedCount++
-                            firestoreRetosViewModel.addProgressToChallenge(retoId, addedProgress, reviewText, eventId)
-                        }
+                // Calculamos todos los retos involucrados (los nuevos y los que estaban antes)
+                val allRelevantChallengeIds = (newProgressMap.keys + oldAnalysis.keys).toSet()
+
+                allRelevantChallengeIds.forEach { retoId ->
+                    val newVal = newProgressMap[retoId] ?: 0.0
+                    val oldVal = oldAnalysis[retoId] ?: 0.0
+                    
+                    if (Math.abs(newVal - oldVal) > 0.01) {
+                        if (newVal > 0) advancedCount++ // Solo contamos los que suman progreso positivo real
+                        
+                        // Sincronizamos usando la lógica de deltas (newVal - oldVal)
+                        firestoreRetosViewModel.syncChallengeProgress(
+                            retoId = retoId,
+                            oldProgress = oldVal,
+                            newProgress = newVal,
+                            reviewText = reviewText,
+                            eventId = eventId
+                        )
                     }
                 }
                 
-                // 3. Actualizar la reseña original del evento con el análisis de la IA
+                // 3. Actualizar la reseña original del evento con el NUEVO análisis de la IA
                 playViewModel?.updateReviewAiAnalysis(
                     eventId = eventId,
                     userId = uid,
-                    analysis = progressMap
+                    analysis = newProgressMap
                 )
                 
                 if (advancedCount > 0) {

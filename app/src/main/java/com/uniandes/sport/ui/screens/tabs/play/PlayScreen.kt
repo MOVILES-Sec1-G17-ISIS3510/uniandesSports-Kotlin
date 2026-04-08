@@ -85,6 +85,7 @@ fun PlayScreen(
     var reviewEvent by remember { mutableStateOf<Event?>(null) }
     var aiReviewTextToAnalyze by remember { mutableStateOf<String?>(null) }
     var aiReviewEventId by remember { mutableStateOf<String?>(null) }
+    var aiReviewOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -185,6 +186,7 @@ fun PlayScreen(
                         android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
                         aiReviewEventId = reviewEventLocal.id
                         aiReviewTextToAnalyze = text
+                        aiReviewOldAnalysis = existingReview?.aiAnalysis ?: emptyMap()
                         onDone(true)
                     },
                     onError = { e ->
@@ -202,9 +204,11 @@ fun PlayScreen(
             reviewText = text,
             eventId = eventId,
             viewModel = aiViewModel,
+            oldAnalysis = aiReviewOldAnalysis,
             onDismiss = { 
                 aiReviewTextToAnalyze = null
                 aiReviewEventId = null
+                aiReviewOldAnalysis = emptyMap()
             }
         )
     }
