@@ -460,7 +460,7 @@ fun CustomOutlinedTextField(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedContainerColor = Color(0xFFF9FAFB),
             focusedContainerColor = Color(0xFFF3F4F6),

@@ -29,10 +29,10 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun getSportAccentColor(sport: String): Color {
     return when(sport.lowercase()) {
-        "soccer", "fútbol", "futbol" -> Color(0xFF2ECC71)
+        "soccer", "fútbol", "futbol", "football" -> Color(0xFF2ECC71)
         "basketball", "baloncesto" -> Color(0xFFE67E22)
         "tennis", "tenis" -> Color(0xFFF1C40F)
-        "calisthenics", "calistenia" -> Color(0xFF9B59B6)
+        "calisthenics", "calistenia", "calistennics" -> Color(0xFF9B59B6)
         "running", "correr" -> Color(0xFFE74C3C)
         "swimming", "natación" -> Color(0xFF3498DB)
         else -> Color(0xFF95A5A6) // Default Gray from the modal
@@ -85,8 +85,8 @@ fun SportIconBox(sport: String, size: Dp, modifier: Modifier = Modifier) {
         Icon(
             imageVector = when(sport.lowercase()) {
                 "running", "correr" -> Icons.Default.DirectionsRun
-                "soccer", "fútbol", "futbol" -> Icons.Default.SportsSoccer
-                "calisthenics", "calistenia" -> Icons.Default.FitnessCenter
+                "soccer", "fútbol", "futbol", "football" -> Icons.Default.SportsSoccer
+                "calisthenics", "calistenia", "calistennics" -> Icons.Default.FitnessCenter
                 "tennis", "tenis" -> Icons.Default.SportsTennis
                 "basketball", "baloncesto" -> Icons.Default.SportsBasketball
                 "swimming", "natación" -> Icons.Default.Waves
