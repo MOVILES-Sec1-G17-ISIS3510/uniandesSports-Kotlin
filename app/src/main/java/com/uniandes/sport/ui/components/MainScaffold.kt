@@ -157,7 +157,8 @@ fun MainScaffold(
                 startTabIndex = initialTabIndex,
                 pendingOpenMatchEventId = pendingOpenMatchEventId,
                 onOpenMatchConsumed = onOpenMatchConsumed,
-                modifier = Modifier.padding(innerPadding),
+                innerPadding = innerPadding,
+                modifier = Modifier.fillMaxSize(),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page
                 },
