@@ -243,6 +243,33 @@ fun HomeScreen(
                 DailyStepChallenge(steps = currentSteps, goal = dailyGoal)
             }
 
+            // Start Live Run Button
+            item {
+                Button(
+                    onClick = { onNavigate("live_run") },
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("START RUN", fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                    }
+                }
+            }
+
             // Sections
             item {
                 SectionHeader(title = "Quick Activity", subtitle = "Suggested sessions you might like")

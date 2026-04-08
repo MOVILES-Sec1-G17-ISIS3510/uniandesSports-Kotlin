@@ -26,12 +26,28 @@ import com.google.firebase.ktx.Firebase
 import java.util.Date
 import com.uniandes.sport.ui.components.SportIconBox
 import com.uniandes.sport.ui.components.ChallengeBadge
+import com.uniandes.sport.ui.screens.tabs.running.RunSummaryDialog
+import com.uniandes.sport.viewmodels.running.FirestoreRunningViewModel
+import com.uniandes.sport.models.RunSession
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Psychology
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialScreen(
     viewModel: RetosViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel::class.java),
     playViewModel: PlayViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel(modelClass = com.uniandes.sport.viewmodels.play.FirestorePlayViewModel::class.java),
+    runningViewModel: FirestoreRunningViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onNavigate: (String) -> Unit,
     onNavigateBack: () -> Unit = { onNavigate("back") }
 ) {
@@ -39,6 +55,10 @@ fun HistorialScreen(
     val finishedEvents by playViewModel.finishedEvents.collectAsState()
     val joinedEventIds by playViewModel.joinedEventIds.collectAsState()
     val myTracksByEventId by playViewModel.myTracksByEventId.collectAsState()
+    val pastRuns by runningViewModel.pastRuns.collectAsState()
+    
+    var selectedRunReport by remember { mutableStateOf<RunSession?>(null) }
+    
     val uid = Firebase.auth.currentUser?.uid ?: ""
     
     // Filter for challenges I participated in and are finished or completed
@@ -59,6 +79,10 @@ fun HistorialScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        runningViewModel.fetchPastRuns()
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -72,7 +96,7 @@ fun HistorialScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (finishedChallenges.isEmpty() && finishedOpenMatches.isEmpty()) {
+        if (finishedChallenges.isEmpty() && finishedOpenMatches.isEmpty() && pastRuns.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.History, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -86,6 +110,26 @@ fun HistorialScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Running Sessions Section
+                if (pastRuns.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "RUNNING TRACKS",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    items(pastRuns) { run ->
+                        RunHistoryCard(run) {
+                            selectedRunReport = run
+                        }
+                    }
+                    
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+
                 if (finishedOpenMatches.isNotEmpty()) {
                     item {
                         Text(
@@ -124,6 +168,11 @@ fun HistorialScreen(
                 }
             }
         }
+    }
+
+    // Report Summary Dialog for Running
+    selectedRunReport?.let { run ->
+        RunSummaryDialog(session = run, onDismiss = { selectedRunReport = null })
     }
 }
 
@@ -189,5 +238,90 @@ fun HistoryCard(reto: com.uniandes.sport.models.Reto, uid: String) {
                 ChallengeBadge("EXPIRED", Color(0xFFFFEBEE).copy(alpha = 0.8f), Color(0xFFD32F2F))
             }
         }
+    }
+}
+
+@Composable
+fun RunHistoryCard(run: RunSession, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon section
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.DirectionsRun,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                val date = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(run.timestamp))
+                
+                Text(
+                    text = date.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                
+                Text(
+                    text = "${String.format("%.2f", run.distanceKm)} km Running",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    HistoryStat(androidx.compose.material.icons.Icons.Default.Schedule, run.pace)
+                    HistoryStat(androidx.compose.material.icons.Icons.Default.Terrain, "${run.elevationGain.toInt()}m")
+                    if (run.aiFeedback.isNotEmpty()) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.Psychology, 
+                            contentDescription = "Has AI Feedback", 
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+            
+            Icon(
+                androidx.compose.material.icons.Icons.Default.ChevronRight, 
+                contentDescription = null, 
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+@Composable
+fun HistoryStat(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

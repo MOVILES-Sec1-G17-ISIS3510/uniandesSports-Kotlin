@@ -19,7 +19,13 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
 
+    private val _cadence = MutableStateFlow(0)
+    val cadence: StateFlow<Int> = _cadence.asStateFlow()
+
     private val prefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+    
+    // For calculating Cadence
+    private val stepTimestamps = mutableListOf<Long>()
 
     fun startListening() {
         if (stepSensor != null) {
@@ -53,6 +59,26 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
             val stepsToday = totalStepsBoot - offset
             
             _currentSteps.value = stepsToday.coerceAtLeast(0)
+
+            // Cadence Calculation (Steps per Minute)
+            val now = System.currentTimeMillis()
+            stepTimestamps.add(now)
+            
+            // Keep only timestamps from the last 10 seconds
+            val windowStart = now - 10000 
+            stepTimestamps.removeAll { it < windowStart }
+            
+            if (stepTimestamps.size > 2) {
+                // Number of steps in the window (excluding the very first one which is our t0)
+                val stepsInWindow = stepTimestamps.size - 1
+                val timeSpanMillis = stepTimestamps.last() - stepTimestamps.first()
+                if (timeSpanMillis > 0) {
+                    val spm = (stepsInWindow.toFloat() / timeSpanMillis.toFloat() * 60000f).toInt()
+                    _cadence.value = spm
+                }
+            } else {
+                _cadence.value = 0
+            }
         }
     }
 

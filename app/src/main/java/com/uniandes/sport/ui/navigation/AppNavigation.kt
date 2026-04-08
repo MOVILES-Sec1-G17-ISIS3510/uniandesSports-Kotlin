@@ -117,6 +117,12 @@ fun AppNavigation(
             )
         }
         
+        composable(Screen.LiveRun.route) {
+            com.uniandes.sport.ui.screens.tabs.running.LiveRunScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
         composable(
             route = Screen.CoachDashboard.route,
             arguments = listOf(androidx.navigation.navArgument("profesorId") { 

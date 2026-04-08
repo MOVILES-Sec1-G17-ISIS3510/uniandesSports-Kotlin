@@ -115,6 +115,53 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
         }
     }
 
+    override suspend fun analyzeRunSession(
+        distance: Float,
+        pace: String,
+        elevation: Float,
+        cadence: Int
+    ): String? {
+        try {
+            val prompt = """
+                You are a professional, highly MOTIVATIONAL running coach. 
+                Analyze the following data from a user's recent run session:
+                - Distance: ${String.format("%.2f", distance)} km
+                - Pace: $pace min/km
+                - Elevation Gain: ${String.format("%.1f", elevation)} m
+                - Cadence: $cadence steps per min (SPM)
+                
+                Provide a short, direct, and VERY MOTIVATIONAL analysis of their performance. 
+                Focus on high energy and encouraging feedback. 
+                Keep it under 3 short paragraphs.
+                Use bullet points for 2-3 specific tips to improve next time.
+                The response must be in ENGLISH.
+                DO NOT start with "Certainly" or "Great job". Start with the coaching analysis directly.
+            """.trimIndent()
+
+            val request = OpenAiRequest(
+                model = "gpt-4o-mini",
+                messages = listOf(
+                    OpenAiMessage(role = "system", content = "You are an elite, energetic, and highly motivational athletic coach."),
+                    OpenAiMessage(role = "user", content = prompt)
+                ),
+                maxTokens = 400
+            )
+
+            val authHeader = "Bearer ${AiConstants.OPENAI_API_KEY}"
+            val response = api.analyzeReviewWithOpenAi(authHeader, request)
+
+            return if (response.isSuccessful) {
+                response.body()?.choices?.firstOrNull()?.message?.content?.toString()
+            } else {
+                Log.e("OpenAiStrategy", "Run Session Error: ${response.errorBody()?.string()}")
+                "You crushed it today! Keep pushing your limits and stay consistent. Your progress is amazing!"
+            }
+        } catch (e: Exception) {
+            Log.e("OpenAiStrategy", "Exception in analyzeRunSession", e)
+            return "Great workout! Keep at it and you'll see massive gains soon!"
+        }
+    }
+
     private fun buildPrompt(trackText: String, challenges: List<Reto>): String {
         val challengesDescriptions = challenges.joinToString(separator = "\n") {
             "- ID: ${it.id}, Sport: ${it.sport}, Title: ${it.title}, Goal: ${it.goalLabel}"

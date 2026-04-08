@@ -15,6 +15,8 @@ interface AiAnalyzerStrategy {
     suspend fun analyzeReview(reviewText: String, activeChallenges: List<Reto>): AiReviewAnalysisResult
 
     suspend fun analyzePose(base64Image: String): String?
+
+    suspend fun analyzeRunSession(distance: Float, pace: String, elevation: Float, cadence: Int): String?
 }
 
 /**
