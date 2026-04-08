@@ -44,6 +44,7 @@ data class SurpriseContent(
     val targetRoute: String
 )
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
     onNavigate: (String) -> Unit,
@@ -62,6 +63,11 @@ fun HomeScreen(
     val allRetos by retosViewModel.retos.collectAsState()
     val userBookings by bookingViewModel.userBookings.collectAsState()
     
+    // ViewModels Loading States
+    val playLoading by playViewModel.isLoading.collectAsState()
+    val retosLoading by retosViewModel.isLoading.collectAsState()
+    val masterLoading = playLoading || retosLoading
+
     // Surprise State
     var showSurprise by remember { mutableStateOf(false) }
     var surpriseData by remember { mutableStateOf<SurpriseContent?>(null) }
@@ -72,14 +78,19 @@ fun HomeScreen(
         refreshing = isRefreshing,
         onRefresh = {
             isRefreshing = true
-            // Sync all data sources
+            // Accurate refresh actions matching system standards
+            playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
-            playViewModel.fetchEvents()
             bookingViewModel.fetchUserBookings(currentUserId)
-            // Simulating end of refresh
-            isRefreshing = false 
         }
     )
+
+    // Sync isRefreshing with real ViewModel states (Full Accuracy)
+    LaunchedEffect(masterLoading) {
+        if (!masterLoading && isRefreshing) {
+            isRefreshing = false
+        }
+    }
 
     // Logic: Separate joined vs available events
     val upcomingMatches = remember(allEvents, joinedIds) {
@@ -148,9 +159,7 @@ fun HomeScreen(
             onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
             onFailure = { /* Fail silent */ }
         )
-        retosViewModel.fetchRetos()
-        playViewModel.fetchEvents()
-        bookingViewModel.fetchUserBookings(currentUserId)
+        // Only initial fetches here
     }
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -208,7 +217,7 @@ fun HomeScreen(
             item {
                 SectionHeader(title = "Quick Activity", subtitle = "Suggested sessions you might like")
                 if (availableEvents.isEmpty()) {
-                    EmptyStateCard(title = "No events nearby", description = "Why not organize one?", icon = Icons.Default.EventBusy, actionLabel = "Create Activity", onAction = { onNavigate("play") })
+                    EmptyStateWideCard(title = "No events nearby", description = "Try searching in the Play tab.", icon = Icons.Default.Search, actionLabel = "Explore Play", onClick = { onNavigate("play") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         availableEvents.take(2).forEach { event -> ActivityCard(event = event, onClick = { /* Detail */ }) }
@@ -219,7 +228,7 @@ fun HomeScreen(
             item {
                 SectionHeader(title = "Active Challenges", onViewAll = { onNavigate("challenges") })
                 if (activeRetos.isEmpty()) {
-                    EmptyStateWideCard(title = "No active challenges", description = "Start your journey today and compete with others.", icon = Icons.Default.Flag, actionLabel = "Browse Challenges", onClick = { onNavigate("challenges") })
+                    EmptyStateWideCard(title = "No active challenges", description = "Join a challenge and start earning points.", icon = Icons.Default.EmojiEvents, actionLabel = "Browse Challenges", onClick = { onNavigate("challenges") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         activeRetos.take(2).forEach { reto ->
@@ -233,7 +242,7 @@ fun HomeScreen(
             item {
                 SectionHeader(title = "Recommended for You")
                 if (availableEvents.size <= 2) {
-                     EmptyStateCard(title = "Searching for you", description = "We'll show you more sports soon.", icon = Icons.Default.AutoAwesome)
+                     EmptyStateCard(title = "Looking for matches", description = "We'll show you more sports soon.", icon = Icons.Default.AutoAwesome)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
                         items(availableEvents.drop(2).take(4)) { event -> RecommendedItemCard(event = event) }
@@ -244,7 +253,7 @@ fun HomeScreen(
             item {
                 SectionHeader(title = "Upcoming Matches")
                 if (upcomingMatches.isEmpty()) {
-                    EmptyStateWideCard(title = "Your field is empty", description = "Join a match or schedule one with your friends.", icon = Icons.Default.SportsSoccer, actionLabel = "Schedule Match", onClick = { onNavigate("play") })
+                    EmptyStateWideCard(title = "Your field is empty", description = "Join a match or schedule one with your friends.", icon = Icons.Default.SportsSoccer, actionLabel = "Find Match", onClick = { onNavigate("play") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         upcomingMatches.forEach { match -> UpcomingMatchItem(event = match) }
@@ -262,7 +271,7 @@ fun HomeScreen(
         )
 
         // Multi-Action FAB
-        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp)) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
             MultiActionFAB(onActionClick = { action ->
                 when(action) {
                     "schedule" -> onNavigate("play")

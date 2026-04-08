@@ -181,7 +181,9 @@ fun ProfesoresScreen(
         if (isFabExpanded) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize(),
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                        .clickable { isFabExpanded = false },
                     contentAlignment = Alignment.BottomEnd
                 ) {
                     Column(
@@ -246,14 +248,15 @@ fun ProfesoresScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 20.dp, bottom = 20.dp),
                 containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = Color.Black,
+                contentColor = Color.White,
                 shape = CircleShape
             ) {
                 val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Menu",
-                    modifier = Modifier.rotate(rotation)
+                    modifier = Modifier.rotate(rotation),
+                    tint = Color.White
                 )
             }
         }
