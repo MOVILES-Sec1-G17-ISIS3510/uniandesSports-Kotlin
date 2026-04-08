@@ -68,6 +68,7 @@ fun AuthScreen(
 ) {
     val screenName = "AuthScreen"
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
     val googleWebClientId = stringResource(id = R.string.google_web_client_id).trim()
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
@@ -159,14 +160,14 @@ fun AuthScreen(
                 }
             },
             shape = RoundedCornerShape(16.dp),
-            containerColor = Color.White
+            containerColor = colorScheme.surface
         )
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF9FAFB)) // Light gray background matching the app
+            .background(colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -185,8 +186,8 @@ fun AuthScreen(
                     .size(108.dp)
                     .shadow(elevation = 16.dp, shape = RoundedCornerShape(28.dp), clip = false)
                     .clip(RoundedCornerShape(28.dp))
-                    .background(Color(0xFF0046B8))
-                    .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(28.dp)),
+                    .background(colorScheme.primary)
+                    .border(1.dp, colorScheme.onPrimary.copy(alpha = 0.2f), RoundedCornerShape(28.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -201,7 +202,7 @@ fun AuthScreen(
                 text = "USports",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Light,
-                color = Color(0xFF2C3138),
+                color = colorScheme.onBackground,
                 modifier = Modifier.padding(top = 10.dp)
             )
 
@@ -211,20 +212,20 @@ fun AuthScreen(
                 text = if (isLoginMode) "Welcome back!" else "Join UniandesSports",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
-                color = Color.Black
+                color = colorScheme.onBackground
             )
             
             Text(
                 text = if (isLoginMode) "Sign in to continue" else "Create your account now",
                 fontSize = 14.sp,
-                color = Color.Gray,
+                color = colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
             )
 
             // Main Card Container for the Form
             Card(
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -317,7 +318,7 @@ fun AuthScreen(
                             .fillMaxWidth()
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary, contentColor = colorScheme.onPrimary)
                     ) {
                             Text(
                                 text = if (isLoginMode) "Sign In" else "Create Account",
@@ -359,14 +360,20 @@ fun AuthScreen(
                                 .height(56.dp),
                             shape = RoundedCornerShape(16.dp),
                             enabled = !isGoogleLoading,
-                            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = colorScheme.surface,
+                                contentColor = colorScheme.onSurface
+                            )
                         ) {
                             if (isGoogleLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = colorScheme.primary
+                                )
                             } else {
                                 Text(
                                     text = "Continue with Google",
-                                    color = Color(0xFF1F2937),
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp
                                 )
@@ -385,18 +392,18 @@ fun AuthScreen(
             ) {
                 Text(
                     text = if (isLoginMode) "Don't have an account? " else "Already have an account? ",
-                    color = Color.Gray,
+                    color = colorScheme.onSurfaceVariant,
                     fontSize = 14.sp
                 )
                 Text(
                     text = if (isLoginMode) "Sign Up" else "Sign In",
-                    color = MaterialTheme.colorScheme.primary,
+                    color = colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Text("Forgot your password?", color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
 
             // Recover Password Button
             TextButton(
@@ -443,15 +450,15 @@ fun CustomOutlinedTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = Color.Gray, fontSize = 13.sp) },
+        label = { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
         leadingIcon = {
-            Icon(imageVector = icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         },
         trailingIcon = {
             if (isPassword) {
                 val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
                 IconButton(onClick = onPasswordVisibilityChange) {
-                    Icon(imageVector = image, contentDescription = "Toggle password visibility", tint = Color.Gray)
+                    Icon(imageVector = image, contentDescription = "Toggle password visibility", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
@@ -462,8 +469,8 @@ fun CustomOutlinedTextField(
             .padding(vertical = 6.dp),
         shape = RoundedCornerShape(28.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = Color(0xFFF9FAFB),
-            focusedContainerColor = Color(0xFFF3F4F6),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
             unfocusedBorderColor = Color.Transparent,
             focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
         ),

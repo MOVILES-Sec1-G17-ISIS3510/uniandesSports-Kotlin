@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material3.*
@@ -34,9 +35,13 @@ fun OnboardingScreen(
     onBackToLogin: () -> Unit
 ) {
     val screenName = "OnboardingScreen"
+    val colorScheme = MaterialTheme.colorScheme
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    val isFormValid = authViewModel.program.isNotBlank() &&
+        authViewModel.semester.isNotBlank() &&
+        authViewModel.mainSport.isNotBlank()
 
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
@@ -59,14 +64,14 @@ fun OnboardingScreen(
                 }
             },
             shape = RoundedCornerShape(16.dp),
-            containerColor = Color.White
+            containerColor = colorScheme.surface
         )
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF9FAFB))
+            .background(colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -80,19 +85,19 @@ fun OnboardingScreen(
                 text = "Almost there...",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Black,
-                color = Color.Black
+                color = colorScheme.onBackground
             )
             
             Text(
                 text = "Complete these details to improve your experience",
                 fontSize = 14.sp,
-                color = Color.Gray,
+                color = colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
             )
 
             Card(
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -105,7 +110,7 @@ fun OnboardingScreen(
                         Text(text = authViewModel.fullName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
                     if (authViewModel.email.isNotBlank()) {
-                        Text(text = authViewModel.email, color = Color.Gray, fontSize = 14.sp)
+                        Text(text = authViewModel.email, color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(24.dp))
                     }
 
@@ -135,7 +140,7 @@ fun OnboardingScreen(
 
                     Button(
                         onClick = {
-                            if (authViewModel.program.isBlank() || authViewModel.semester.isBlank() || authViewModel.mainSport.isBlank()) {
+                            if (!isFormValid) {
                                 dialogMessage = "Please complete all fields"
                                 showDialog = true
                                 return@Button
@@ -160,11 +165,14 @@ fun OnboardingScreen(
                             .fillMaxWidth()
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        enabled = !isLoading && isFormValid,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorScheme.primary,
+                            contentColor = colorScheme.onPrimary
+                        )
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorScheme.onPrimary, strokeWidth = 2.dp)
                         } else {
                             Text(
                                 text = "Complete Registration",
@@ -183,7 +191,8 @@ fun OnboardingScreen(
                     ) {
                         Text(
                             text = "Back to Login",
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            color = colorScheme.primary
                         )
                     }
                 }
@@ -207,12 +216,12 @@ private fun SemesterStepperField(
         onValueChange = {},
         readOnly = true,
         enabled = enabled,
-        label = { Text("Semester", color = Color.Gray, fontSize = 13.sp) },
+        label = { Text("Semester", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Default.FormatListNumbered,
                 contentDescription = null,
-                tint = Color.Gray,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
         },
@@ -249,8 +258,8 @@ private fun SemesterStepperField(
             .padding(vertical = 6.dp),
         shape = RoundedCornerShape(24.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = Color(0xFFF9FAFB),
-            focusedContainerColor = Color(0xFFF3F4F6),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
             unfocusedBorderColor = Color.Transparent,
             focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
         ),
@@ -304,14 +313,14 @@ private fun MainSportLabelsField(
             Icon(
                 imageVector = Icons.Default.Sports,
                 contentDescription = null,
-                tint = Color.Gray,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Main Sport",
                 fontSize = 13.sp,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -357,9 +366,9 @@ private fun MainSportLabelsField(
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.secondary,
-                        selectedLabelColor = Color.White,
-                        selectedLeadingIconColor = Color.White,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondary,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                         labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
@@ -380,8 +389,8 @@ private fun MainSportLabelsField(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(28.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = Color(0xFFF9FAFB),
-                    focusedContainerColor = Color(0xFFF3F4F6),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                     unfocusedBorderColor = Color.Transparent,
                     focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                 )
@@ -422,52 +431,53 @@ private fun ProgramSearchField(
 ) {
     val uniAndesprograms = remember {
         listOf(
-            "Administración",
-            "Antropología",
-            "Arquitectura",
-            "Arte",
-            "Biología",
-            "Ciencia Política",
-            "Derecho",
-            "Diseño",
-            "Economía",
-            "Filosofía",
-            "Física",
-            "Geociencias",
-            "Gestión Pública y Gobierno",
-            "Historia",
-            "Historia del Arte",
-            "Ingeniería Ambiental",
-            "Ingeniería Biomédica",
-            "Ingeniería Civil",
-            "Ingeniería de Alimentos",
-            "Ingeniería de Sistemas y Computación",
-            "Ingeniería Eléctrica",
-            "Ingeniería Electrónica",
-            "Ingeniería Industrial",
-            "Ingeniería Mecánica",
-            "Ingeniería Química",
-            "Lenguas y Cultura",
-            "Licenciatura en Artes",
-            "Licenciatura en Biología",
-            "Licenciatura en Ciencias Sociales",
-            "Licenciatura en Educación Infantil",
-            "Licenciatura en Física",
-            "Licenciatura en Humanidades",
-            "Licenciatura en Matemáticas",
-            "Licenciatura en Química",
-            "Literatura",
-            "Matemáticas",
-            "Medicina",
-            "Microbiología",
-            "Música",
-            "Narrativas Digitales",
-            "Psicología",
-            "Química"
+            "Administration",
+            "Anthropology",
+            "Architecture",
+            "Art",
+            "Biology",
+            "Political Science",
+            "Law",
+            "Design",
+            "Economics",
+            "Philosophy",
+            "Physics",
+            "Geosciences",
+            "Public Management and Government",
+            "History",
+            "Art History",
+            "Environmental Engineering",
+            "Biomedical Engineering",
+            "Civil Engineering",
+            "Food Engineering",
+            "Systems and Computer Engineering",
+            "Electrical Engineering",
+            "Electronic Engineering",
+            "Industrial Engineering",
+            "Mechanical Engineering",
+            "Chemical Engineering",
+            "Languages and Culture",
+            "Bachelor in Arts",
+            "Bachelor in Biology",
+            "Bachelor in Social Sciences",
+            "Bachelor in Early Childhood Education",
+            "Bachelor in Physics",
+            "Bachelor in Humanities",
+            "Bachelor in Mathematics",
+            "Bachelor in Chemistry",
+            "Literature",
+            "Mathematics",
+            "Medicine",
+            "Microbiology",
+            "Music",
+            "Digital Narratives",
+            "Psychology",
+            "Chemistry"
         )
     }
 
     var expanded by remember { mutableStateOf(false) }
+    var selectedFromSuggestions by remember { mutableStateOf(false) }
     
     val filteredPrograms = remember(value) {
         if (value.isBlank()) {
@@ -483,47 +493,65 @@ private fun ProgramSearchField(
         OutlinedTextField(
             value = value,
             onValueChange = { newValue ->
+                selectedFromSuggestions = false
                 onValueChange(newValue)
                 expanded = newValue.isNotBlank() && filteredPrograms.isNotEmpty()
             },
-            label = { Text("Search or enter program", color = Color.Gray, fontSize = 13.sp) },
+            label = { Text("Search or enter program", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.School,
                     contentDescription = null,
-                    tint = Color.Gray,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
+            trailingIcon = if (selectedFromSuggestions) {
+                {
+                    IconButton(onClick = {
+                        selectedFromSuggestions = false
+                        expanded = false
+                        onValueChange("")
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear selected program",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else null,
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = Color(0xFFF9FAFB),
-                focusedContainerColor = Color(0xFFF3F4F6),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 unfocusedBorderColor = Color.Transparent,
                 focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
             ),
             enabled = enabled,
+            readOnly = selectedFromSuggestions,
             singleLine = true
         )
 
-        if (expanded && filteredPrograms.isNotEmpty()) {
+        if (!selectedFromSuggestions && expanded && filteredPrograms.isNotEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 200.dp)
+                        .heightIn(max = 400.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     filteredPrograms.forEach { program ->
                         TextButton(
                             onClick = {
+                                color = MaterialTheme.colorScheme.onSurface,
                                 onValueChange(program)
                                 expanded = false
                             },
