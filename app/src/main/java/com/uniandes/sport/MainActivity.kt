@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.uniandes.sport.ui.screens.AuthScreen
+import com.uniandes.sport.ui.screens.OnboardingScreen
 import com.uniandes.sport.ui.screens.wallscreen.WallScreen
 import com.uniandes.sport.viewmodels.log.FirebaseLogViewModel
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -97,11 +98,23 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
-                            onLoginSuccess = {
+                            onLoginSuccess = { isNewUser ->
                                 // Ensure token is saved for the authenticated user immediately after login/register.
                                 syncCurrentUserFcmToken()
-                                navController.navigate(Routes.MAIN_TABS) {
+                                val dest = if (isNewUser) Routes.ONBOARDING_SCREEN else Routes.MAIN_TABS
+                                navController.navigate(dest) {
                                     popUpTo(Routes.AUTH_SCREEN) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                    composable(Routes.ONBOARDING_SCREEN) {
+                        OnboardingScreen(
+                            authViewModel = authViewModel,
+                            logViewModel = logViewModel,
+                            onFinishOnboarding = {
+                                navController.navigate(Routes.MAIN_TABS) {
+                                    popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
                                 }
                             }
                         )
