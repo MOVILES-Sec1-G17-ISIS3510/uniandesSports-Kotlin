@@ -51,7 +51,8 @@ fun HomeScreen(
     authViewModel: FirebaseAuthViewModel = viewModel(),
     retosViewModel: FirestoreRetosViewModel = viewModel(),
     playViewModel: FirestorePlayViewModel = viewModel(),
-    bookingViewModel: BookClassViewModel = viewModel()
+    bookingViewModel: BookClassViewModel = viewModel(),
+    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel()
 ) {
     val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
     var userName by remember { mutableStateOf("User") }
@@ -71,6 +72,20 @@ fun HomeScreen(
     // Surprise State
     var showSurprise by remember { mutableStateOf(false) }
     var surpriseData by remember { mutableStateOf<SurpriseContent?>(null) }
+
+    // Step Counter State
+    val currentSteps by stepViewModel.currentSteps.collectAsState()
+    val dailyGoal = stepViewModel.dailyGoal
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                stepViewModel.startTracking()
+            }
+        }
+    )
 
     // Pull Refresh State
     var isRefreshing by remember { mutableStateOf(false) }
@@ -159,7 +174,17 @@ fun HomeScreen(
             onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
             onFailure = { /* Fail silent */ }
         )
-        // Only initial fetches here
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val status = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACTIVITY_RECOGNITION)
+            if (status == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                stepViewModel.startTracking()
+            } else {
+                permissionLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+            }
+        } else {
+            stepViewModel.startTracking()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -209,6 +234,38 @@ fun HomeScreen(
                         HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather logic */ }
                         HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") }
                         HomeActionChip(Icons.Default.History, "History") { onNavigate("history") }
+                    }
+                }
+            }
+
+            // Daily Step Challenge
+            item {
+                DailyStepChallenge(steps = currentSteps, goal = dailyGoal)
+            }
+
+            // Start Live Run Button
+            item {
+                Button(
+                    onClick = { onNavigate("live_run") },
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("START RUN", fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null)
                     }
                 }
             }
