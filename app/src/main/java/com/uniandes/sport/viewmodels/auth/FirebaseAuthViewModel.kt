@@ -74,24 +74,16 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val uid = auth.currentUser?.uid ?: ""
-                    val userProfile = User(
+                    val skeletonUser = User(
                         uid = uid,
                         email = email,
-                        fullName = fullName,
-                        program = program,
-                        semester = semester.toIntOrNull() ?: 0,
-                        mainSport = mainSport
+                        fullName = fullName
                     )
-                    
-                    db.collection("users").document(uid).set(userProfile)
-                        .addOnSuccessListener {
-                            onSuccess(userProfile)
-                        }
-                        .addOnFailureListener { e ->
-                            onFailure(e)
-                        }
+                    // We NO LONGER save to Firestore here.
+                    // The document will be created in saveOnboardingData at the end of onboarding.
+                    onSuccess(skeletonUser)
                 } else {
-                    onFailure(task.exception ?: Exception("Unknown exception."))
+                    onFailure(task.exception ?: Exception("Could not create authentication account."))
                 }
             }
     }
@@ -121,11 +113,12 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                                     return@addOnSuccessListener
                                 }
                             }
-                            // Fallback if no extended profile exists
-                            onSuccess(User(uid = uid, email = email), false)
+                            // Fallback if no extended profile exists -> They need onboarding
+                            onSuccess(User(uid = uid, email = email), true)
                         }
                         .addOnFailureListener {
-                            onSuccess(User(uid = uid, email = email), false)
+                            // If we can't check, play it safe and assume they might need onboarding
+                            onSuccess(User(uid = uid, email = email), true)
                         }
                 } else {
                     onFailure(task.exception ?: Exception("Unknown exception."))
@@ -173,14 +166,12 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                             }
                         }
 
-                        val newProfile = fallbackUser
-                        email = newProfile.email
-                        fullName = newProfile.fullName
-
-                        db.collection("users").document(uid).set(newProfile)
-                            .addOnSuccessListener { onSuccess(newProfile, true) }
-                            // Do not block login on profile write issues.
-                            .addOnFailureListener { onSuccess(fallbackUser, true) }
+                        // For new Google users, we set the skeleton data in the ViewModel state
+                        // but DO NOT create the Firestore document yet.
+                        email = fallbackUser.email
+                        fullName = fallbackUser.fullName
+                        
+                        onSuccess(fallbackUser, true)
                     }
                     .addOnFailureListener {
                         onSuccess(fallbackUser, true)
@@ -189,20 +180,27 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
     }
 
     override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
-        val uid = auth.currentUser?.uid
-        if (uid.isNullOrBlank()) {
-            onFailure(Exception("Usuario no autenticado"))
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            onFailure(Exception("User not authenticated"))
             return
         }
 
-        val updates = mapOf(
-            "program" to program,
-            "semester" to (semester.toIntOrNull() ?: 0),
-            "mainSport" to mainSport
+        val uid = currentUser.uid
+        val fullProfile = User(
+            uid = uid,
+            email = currentUser.email ?: email,
+            fullName = if (fullName.isNotBlank()) fullName else (currentUser.displayName ?: ""),
+            program = program,
+            semester = semester.toIntOrNull() ?: 0,
+            mainSport = mainSport,
+            role = "athlete",
+            createdAt = System.currentTimeMillis()
         )
 
+        // We use .set() instead of .update() because the document might not exist yet
         db.collection("users").document(uid)
-            .update(updates)
+            .set(fullProfile)
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { e -> onFailure(e) }
     }
@@ -225,10 +223,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                             return@addOnSuccessListener
                         }
                     }
-                    onSuccess(true, true) // if document missing, they need onboarding
+                    // Document does NOT exist -> User is new to the USPORTS platform
+                    onSuccess(true, true)
                 }
                 .addOnFailureListener {
-                    onSuccess(true, false) // fallback, avoid locking them out completely
+                    onSuccess(true, true) // if error, assume they need onboarding to be safe
                 }
         } else {
             onSuccess(false, false)
