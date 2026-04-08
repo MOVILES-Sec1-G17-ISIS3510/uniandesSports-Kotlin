@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -37,10 +38,26 @@ val skillLevels = listOf("Beginner", "Intermediate", "Advanced")
 fun BookClassScreen(
     profesorId: String,
     viewModel: BookClassViewModel = viewModel(),
+    authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = viewModel(),
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigateBack: () -> Unit = {},
     onOpenProfile: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    var userUid by remember { mutableStateOf("") }
+    var userName by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) {
+        authViewModel.getUser(
+            onSuccess = { user -> 
+                userUid = user.uid
+                userName = user.fullName.ifBlank { user.email.split("@")[0] }
+            },
+            onFailure = { /* Not logged in */ }
+        )
+    }
     val selectedSport = viewModel.selectedSport
     val selectedSkillLevel = viewModel.selectedSkillLevel
     val preferredSchedule = viewModel.preferredSchedule
@@ -289,6 +306,11 @@ fun BookClassScreen(
                 }
                 Button(
                     onClick = { 
+                        if (userUid.isBlank()) {
+                            android.widget.Toast.makeText(context, "Please sign in to book", android.widget.Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        
                         // Analytics Engine: BQ3 (Most scheduled sport)
                         logViewModel.log(
                             screen = "BookClassScreen",
@@ -301,15 +323,29 @@ fun BookClassScreen(
                         // Analytics Engine: BQ5 (Persist User Property for Time Elapsed query)
                         logViewModel.setUserProperty("last_coaching_date", System.currentTimeMillis().toString())
 
-                        viewModel.submitBooking(profesorId) {
-                            onNavigateBack()
-                        }
+                        viewModel.submitBooking(
+                            profesorId = profesorId,
+                            studentId = userUid,
+                            studentName = userName,
+                            onSuccess = {
+                                android.widget.Toast.makeText(context, "Request sent to coaches!", android.widget.Toast.LENGTH_LONG).show()
+                                onNavigateBack()
+                            },
+                            onError = { error ->
+                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        )
                     },
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                    enabled = !viewModel.isSubmitting
                 ) {
-                    Text("Submit Request", fontWeight = FontWeight.Bold)
+                    if (viewModel.isSubmitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Submit Request", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
