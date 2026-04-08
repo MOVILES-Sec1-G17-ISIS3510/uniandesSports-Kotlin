@@ -23,6 +23,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.ui.components.SportIconBox
 import com.uniandes.sport.ui.theme.ArchivoFamily
+import com.uniandes.sport.models.RunSession
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
+import java.util.Calendar
 
 @Composable
 fun StatCard(
@@ -462,6 +470,138 @@ fun DailyStepChallenge(
                Text("Goal: $goal", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+@Composable
+fun CoachInsightCard(feedback: String) {
+    val cardColor = MaterialTheme.colorScheme.primary
+    val contentColor = MaterialTheme.colorScheme.onPrimary
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(28.dp),
+                spotColor = cardColor.copy(alpha = 0.4f)
+            ),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(contentColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Psychology, null, tint = contentColor, modifier = Modifier.size(24.dp))
+                }
+                
+                Spacer(Modifier.width(16.dp))
+                
+                Column {
+                    Text(
+                        "COACH'S INSIGHT",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp,
+                            color = contentColor.copy(alpha = 0.8f)
+                        )
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = feedback.take(120) + if (feedback.length > 120) "..." else "",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecentRunWidget(run: RunSession, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.DirectionsRun, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(28.dp))
+            }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "LAST RUN",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                )
+                Text(
+                    "${String.format("%.2f", run.distanceKm)} KM",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        fontFamily = ArchivoFamily
+                    )
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.History, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        " ${run.pace} min/km",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+fun getDynamicGreeting(): String {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..11 -> "GOOD MORNING"
+        in 12..17 -> "GOOD AFTERNOON"
+        in 18..21 -> "GOOD EVENING"
+        else -> "HELLO"
     }
 }
 

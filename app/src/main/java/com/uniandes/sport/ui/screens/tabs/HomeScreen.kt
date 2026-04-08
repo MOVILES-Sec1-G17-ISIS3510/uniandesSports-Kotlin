@@ -23,14 +23,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.Reto
+import com.uniandes.sport.models.RunSession
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel
 import com.uniandes.sport.viewmodels.play.FirestorePlayViewModel
 import com.uniandes.sport.viewmodels.booking.BookClassViewModel
+import com.uniandes.sport.viewmodels.running.FirestoreRunningViewModel
 import com.uniandes.sport.ui.components.getSportAccentColor
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
@@ -52,7 +57,8 @@ fun HomeScreen(
     retosViewModel: FirestoreRetosViewModel = viewModel(),
     playViewModel: FirestorePlayViewModel = viewModel(),
     bookingViewModel: BookClassViewModel = viewModel(),
-    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel()
+    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
+    runningViewModel: FirestoreRunningViewModel = viewModel()
 ) {
     val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
     var userName by remember { mutableStateOf("User") }
@@ -63,6 +69,10 @@ fun HomeScreen(
     val activeRetos by retosViewModel.activeChallenges.collectAsState()
     val allRetos by retosViewModel.retos.collectAsState()
     val userBookings by bookingViewModel.userBookings.collectAsState()
+    val pastRuns by runningViewModel.pastRuns.collectAsState()
+    
+    val lastRun = pastRuns.firstOrNull()
+    val lastCoachFeedback = lastRun?.aiFeedback ?: "Start your first run to get personalized tips from your AI Coach!"
     
     // ViewModels Loading States
     val playLoading by playViewModel.isLoading.collectAsState()
@@ -97,6 +107,7 @@ fun HomeScreen(
             playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
             bookingViewModel.fetchUserBookings(currentUserId)
+            runningViewModel.fetchPastRuns()
         }
     )
 
@@ -185,6 +196,8 @@ fun HomeScreen(
         } else {
             stepViewModel.startTracking()
         }
+        
+        runningViewModel.fetchPastRuns()
     }
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -198,7 +211,7 @@ fun HomeScreen(
             item {
                 Column {
                     Text(
-                        text = "WELCOME, ${userName.uppercase()}",
+                        text = "${getDynamicGreeting()}, ${userName.uppercase()}",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontFamily = ArchivoFamily,
@@ -214,6 +227,11 @@ fun HomeScreen(
                         letterSpacing = 1.sp
                     )
                 }
+            }
+
+            // Coach Insight Widget
+            item {
+                CoachInsightCard(feedback = lastCoachFeedback)
             }
 
             // Stats
@@ -237,6 +255,8 @@ fun HomeScreen(
                     }
                 }
             }
+
+            // Daily Step Challenge
 
             // Daily Step Challenge
             item {
@@ -293,6 +313,21 @@ fun HomeScreen(
                             HomeChallengeCard(title = reto.title, daysRemaining = calculateDaysRemaining(reto.endDate), progress = userProgress, participants = reto.participantsCount.toInt())
                         }
                     }
+                }
+            }
+
+            item {
+                SectionHeader(title = "Recent Activity", onViewAll = { onNavigate("history") })
+                lastRun?.let { run ->
+                    RecentRunWidget(run = run, onClick = { onNavigate("history") })
+                } ?: run {
+                    EmptyStateWideCard(
+                        title = "No recent runs",
+                        description = "Start your running journey today!",
+                        icon = Icons.Default.DirectionsRun,
+                        actionLabel = "Start Run",
+                        onClick = { onNavigate("live_run") }
+                    )
                 }
             }
 
