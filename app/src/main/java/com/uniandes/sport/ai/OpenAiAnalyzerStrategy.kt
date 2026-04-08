@@ -43,7 +43,8 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
                 messages = listOf(
                     OpenAiMessage(role = "system", content = "You are a helpful AI assistant that analyzes sports activities and outputs JSON strictly."),
                     OpenAiMessage(role = "user", content = prompt)
-                )
+                ),
+                responseFormat = OpenAiResponseFormat(type = "json_object")
             )
 
             val authHeader = "Bearer ${AiConstants.OPENAI_API_KEY}"
@@ -53,7 +54,7 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
                 val openAiResponse = response.body()
                 
                 // Extraer el String JSON de la respuesta de OpeanAI
-                val jsonText = openAiResponse?.choices?.firstOrNull()?.message?.content ?: "{}"
+                val jsonText = openAiResponse?.choices?.firstOrNull()?.message?.content?.toString() ?: "{}"
                 Log.d("OpenAiStrategy", "Raw JSON string from AI: $jsonText")
 
                 // Parsear el JSON
@@ -72,6 +73,45 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
         } catch (e: Exception) {
             Log.e("OpenAiStrategy", "Exception in API", e)
             return AiReviewAnalysisResult(success = false, errorMessage = e.message)
+        }
+    }
+
+    override suspend fun analyzePose(base64Image: String): String? {
+        try {
+            val request = OpenAiRequest(
+                model = "gpt-4o",
+                messages = listOf(
+                    OpenAiMessage(
+                        role = "user",
+                        content = listOf(
+                            OpenAiContent(type = "text", text = "You are a professional Calisthenics Coach. Analyze this image immediately and provide direct technical feedback on the athlete's form. Focus on the specific biomechanical details visible in the photo. Highlight key strengths and provide actionable points for improvement. DO NOT use introductory phrases like \"Certainly\" or \"In this image\". Start directly with the coaching feedback. All feedback must be in ENGLISH."),
+                            OpenAiContent(
+                                type = "image_url",
+                                imageUrl = OpenAiImageUrl(
+                                    url = "data:image/jpeg;base64,$base64Image",
+                                    detail = "low"
+                                )
+                            )
+                        )
+                    )
+                ),
+                maxTokens = 500,
+                responseFormat = null
+            )
+
+            val authHeader = "Bearer ${AiConstants.OPENAI_API_KEY}"
+            val response = api.analyzeReviewWithOpenAi(authHeader, request)
+
+            return if (response.isSuccessful) {
+                response.body()?.choices?.firstOrNull()?.message?.content?.toString()
+            } else {
+                val error = response.errorBody()?.string()
+                Log.e("OpenAiStrategy", "Pose Analysis Error: $error")
+                "Error al analizar la pose. Revisa tu conexión o créditos de OpenAI."
+            }
+        } catch (e: Exception) {
+            Log.e("OpenAiStrategy", "Exception in analyzePose", e)
+            return "Error: ${e.message}"
         }
     }
 

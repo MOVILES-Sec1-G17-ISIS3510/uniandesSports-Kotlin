@@ -28,6 +28,7 @@ fun EventDetailModal(
     viewModel: PlayViewModelInterface,
     onEditClick: (() -> Unit)? = null,
     onReviewClick: (() -> Unit)? = null,
+    onPoseAnalysisClick: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val event = uiModel.rawEvent
@@ -242,6 +243,23 @@ fun EventDetailModal(
                                 Icon(Icons.Default.Edit, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("EDIT EVENT", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // CALISTHENICS VISION AI BUTTON
+                        if (event.sport.lowercase() == "calisthenics" || event.sport.lowercase() == "calistenia") {
+                            Button(
+                                onClick = { onPoseAnalysisClick?.invoke() },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("POSE FEEDBACK (AI)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             }
                         }
 

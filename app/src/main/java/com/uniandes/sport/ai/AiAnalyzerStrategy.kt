@@ -13,6 +13,8 @@ interface AiAnalyzerStrategy {
      * @return AiReviewAnalysisResult que contiene el mapeo de retoId -> porcentajeAvanzado (double 0.0 a 1.0 o etc)
      */
     suspend fun analyzeReview(reviewText: String, activeChallenges: List<Reto>): AiReviewAnalysisResult
+
+    suspend fun analyzePose(base64Image: String): String?
 }
 
 /**
