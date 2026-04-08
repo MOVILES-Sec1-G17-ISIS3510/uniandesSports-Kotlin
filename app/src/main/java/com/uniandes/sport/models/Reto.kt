@@ -10,8 +10,13 @@ interface ProgressStrategy {
 }
 
 class DefaultProgressStrategy : ProgressStrategy {
+    /**
+     * Retorna el porcentaje como entero (0-100).
+     * Nota: Hemos migrado de una escala 0.0-1.0 a una escala 0-100 para mejorar 
+     * la legibilidad en la consola de Firebase.
+     */
     override fun getPercent(progress: Double): Int {
-        return (progress * 100).toInt()
+        return progress.toInt()
     }
 }
 
@@ -29,6 +34,10 @@ data class Reto(
     var participants: List<String> = emptyList(),
     var participantsCount: Long = 0, // asemos k sea long para k sea igual al de firestore
     var progress: Double = 0.0, // el global o promedio
+    /**
+     * Mapa de progreso por usuario.
+     * IMPORTANTE: Los valores se almacenan en una escala de 0.0 a 100.0 (donde 100.0 es el 100%).
+     */
     var progressByUser: Map<String, Double> = emptyMap(),
     
     // fechas de verdad de firebase

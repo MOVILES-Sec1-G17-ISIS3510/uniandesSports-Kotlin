@@ -38,14 +38,14 @@ fun HistorialScreen(
     val retos by viewModel.retos.collectAsState()
     val finishedEvents by playViewModel.finishedEvents.collectAsState()
     val joinedEventIds by playViewModel.joinedEventIds.collectAsState()
-    val myReviewsByEventId by playViewModel.myReviewsByEventId.collectAsState()
+    val myTracksByEventId by playViewModel.myTracksByEventId.collectAsState()
     val uid = Firebase.auth.currentUser?.uid ?: ""
     
     // Filter for challenges I participated in and are finished or completed
     val finishedChallenges = retos.filter { reto ->
         val isParticipant = reto.participants.contains(uid)
         val isExpired = (reto.endDate?.toDate()?.time ?: 0) < Date().time
-        val isCompleted = (reto.progressByUser[uid] ?: 0.0) >= 1.0
+        val isCompleted = (reto.progressByUser[uid] ?: 0.0) >= 100.0
         isParticipant && (isExpired || isCompleted)
     }
 
@@ -54,7 +54,9 @@ fun HistorialScreen(
         .sortedByDescending { it.scheduledAt }
 
     LaunchedEffect(finishedOpenMatches) {
-        playViewModel.fetchMyReviewsForEvents(finishedOpenMatches.map { it.id })
+        if (finishedOpenMatches.isNotEmpty()) {
+            playViewModel.fetchMyTracksForEvents(finishedOpenMatches.map { it.id })
+        }
     }
 
     Scaffold(
@@ -97,7 +99,7 @@ fun HistorialScreen(
                     items(finishedOpenMatches, key = { it.id }) { event ->
                         OpenMatchHistoryCard(
                             event = event,
-                            review = myReviewsByEventId[event.id]?.text
+                            trackText = myTracksByEventId[event.id]?.text
                         )
                     }
 
@@ -126,7 +128,7 @@ fun HistorialScreen(
 }
 
 @Composable
-private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review: String?) {
+private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, trackText: String?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -154,10 +156,10 @@ private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review:
                 ) {
                     Icon(Icons.Default.RateReview, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    val message = if (review.isNullOrBlank()) {
-                        "No review saved yet"
+                    val message = if (trackText.isNullOrBlank()) {
+                        "No activity track saved"
                     } else {
-                        review
+                        trackText
                     }
                     Text(message, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -168,7 +170,7 @@ private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review:
 
 @Composable
 fun HistoryCard(reto: com.uniandes.sport.models.Reto, uid: String) {
-    val progress = (reto.progressByUser[uid] ?: 0.0) * 100
+    val progress = reto.progressByUser[uid] ?: 0.0
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

@@ -7,7 +7,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.MatchMember
-import com.uniandes.sport.models.OpenMatchReview
+import com.uniandes.sport.models.Track
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
 import com.uniandes.sport.patterns.event.MultiSportFilterStrategy
@@ -42,8 +42,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     private val _joinedEventIds = MutableStateFlow<Set<String>>(emptySet())
     override val joinedEventIds: StateFlow<Set<String>> = _joinedEventIds.asStateFlow()
 
-    private val _myReviewsByEventId = MutableStateFlow<Map<String, OpenMatchReview>>(emptyMap())
-    override val myReviewsByEventId: StateFlow<Map<String, OpenMatchReview>> = _myReviewsByEventId.asStateFlow()
+    private val _myTracksByEventId = MutableStateFlow<Map<String, Track>>(emptyMap())
+    override val myTracksByEventId: StateFlow<Map<String, Track>> = _myTracksByEventId.asStateFlow()
 
     private var joinedEventsListener: ListenerRegistration? = null
 
@@ -104,40 +104,40 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
     }
 
-    override fun fetchMyReviewsForEvents(eventIds: List<String>) {
+    override fun fetchMyTracksForEvents(eventIds: List<String>) {
         val uid = currentUserId ?: run {
-            _myReviewsByEventId.value = emptyMap()
+            _myTracksByEventId.value = emptyMap()
             return
         }
 
         val distinctIds = eventIds.distinct()
         if (distinctIds.isEmpty()) {
-            _myReviewsByEventId.value = emptyMap()
+            _myTracksByEventId.value = emptyMap()
             return
         }
 
         viewModelScope.launch {
-            val result = mutableMapOf<String, OpenMatchReview>()
+            val result = mutableMapOf<String, Track>()
             distinctIds.forEach { eventId ->
                 try {
                     val doc = db.collection("events")
                         .document(eventId)
-                        .collection("reviews")
+                        .collection("tracks")
                         .document(uid)
                         .get()
                         .await()
 
                     if (doc.exists()) {
-                        val review = doc.toObject(OpenMatchReview::class.java)
-                        if (review != null) {
-                            result[eventId] = review
+                        val track = doc.toObject(Track::class.java)
+                        if (track != null) {
+                            result[eventId] = track
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("PlayVM", "Error loading review for event $eventId", e)
+                    Log.e("PlayVM", "Error loading track for event $eventId", e)
                 }
             }
-            _myReviewsByEventId.value = result
+            _myTracksByEventId.value = result
         }
     }
 
@@ -224,15 +224,27 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             .sortedByDescending { it.scheduledAt }
     }
 
-    override fun submitReview(eventId: String, reviewText: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        val text = reviewText.trim()
-        if (text.isBlank()) {
-            onError(IllegalArgumentException("Review text cannot be empty"))
-            return
-        }
-        if (rating !in 1..5) {
-            onError(IllegalArgumentException("Rating must be between 1 and 5"))
-            return
+    override fun submitTrack(
+        eventId: String, 
+        text: String, 
+        rating: Int, 
+        participated: Boolean, 
+        source: String, 
+        onSuccess: () -> Unit, 
+        onError: (Exception) -> Unit
+    ) {
+        val cleanText = text.trim()
+        
+        // Si participó, el texto y rating son obligatorios para la IA
+        if (participated) {
+            if (cleanText.isBlank()) {
+                onError(IllegalArgumentException("Please describe your activity to track progress"))
+                return
+            }
+            if (rating !in 1..5) {
+                onError(IllegalArgumentException("Rating must be between 1 and 5"))
+                return
+            }
         }
 
         val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
@@ -241,40 +253,43 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             onError(IllegalStateException("User not authenticated"))
             return
         }
+
         val payload = mapOf(
             "eventId" to eventId,
             "userId" to uid,
             "userEmail" to (user?.email ?: ""),
-            "text" to text,
+            "text" to cleanText,
             "rating" to rating,
-            "attendanceByUserId" to attendanceByUserId,
+            "participated" to participated,
             "source" to source,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
-        val reviewRef = db.collection("events")
+        val trackRef = db.collection("events")
             .document(eventId)
-            .collection("reviews")
+            .collection("tracks")
             .document(uid)
 
         db.runTransaction { transaction ->
-            val existing = transaction.get(reviewRef)
+            val existing = transaction.get(trackRef)
             val data = payload.toMutableMap()
             if (!existing.exists()) {
                 data["createdAt"] = com.google.firebase.firestore.FieldValue.serverTimestamp()
             }
-            transaction.set(reviewRef, data, com.google.firebase.firestore.SetOptions.merge())
+            transaction.set(trackRef, data, com.google.firebase.firestore.SetOptions.merge())
         }
             .addOnSuccessListener {
-                _myReviewsByEventId.value = _myReviewsByEventId.value + (
-                    eventId to OpenMatchReview(
+                val existingAnalysis = _myTracksByEventId.value[eventId]?.aiAnalysis ?: emptyMap()
+                _myTracksByEventId.value = _myTracksByEventId.value + (
+                    eventId to Track(
                         eventId = eventId,
                         userId = uid,
                         userEmail = user.email ?: "",
-                        text = text,
+                        text = cleanText,
                         rating = rating,
-                        attendanceByUserId = attendanceByUserId,
-                        source = source
+                        participated = participated,
+                        source = source,
+                        aiAnalysis = existingAnalysis // Preservamos el pasado para el Sistema de Deltas
                     )
                 )
                 onSuccess()
@@ -485,6 +500,31 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
             onSuccess()
         }.addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
+    }
+
+    override fun updateTrackAiAnalysis(eventId: String, userId: String, analysis: Map<String, Double>) {
+        if (eventId.isBlank() || userId.isBlank()) return
+        
+        val trackRef = db.collection("events")
+            .document(eventId)
+            .collection("tracks")
+            .document(userId)
+
+        trackRef.update("aiAnalysis", analysis)
+            .addOnSuccessListener {
+                Log.d("PlayVM", "AI Analysis updated for event $eventId and user $userId")
+                
+                // Actualizar el estado local si es necesario
+                val currentTracks = _myTracksByEventId.value.toMutableMap()
+                val existing = currentTracks[eventId]
+                if (existing != null) {
+                    currentTracks[eventId] = existing.copy(aiAnalysis = analysis)
+                    _myTracksByEventId.value = currentTracks
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("PlayVM", "Error updating AI Analysis for event $eventId", e)
+            }
     }
 
     override fun onCleared() {

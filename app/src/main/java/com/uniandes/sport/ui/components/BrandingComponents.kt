@@ -78,7 +78,7 @@ fun SportIconBox(sport: String, size: Dp, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(CircleShape)
             .background(sportColor.copy(alpha = 0.1f)),
         contentAlignment = Alignment.Center
     ) {

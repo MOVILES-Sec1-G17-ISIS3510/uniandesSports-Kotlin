@@ -197,4 +197,78 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                 _creationStatus.value = "ERROR: ${e.message}"
             }
     }
+
+    override fun syncChallengeProgress(
+        retoId: String,
+        oldProgress: Double,
+        newProgress: Double,
+        trackText: String,
+        eventId: String
+    ) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: run {
+            Log.e("RetosVM", "Sync failed: No user authenticated")
+            return
+        }
+        val docRef = db.collection("challenges").document(retoId)
+        val delta = newProgress - oldProgress
+        
+        Log.d("RetosVM", "Starting sync for $retoId. Delta: $delta (New: $newProgress, Old: $oldProgress)")
+
+        if (Math.abs(delta) < 0.01) {
+            Log.d("RetosVM", "Sync skipped: delta is too small ($delta)")
+            return
+        }
+        
+        db.runTransaction { transaction ->
+            Log.d("RetosVM", "Transaction started for challenge $retoId")
+            val snapshot = transaction.get(docRef)
+            
+            if (!snapshot.exists()) {
+                Log.e("RetosVM", "Transaction error: Challenge $retoId does not exist")
+                return@runTransaction
+            }
+
+            val rawParticipants = snapshot.get("participants") as? List<*> ?: emptyList<Any>()
+            val participants = rawParticipants.map { it.toString().trim() }
+            val cleanUid = uid.trim()
+            
+            Log.d("RetosVM", "Checking participant: '$cleanUid' among $participants")
+
+            if (participants.contains(cleanUid)) {
+                val progressByUserRaw = snapshot.get("progressByUser") as? Map<String, Any> ?: emptyMap()
+                val updatedMap = progressByUserRaw.toMutableMap()
+                
+                val currentTotal = (updatedMap[cleanUid] as? Number)?.toDouble() ?: 0.0
+                val newTotal = (currentTotal + delta).coerceIn(0.0, 100.0)
+                
+                Log.d("RetosVM", "Syncing match found! Account: $cleanUid. OldTotal: $currentTotal + Delta: $delta = NewTotal: $newTotal")
+
+                updatedMap[cleanUid] = newTotal
+                
+                // Actualización agresiva: Sobreescribimos el campo del mapa completo
+                transaction.update(docRef, "progressByUser", updatedMap)
+                transaction.update(docRef, "updatedAt", com.google.firebase.firestore.FieldValue.serverTimestamp())
+                
+                // Log de auditoría
+                val trackLogRef = docRef.collection("tracks").document()
+                val trackLog = mapOf(
+                    "userId" to cleanUid,
+                    "eventId" to eventId,
+                    "delta" to delta,
+                    "previousValue" to oldProgress,
+                    "newValue" to newProgress,
+                    "trackText" to trackText,
+                    "type" to "SYNC_UPDATE",
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+                transaction.set(trackLogRef, trackLog)
+            } else {
+                Log.w("RetosVM", "User '$cleanUid' NOT FOUND in participants of $retoId. Sync aborted. Participants were: $participants")
+            }
+        }.addOnSuccessListener {
+            Log.i("RetosVM", "Sincronización finalizada con éxito para $retoId")
+        }.addOnFailureListener { e ->
+            Log.e("RetosVM", "Error fatal en transacción para $retoId: ${e.message}", e)
+        }
+    }
 }
