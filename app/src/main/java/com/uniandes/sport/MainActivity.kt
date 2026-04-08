@@ -116,6 +116,20 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate(Routes.MAIN_TABS) {
                                     popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
                                 }
+                            },
+                            onBackToLogin = {
+                                authViewModel.logout(
+                                    onSuccess = {
+                                        navController.navigate(Routes.AUTH_SCREEN) {
+                                            popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
+                                        }
+                                    },
+                                    onFailure = {
+                                        navController.navigate(Routes.AUTH_SCREEN) {
+                                            popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
+                                        }
+                                    }
+                                )
                             }
                         )
                     }

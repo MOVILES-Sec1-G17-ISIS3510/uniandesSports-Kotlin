@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,12 +27,17 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 fun OnboardingScreen(
     authViewModel: AuthViewModelInterface,
     logViewModel: LogViewModelInterface,
-    onFinishOnboarding: () -> Unit
+    onFinishOnboarding: () -> Unit,
+    onBackToLogin: () -> Unit
 ) {
     val screenName = "OnboardingScreen"
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+
+    BackHandler {
+        onBackToLogin()
+    }
 
     if (showDialog) {
         AlertDialog(
@@ -157,6 +163,19 @@ fun OnboardingScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TextButton(
+                        onClick = { onBackToLogin() },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Back to Login",
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
