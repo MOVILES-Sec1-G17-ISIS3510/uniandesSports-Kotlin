@@ -41,5 +41,5 @@ interface RetosViewModelInterface {
     
     // para actualizar progreso (analizado por IA)
     // para actualizar progreso de forma sincronizada (IA calcula el nuevo, restamos el viejo)
-    fun syncChallengeProgress(retoId: String, oldProgress: Double, newProgress: Double, reviewText: String, eventId: String)
+    fun syncChallengeProgress(retoId: String, oldProgress: Double, newProgress: Double, trackText: String, eventId: String)
 }

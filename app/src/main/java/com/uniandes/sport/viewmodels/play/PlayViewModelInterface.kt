@@ -1,10 +1,13 @@
 package com.uniandes.sport.viewmodels.play
 
-import com.uniandes.sport.models.OpenMatchReview
+import com.uniandes.sport.models.Track
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.MatchMember
 import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * Interface del ViewModel para gestionar la lógica de "Play" (Partidos y Seguimiento).
+ */
 interface PlayViewModelInterface {
     val events: StateFlow<List<Event>>
     val inProgressEvents: StateFlow<List<Event>>
@@ -13,14 +16,17 @@ interface PlayViewModelInterface {
     val members: StateFlow<List<com.uniandes.sport.models.MatchMember>>
     val selectedSports: StateFlow<Set<String>>
     val joinedEventIds: StateFlow<Set<String>>
-    val myReviewsByEventId: StateFlow<Map<String, OpenMatchReview>>
+    val myTracksByEventId: StateFlow<Map<String, Track>> // Antes: myReviewsByEventId
     val currentUserId: String?
     
     fun toggleSportFilter(sport: String)
     fun clearSportFilters()
     fun fetchEvents()
     fun refreshEvents()
-    fun fetchMyReviewsForEvents(eventIds: List<String>)
+    
+    /** Busca los registros de progreso (Tracks) del usuario para una lista de eventos */
+    fun fetchMyTracksForEvents(eventIds: List<String>)
+    
     fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
     fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
@@ -30,7 +36,17 @@ interface PlayViewModelInterface {
     fun updateEvent(eventId: String, title: String, description: String, location: String, sport: String, scheduledAt: java.util.Date, finishedAt: java.util.Date?, skillLevel: String, maxParticipants: Long, onSuccess: () -> Unit, onError: (Exception) -> Unit)
     fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
 
-    fun submitReview(eventId: String, reviewText: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String = "text", onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
+    /** Envía el registro de progreso (Track) de una sesión */
+    fun submitTrack(
+        eventId: String, 
+        text: String, 
+        rating: Int, 
+        participated: Boolean, 
+        source: String = "text", 
+        onSuccess: () -> Unit = {}, 
+        onError: (Exception) -> Unit = {}
+    )
     
-    fun updateReviewAiAnalysis(eventId: String, userId: String, analysis: Map<String, Double>)
+    /** Actualiza el análisis de IA de un registro de progreso ya existente */
+    fun updateTrackAiAnalysis(eventId: String, userId: String, analysis: Map<String, Double>)
 }

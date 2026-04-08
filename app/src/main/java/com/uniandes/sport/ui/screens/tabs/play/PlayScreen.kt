@@ -57,7 +57,7 @@ fun PlayScreen(
     val events by viewModel.events.collectAsState()
     val inProgressEvents by viewModel.inProgressEvents.collectAsState()
     val finishedEvents by viewModel.finishedEvents.collectAsState()
-    val myReviewsByEventId by viewModel.myReviewsByEventId.collectAsState()
+    val myTracksByEventId by viewModel.myTracksByEventId.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSports by viewModel.selectedSports.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
@@ -82,10 +82,10 @@ fun PlayScreen(
     var isFabExpanded by remember { mutableStateOf(false) }
     
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
-    var reviewEvent by remember { mutableStateOf<Event?>(null) }
-    var aiReviewTextToAnalyze by remember { mutableStateOf<String?>(null) }
-    var aiReviewEventId by remember { mutableStateOf<String?>(null) }
-    var aiReviewOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var trackEvent by remember { mutableStateOf<Event?>(null) }
+    var aiTrackTextToAnalyze by remember { mutableStateOf<String?>(null) }
+    var aiTrackEventId by remember { mutableStateOf<String?>(null) }
+    var aiTrackOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -151,7 +151,7 @@ fun PlayScreen(
 
     LaunchedEffect(inProgressEvents, finishedEvents) {
         val ids = (inProgressEvents + finishedEvents).map { it.id }.distinct()
-        viewModel.fetchMyReviewsForEvents(ids)
+        viewModel.fetchMyTracksForEvents(ids)
     }
 
     if (selectedEventUIModel != null) {
@@ -159,7 +159,7 @@ fun PlayScreen(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
             onEditClick = { editingEvent = selectedEventUIModel?.rawEvent },
-            onReviewClick = { reviewEvent = selectedEventUIModel?.rawEvent },
+            onReviewClick = { trackEvent = selectedEventUIModel?.rawEvent },
             onDismiss = {
                 selectedEventUIModel = null
                 viewModel.refreshEvents()
@@ -167,30 +167,35 @@ fun PlayScreen(
         )
     }
 
-    val reviewEventLocal = reviewEvent
-    if (reviewEventLocal != null) {
-        val existingReview = myReviewsByEventId[reviewEventLocal.id]
-        ReviewDialog(
-            event = reviewEventLocal,
-            existingReview = existingReview,
+    val trackEventLocal = trackEvent
+    if (trackEventLocal != null) {
+        val existingTrack = myTracksByEventId[trackEventLocal.id]
+        TrackDialog(
+            event = trackEventLocal,
+            existingTrack = existingTrack,
             viewModel = viewModel,
-            onDismiss = { reviewEvent = null },
-            onSubmit = { text, rating, attendanceByUserId, source, onDone ->
-                viewModel.submitReview(
-                    eventId = reviewEventLocal.id,
-                    reviewText = text,
+            onDismiss = { trackEvent = null },
+            onSubmit = { text, rating, participated, source, onDone ->
+                viewModel.submitTrack(
+                    eventId = trackEventLocal.id,
+                    text = text,
                     rating = rating,
-                    attendanceByUserId = attendanceByUserId,
+                    participated = participated,
                     source = source,
                     onSuccess = {
-                        android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
-                        aiReviewEventId = reviewEventLocal.id
-                        aiReviewTextToAnalyze = text
-                        aiReviewOldAnalysis = existingReview?.aiAnalysis ?: emptyMap()
+                        android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
+                        if (participated && text.isNotBlank()) {
+                            aiTrackEventId = trackEventLocal.id
+                            aiTrackTextToAnalyze = text
+                            aiTrackOldAnalysis = existingTrack?.aiAnalysis ?: emptyMap()
+                        } else if (!participated && existingTrack?.aiAnalysis?.isNotEmpty() == true) {
+                            // Si marcó que NO asistió pero antes tenía progreso, reseteamos el progreso en los retos
+                            aiViewModel.resetProgressForEvent(trackEventLocal.id, existingTrack.aiAnalysis)
+                        }
                         onDone(true)
                     },
                     onError = { e ->
-                        android.widget.Toast.makeText(context, "Could not save review: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "Could not save track: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                         onDone(false)
                     }
                 )
@@ -198,17 +203,17 @@ fun PlayScreen(
         )
     }
 
-    aiReviewTextToAnalyze?.let { text ->
-        val eventId = aiReviewEventId ?: ""
+    aiTrackTextToAnalyze?.let { text ->
+        val eventId = aiTrackEventId ?: ""
         com.uniandes.sport.ui.screens.AiReviewDialog(
-            reviewText = text,
+            trackText = text,
             eventId = eventId,
             viewModel = aiViewModel,
-            oldAnalysis = aiReviewOldAnalysis,
+            oldAnalysis = aiTrackOldAnalysis,
             onDismiss = { 
-                aiReviewTextToAnalyze = null
-                aiReviewEventId = null
-                aiReviewOldAnalysis = emptyMap()
+                aiTrackTextToAnalyze = null
+                aiTrackEventId = null
+                aiTrackOldAnalysis = emptyMap()
             }
         )
     }
@@ -364,14 +369,14 @@ fun PlayScreen(
                             color = MaterialTheme.colorScheme.secondary,
                             onClick = { activeModal = PlayModalType.SEARCH }
                         )
-                        val pendingReviews = joinedFinishedEvents.count { !myReviewsByEventId.containsKey(it.id) }
+                        val pendingTracks = joinedFinishedEvents.count { !myTracksByEventId.containsKey(it.id) }
                         ActionCard(
                             modifier = Modifier.weight(1f),
                             title = "History",
-                            subtitle = if (pendingReviews > 0) "$pendingReviews pending reviews" else "View past play",
+                            subtitle = if (pendingTracks > 0) "$pendingTracks pending tracks" else "View past play",
                             icon = Icons.Default.History,
-                            badgeCount = if (pendingReviews > 0) pendingReviews else null,
-                            color = if (pendingReviews > 0) MaterialTheme.colorScheme.error else Color(0xFF012567),
+                            badgeCount = if (pendingTracks > 0) pendingTracks else null,
+                            color = if (pendingTracks > 0) MaterialTheme.colorScheme.error else Color(0xFF012567),
                             onClick = { activeModal = PlayModalType.HISTORY }
                         )
                     }
@@ -462,10 +467,10 @@ fun PlayScreen(
                                 FullWidthEventCard(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     badgeText = "FINISHED",
-                                    reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                                    reviewLabel = if (myTracksByEventId.containsKey(event.id)) "Edit track" else "Track session",
                                     onReviewClick = { 
                                         activeModal = null
-                                        reviewEvent = event 
+                                        trackEvent = event 
                                     },
                                     onClick = { 
                                         activeModal = null
@@ -917,41 +922,21 @@ fun EventCard(
 }
 
 @Composable
-private fun ReviewDialog(
+private fun TrackDialog(
     event: com.uniandes.sport.models.Event,
-    existingReview: com.uniandes.sport.models.OpenMatchReview?,
+    existingTrack: com.uniandes.sport.models.Track?,
     viewModel: PlayViewModelInterface,
     onDismiss: () -> Unit,
-    onSubmit: (text: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onDone: (Boolean) -> Unit) -> Unit
+    onSubmit: (text: String, rating: Int, participated: Boolean, source: String, onDone: (Boolean) -> Unit) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var reviewText by remember(existingReview?.text) { mutableStateOf(existingReview?.text.orEmpty()) }
-    var rating by remember(existingReview?.rating) { mutableIntStateOf(existingReview?.rating ?: 0) }
+    var trackText by remember(existingTrack?.text) { mutableStateOf(existingTrack?.text.orEmpty()) }
+    var rating by remember(existingTrack?.rating) { mutableIntStateOf(existingTrack?.rating ?: 0) }
+    var participated by remember(existingTrack?.participated) { mutableStateOf(existingTrack?.participated ?: true) }
     var submitting by remember { mutableStateOf(false) }
-    var inputSource by remember { mutableStateOf(existingReview?.source ?: "text") }
-    var members by remember { mutableStateOf<List<com.uniandes.sport.models.MatchMember>>(emptyList()) }
-    var loadingMembers by remember { mutableStateOf(true) }
-    val attendanceByUserId = remember { mutableStateMapOf<String, Boolean>() }
+    var inputSource by remember { mutableStateOf(existingTrack?.source ?: "text") }
+    
     val scrollState = rememberScrollState()
-
-    LaunchedEffect(event.id, existingReview?.attendanceByUserId) {
-        loadingMembers = true
-        viewModel.fetchEventMembersOnce(
-            eventId = event.id,
-            onSuccess = { list ->
-                members = list
-                attendanceByUserId.clear()
-                list.forEach { member ->
-                    attendanceByUserId[member.userId] = existingReview?.attendanceByUserId?.get(member.userId) ?: false
-                }
-                loadingMembers = false
-            },
-            onError = {
-                members = emptyList()
-                loadingMembers = false
-            }
-        )
-    }
 
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -962,7 +947,7 @@ private fun ReviewDialog(
                 ?.firstOrNull()
                 .orEmpty()
             if (spoken.isNotBlank()) {
-                reviewText = spoken
+                trackText = spoken
                 inputSource = "microphone"
             }
         }
@@ -973,7 +958,7 @@ private fun ReviewDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Event review",
+                    text = "Session Track",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black
                 )
@@ -990,155 +975,160 @@ private fun ReviewDialog(
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
                     .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Section 1: Participation (The Gatekeeper)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    color = if (participated) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = if (participated) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Rate the Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            (1..5).forEach { star ->
-                                FilledIconButton(
-                                    onClick = { rating = star },
-                                    modifier = Modifier.size(34.dp),
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                                        contentDescription = "Star $star",
-                                        tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (rating == 0) "Select" else "$rating/5",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "Did you participate?", 
+                                style = MaterialTheme.typography.titleSmall, 
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(
+                                if (participated) "I attended this session" else "I missed this session",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Your review", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            OutlinedButton(
-                                onClick = {
-                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
-                                    }
-                                    try {
-                                        speechLauncher.launch(intent)
-                                    } catch (_: Exception) {
-                                        android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Voice")
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = reviewText,
-                            onValueChange = {
-                                reviewText = it
-                                inputSource = "text"
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 4,
-                            maxLines = 7,
-                            placeholder = { Text("Tell us what happened in this Event") }
-                        )
-
-                        if (inputSource == "microphone") {
-                            AssistChip(onClick = {}, label = { Text("Voice input") })
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Attendance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            if (loadingMembers) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            }
-                        }
-
-                        if (!loadingMembers && members.isEmpty()) {
-                            Text("No members found for this Event", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        members.forEach { member ->
-                            val checked = attendanceByUserId[member.userId] == true
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    attendanceByUserId[member.userId] = !checked
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (checked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = checked,
-                                        onCheckedChange = { value -> attendanceByUserId[member.userId] = value }
-                                    )
-                                    Text(
-                                        text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (member.userId == viewModel.currentUserId) FontWeight.Bold else FontWeight.Medium
+                        Switch(
+                            checked = participated,
+                            onCheckedChange = { participated = it },
+                            thumbContent = if (participated) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize),
                                     )
                                 }
+                            } else null
+                        )
+                    }
+                }
+
+                if (participated) {
+                    // Section 2: Rating
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("Performance Rating", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                (1..5).forEach { star ->
+                                    FilledIconButton(
+                                        onClick = { rating = star },
+                                        modifier = Modifier.size(34.dp),
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                            contentDescription = "Star $star",
+                                            tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (rating == 0) "Select" else "$rating/5",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
+
+                    // Section 3: Activity Log
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Activity Log", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                OutlinedButton(
+                                    onClick = {
+                                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your activity")
+                                        }
+                                        try {
+                                            speechLauncher.launch(intent)
+                                        } catch (_: Exception) {
+                                            android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Voice")
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = trackText,
+                                onValueChange = {
+                                    trackText = it
+                                    inputSource = "text"
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 4,
+                                maxLines = 7,
+                                placeholder = { Text("What did you accomplish in this session?") }
+                            )
+
+                            if (inputSource == "microphone") {
+                                AssistChip(onClick = {}, label = { Text("Voice input") })
+                            }
+                        }
+                    }
+                } else {
+                    // Missed session message
+                    Text(
+                        "You've marked this session as missed. Your status will be saved, but no progress will be tracked for your challenges.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
-                enabled = reviewText.isNotBlank() && rating in 1..5 && !submitting,
+                enabled = (!participated || (trackText.isNotBlank() && rating in 1..5)) && !submitting,
                 onClick = {
                     submitting = true
-                    onSubmit(reviewText, rating, attendanceByUserId.toMap(), inputSource) { success ->
+                    onSubmit(trackText, rating, participated, inputSource) { success ->
                         submitting = false
                         if (success) onDismiss()
                     }
@@ -1148,17 +1138,16 @@ private fun ReviewDialog(
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(6.dp))
                 }
-                Text("Save")
+                Text(if (participated) "Save Activity" else "Save Status")
             }
         },
         dismissButton = {
-            TextButton(onClick = { if (!submitting) onDismiss() }) {
+            TextButton(enabled = !submitting, onClick = onDismiss) {
                 Text("Cancel")
             }
         }
     )
 }
-
 
 enum class PlayModalType { MY_SCHEDULE, SEARCH, HISTORY }
 

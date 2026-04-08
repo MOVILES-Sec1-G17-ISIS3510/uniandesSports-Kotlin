@@ -20,7 +20,7 @@ import com.uniandes.sport.viewmodels.retos.AiReviewViewModel
 
 @Composable
 fun AiReviewDialog(
-    reviewText: String,
+    trackText: String,
     eventId: String,
     viewModel: AiReviewViewModel,
     oldAnalysis: Map<String, Double> = emptyMap(),
@@ -28,9 +28,9 @@ fun AiReviewDialog(
 ) {
     val uiState by viewModel.uiState
 
-    LaunchedEffect(reviewText) {
-        if (uiState is AiReviewState.Idle && reviewText.isNotBlank()) {
-            viewModel.analyzeReview(reviewText, eventId, oldAnalysis)
+    LaunchedEffect(trackText) {
+        if (uiState is AiReviewState.Idle && trackText.isNotBlank()) {
+            viewModel.analyzeTrack(trackText, eventId, oldAnalysis)
         }
     }
 
@@ -52,7 +52,7 @@ fun AiReviewDialog(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Cabecera
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -65,7 +65,7 @@ fun AiReviewDialog(
                         modifier = Modifier.size(28.dp)
                     )
                     Text(
-                        text = "Reseña de Actividad",
+                        text = "Track Analysis",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -75,7 +75,7 @@ fun AiReviewDialog(
                             onDismiss()
                         }
                     }) {
-                        Icon(Icons.Default.Close, "Cerrar")
+                        Icon(Icons.Default.Close, "Close")
                     }
                 }
                 
@@ -83,7 +83,6 @@ fun AiReviewDialog(
 
                 when (val state = uiState) {
                     is AiReviewState.Idle -> {
-                        // Oculto mientras se dispara el LaunchedEffect
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                     is AiReviewState.Loading -> {
@@ -92,7 +91,7 @@ fun AiReviewDialog(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "Analizando tu esfuerzo...",
+                            "Analyzing your progress...",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -122,23 +121,23 @@ fun AiReviewDialog(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Aceptar")
+                            Text("Got it!")
                         }
                     }
                     is AiReviewState.Error -> {
                         Text(
-                            text = "Hubo un error al contactar la IA: ${state.error}",
+                            text = "AI analysis failed: ${state.error}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                         Button(
-                            onClick = { viewModel.resetState() },
+                            onClick = { viewModel.analyzeTrack(trackText, eventId, oldAnalysis) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("Reintentar")
+                            Text("Try Again")
                         }
                     }
                 }

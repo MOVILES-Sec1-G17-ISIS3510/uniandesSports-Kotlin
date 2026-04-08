@@ -18,57 +18,87 @@ sealed class AiReviewState {
 class AiReviewViewModel(
     private val analyzerStrategy: AiAnalyzerStrategy,
     private val firestoreRetosViewModel: FirestoreRetosViewModel, // Para guardar directo en la BD
-    private val playViewModel: com.uniandes.sport.viewmodels.play.PlayViewModelInterface? = null // Para actualizar el review del evento
+    private val playViewModel: com.uniandes.sport.viewmodels.play.PlayViewModelInterface? = null // Para actualizar el track del evento
 ) : ViewModel() {
 
     private val _uiState = mutableStateOf<AiReviewState>(AiReviewState.Idle)
     val uiState: State<AiReviewState> = _uiState
 
-    fun analyzeReview(reviewText: String, eventId: String, oldAnalysis: Map<String, Double> = emptyMap()) {
+    /**
+     * Resetea el progreso de todos los retos asociados a un evento específico.
+     * Se usa cuando un usuario marca un evento como "no asistido" después de haber tenido progreso.
+     */
+    fun resetProgressForEvent(eventId: String, oldAnalysis: Map<String, Double>) {
+        if (oldAnalysis.isEmpty()) return
+        
+        _uiState.value = AiReviewState.Loading
+        viewModelScope.launch {
+            try {
+                oldAnalysis.forEach { (retoId, oldVal) ->
+                    // Sincronizamos a 0.0 (newProgress = 0.0)
+                    firestoreRetosViewModel.syncChallengeProgress(
+                        retoId = retoId,
+                        oldProgress = oldVal,
+                        newProgress = 0.0,
+                        trackText = "Participation removed / Track reset",
+                        eventId = eventId
+                    )
+                }
+                _uiState.value = AiReviewState.Success(0, "Progress has been reset for this session.")
+            } catch (e: Exception) {
+                _uiState.value = AiReviewState.Error("Error resetting progress: ${e.message}")
+            }
+        }
+    }
+
+    fun analyzeTrack(trackText: String, eventId: String, oldAnalysis: Map<String, Double> = emptyMap()) {
         _uiState.value = AiReviewState.Loading
         
         viewModelScope.launch {
-            // Obtener los retos activos actuales del usuario filtrando manualmente la lista global
-            // (evitamos .activeChallenges.value porque es un StateFlow WhileSubscribed y puede estar vacío si no hay UI escuchando)
             val allRetos = firestoreRetosViewModel.retos.value
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
             val activeChallenges = allRetos.filter { it.participants.contains(uid) && it.status == "active" }
             
+            android.util.Log.d("AiReviewVM", "Starting analyzeTrack. Found ${activeChallenges.size} active challenges.")
+
             if (activeChallenges.isEmpty()) {
-                _uiState.value = AiReviewState.Success(0, "No tienes retos activos a los cuales aplicar progreso.")
+                android.util.Log.w("AiReviewVM", "No active challenges found. Logic skipped.")
+                _uiState.value = AiReviewState.Success(0, "You don't have active challenges to track progress for.")
                 return@launch
             }
 
-            // Delegamos en la estrategia elegida para obtener el NUEVO análisis
-            val result = analyzerStrategy.analyzeReview(reviewText, activeChallenges)
+            val result = analyzerStrategy.analyzeReview(trackText, activeChallenges)
+            android.util.Log.d("AiReviewVM", "AI Analysis Success: ${result.success}. Map size: ${result.progressByChallengeId.size}")
             
             if (result.success) {
                 var advancedCount = 0
                 val newProgressMap = result.progressByChallengeId
-                
-                // Calculamos todos los retos involucrados (los nuevos y los que estaban antes)
                 val allRelevantChallengeIds = (newProgressMap.keys + oldAnalysis.keys).toSet()
+
+                android.util.Log.d("AiReviewVM", "Syncing progress for ${allRelevantChallengeIds.size} challenges...")
 
                 allRelevantChallengeIds.forEach { retoId ->
                     val newVal = newProgressMap[retoId] ?: 0.0
                     val oldVal = oldAnalysis[retoId] ?: 0.0
                     
+                    android.util.Log.d("AiReviewVM", "Ch: $retoId | Old: $oldVal | New: $newVal")
+
                     if (Math.abs(newVal - oldVal) > 0.01) {
-                        if (newVal > 0) advancedCount++ // Solo contamos los que suman progreso positivo real
+                        if (newVal > 0) advancedCount++
                         
-                        // Sincronizamos usando la lógica de deltas (newVal - oldVal)
                         firestoreRetosViewModel.syncChallengeProgress(
                             retoId = retoId,
                             oldProgress = oldVal,
                             newProgress = newVal,
-                            reviewText = reviewText,
+                            trackText = trackText,
                             eventId = eventId
                         )
+                    } else {
+                        android.util.Log.d("AiReviewVM", "Skipping sync for $retoId: delta is zero.")
                     }
                 }
                 
-                // 3. Actualizar la reseña original del evento con el NUEVO análisis de la IA
-                playViewModel?.updateReviewAiAnalysis(
+                playViewModel?.updateTrackAiAnalysis(
                     eventId = eventId,
                     userId = uid,
                     analysis = newProgressMap
@@ -77,16 +107,17 @@ class AiReviewViewModel(
                 if (advancedCount > 0) {
                     _uiState.value = AiReviewState.Success(
                         advancedCount, 
-                        "¡Buen trabajo! Has avanzado en $advancedCount retos activos."
+                        "Great work! You advanced in $advancedCount active challenges."
                     )
                 } else {
                     _uiState.value = AiReviewState.Success(
                         0, 
-                        "¡Registro completado! Tu reseña no aplicaba a los retos actuales."
+                        "Activity recorded! This track didn't apply to your current challenges goals."
                     )
                 }
             } else {
-                _uiState.value = AiReviewState.Error(result.errorMessage ?: "Ocurrió un error desconocido")
+                android.util.Log.e("AiReviewVM", "AI Strategy Error: ${result.errorMessage}")
+                _uiState.value = AiReviewState.Error(result.errorMessage ?: "Unknown error occurred")
             }
         }
     }
