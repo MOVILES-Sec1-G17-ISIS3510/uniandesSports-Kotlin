@@ -105,8 +105,6 @@ fun PlaceholderContent(
     }
 }
 
-@Composable
-fun HomeScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Home", onNavigate, isStandalone = false)
 
 // Removed RetosScreen as it now has its own implementation file
 
