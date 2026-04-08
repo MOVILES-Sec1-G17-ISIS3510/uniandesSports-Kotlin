@@ -23,12 +23,19 @@ import com.uniandes.sport.patterns.event.EventUIModel
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
 @Composable
-fun MatchDetailModal(
+fun EventDetailModal(
     uiModel: EventUIModel,
     viewModel: PlayViewModelInterface,
+    onEditClick: (() -> Unit)? = null,
+    onReviewClick: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val event = uiModel.rawEvent
+    val now = java.util.Date()
+    val oneHourAgo = java.util.Date(now.time - 3600 * 1000)
+    val isFinished = event.status == "finished" || 
+                    (event.finishedAt != null && event.finishedAt!!.toDate().before(now)) ||
+                    (event.finishedAt == null && event.scheduledAt?.toDate()?.before(oneHourAgo) == true)
     val currentUserId = viewModel.currentUserId
     val members by viewModel.members.collectAsState()
     val isAlreadyJoined = currentUserId != null && members.any { it.userId == currentUserId }
@@ -39,6 +46,9 @@ fun MatchDetailModal(
     }
     
     var isLoading by remember { mutableStateOf(false) }
+    var showConfirmLeave by remember { mutableStateOf(false) }
+    var showConfirmCancel by remember { mutableStateOf(false) }
+
     
     LaunchedEffect(event.id) {
         viewModel.fetchMembers(event.id)
@@ -124,7 +134,7 @@ fun MatchDetailModal(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Description
-                Text("ABOUT THIS MATCH", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("ABOUT THIS Event", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -178,7 +188,7 @@ fun MatchDetailModal(
                             }
                             
                             // Kick button for organizers
-                            if (currentUserId == event.createdBy && member.userId != currentUserId) {
+                            if (!isFinished && currentUserId == event.createdBy && member.userId != currentUserId) {
                                 IconButton(onClick = {
                                     viewModel.kickMember(event.id, member.userId)
                                 }) {
@@ -189,43 +199,219 @@ fun MatchDetailModal(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                // Join Button
-                Button(
-                    onClick = {
-                        if (currentUserId != null) {
-                            isLoading = true
-                            viewModel.joinEvent(event.id, currentUserId, 
-                                onSuccess = { isLoading = false; onDismiss() },
-                                onError = { isLoading = false }
+                // Action Buttons
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (isFinished) {
+                        if (isAlreadyJoined) {
+                            Button(
+                                onClick = { onReviewClick?.invoke(); onDismiss() },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary,
+                                    contentColor = MaterialTheme.colorScheme.onTertiary
+                                )
+                            ) {
+                                Icon(Icons.Default.RateReview, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("WRITE REVIEW", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text(
+                                "This event has already finished.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp)
                             )
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    enabled = !isAlreadyJoined && !isFull && !isLoading,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = if (isAlreadyJoined) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        val buttonText = when {
-                            isAlreadyJoined -> "ALREADY JOINED ✓"
-                            isFull -> "MATCH FULL"
-                            else -> "JOIN MATCH"
+                    } else if (isAlreadyJoined) {
+                        // EDIT Button (Owners only)
+                        if (currentUserId == event.createdBy) {
+                            Button(
+                                onClick = { onEditClick?.invoke(); onDismiss() },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary
+                                )
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("EDIT EVENT", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
                         }
-                        val contentColor = if (isAlreadyJoined) MaterialTheme.colorScheme.onSecondaryContainer else if (isFull) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
-                        Text(buttonText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = contentColor)
+
+                        // LEAVE Event button
+                        OutlinedButton(
+                            onClick = { showConfirmLeave = true },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFE74C3C)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE74C3C).copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("LEAVE Event", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+
+                        // CANCEL Event button (Owners only)
+                        if (currentUserId == event.createdBy) {
+                            TextButton(
+                                onClick = { showConfirmCancel = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isLoading,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color(0xFFE74C3C).copy(alpha = 0.7f)
+                                )
+                            ) {
+                                Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("CANCEL Event FOR EVERYONE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    } else {
+                        // JOIN Event button
+                        Button(
+                            onClick = {
+                                if (currentUserId != null) {
+                                    isLoading = true
+                                    viewModel.joinEvent(event.id, currentUserId, 
+                                        onSuccess = { isLoading = false; onDismiss() },
+                                        onError = { isLoading = false }
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isFull && !isLoading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                if (isFull) {
+                                    Text("Event FULL", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Text("JOIN Event", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showConfirmLeave) {
+        PremiumActionDialog(
+            title = "Leave this Event?",
+            description = "You'll be removed from the participants list. You can join again later if there's space.",
+            confirmLabel = "YES, LEAVE",
+            isDestructive = true,
+            onConfirm = {
+                if (currentUserId != null) {
+                    isLoading = true
+                    viewModel.leaveEvent(event.id, currentUserId,
+                        onSuccess = { 
+                            isLoading = false
+                            showConfirmLeave = false
+                            onDismiss() 
+                        },
+                        onError = { 
+                            isLoading = false
+                            showConfirmLeave = false
+                        }
+                    )
+                }
+            },
+            onDismiss = { showConfirmLeave = false }
+        )
+    }
+
+    if (showConfirmCancel) {
+        PremiumActionDialog(
+            title = "CANCEL Event?",
+            description = "This will notify all participants and remove the Event forever. This action cannot be undone.",
+            confirmLabel = "YES, CANCEL IT",
+            isDestructive = true,
+            onConfirm = {
+                isLoading = true
+                viewModel.cancelEvent(event.id,
+                    onSuccess = { 
+                        isLoading = false
+                        showConfirmCancel = false
+                        onDismiss() 
+                    },
+                    onError = { 
+                        isLoading = false
+                        showConfirmCancel = false
+                    }
+                )
+            },
+            onDismiss = { showConfirmCancel = false }
+        )
+    }
 }
+
+@Composable
+fun PremiumActionDialog(
+    title: String,
+    description: String,
+    confirmLabel: String,
+    isDestructive: Boolean = false,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                title.uppercase(),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = if (isDestructive) Color(0xFFE74C3C) else MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isDestructive) Color(0xFFE74C3C) else MaterialTheme.colorScheme.primary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(confirmLabel, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("KEEP GOING", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}
+
 
 @Composable
 fun DetailRow(icon: ImageVector, label: String, value: String) {
@@ -250,3 +436,4 @@ private fun getSportIconAndColor(sport: String): Pair<ImageVector, Color> {
         else -> Icons.Default.Sports to Color.Gray
     }
 }
+

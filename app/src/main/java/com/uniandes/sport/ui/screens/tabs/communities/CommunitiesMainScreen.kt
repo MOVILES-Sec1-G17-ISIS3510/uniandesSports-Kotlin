@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.uniandes.sport.models.Community
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
+import com.uniandes.sport.ui.theme.ArchivoFamily
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -138,7 +139,11 @@ fun CommunitiesMainScreen(
                             "Mine" -> "MY COMMUNITIES"
                             else -> "OTHER COMMUNITIES"
                         },
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Black, 
+                            letterSpacing = 0.5.sp,
+                            fontFamily = ArchivoFamily
+                        ),
                         modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 12.dp)
                     )
                 }
@@ -348,8 +353,8 @@ fun TrendingCommunityCard(community: Community, currentUserId: String?, onClick:
             .background(
                 Brush.linearGradient(
                     colors = listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.primary, // Navy Blue
+                        Color(0xFF012567).copy(alpha = 0.8f)
                     )
                 )
             )
@@ -477,8 +482,8 @@ fun StandardCommunityCard(community: Community, currentUserId: String?, modifier
                         .background(
                             Brush.linearGradient(
                                 colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme.primaryContainer, // Mint Green
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                                 )
                             )
                         ),

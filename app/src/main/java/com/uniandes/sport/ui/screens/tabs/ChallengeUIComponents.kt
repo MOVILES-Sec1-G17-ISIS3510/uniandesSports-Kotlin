@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.models.Reto
+import com.uniandes.sport.ui.components.SportIconBox
+import com.uniandes.sport.ui.components.getSportAccentColor
+import com.uniandes.sport.ui.components.ChallengeBadge
 
 @Composable
 fun SectionHeader(title: String, subtitle: String) {
@@ -38,7 +41,7 @@ fun SectionHeader(title: String, subtitle: String) {
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -47,7 +50,7 @@ fun SectionHeader(title: String, subtitle: String) {
 fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit) {
     val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
     val progressPercent = (progressRaw * 100).toInt()
-    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary // Teal
 
     Column(
         modifier = Modifier
@@ -56,10 +59,9 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(72.dp)) {
-            // Fondo del anillo (gris claro)
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
-                    color = Color.LightGray.copy(alpha = 0.3f),
+                    color = indicatorColor.copy(alpha = 0.1f),
                     style = Stroke(width = 4.dp.toPx())
                 )
             }
@@ -75,27 +77,11 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
                 )
             }
             
-            // Icono central (circular)
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFE0F2F1)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = when(reto.sport.lowercase()) {
-                        "running" -> Icons.Default.DirectionsRun
-                        "soccer" -> Icons.Default.SportsSoccer
-                        "calisthenics" -> Icons.Default.FitnessCenter
-                        "tennis" -> Icons.Default.SportsTennis
-                        else -> Icons.Default.FlashOn
-                    },
-                    contentDescription = null,
-                    tint = Color(0xFF00796B),
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+            // Icono central (Standardized Circular Box)
+            SportIconBox(
+                sport = reto.sport,
+                size = 52.dp
+            )
         }
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -120,7 +106,7 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -130,10 +116,10 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                Text(reto.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(reto.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ChallengeBadge(reto.type.uppercase(), Color(0xFFE3F2FD), Color(0xFF1976D2))
-                    ChallengeBadge(reto.difficulty.uppercase(), Color(0xFFF3E5F5), Color(0xFF7B1FA2))
+                    ChallengeBadge(reto.type.uppercase(), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
+                    ChallengeBadge(reto.difficulty.uppercase(), MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 DetailItemSmall(Icons.Default.TrackChanges, reto.goalLabel)
@@ -141,7 +127,6 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
             
             Button(
                 onClick = { 
-                    // Stop propagation is handled by Compose by default for nested buttons
                     onJoin() 
                 },
                 contentPadding = PaddingValues(horizontal = 16.dp),
@@ -155,38 +140,10 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
 }
 
 @Composable
-fun SportIconBox(sport: String, size: Dp) {
-    Box(
-        modifier = Modifier.size(size).clip(RoundedCornerShape(size/4)).background(Color(0xFFE0F2F1)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = when(sport.lowercase()) {
-                "running" -> Icons.Default.DirectionsRun
-                "soccer" -> Icons.Default.SportsSoccer
-                "calisthenics" -> Icons.Default.FitnessCenter
-                "tennis" -> Icons.Default.SportsTennis
-                else -> Icons.Default.FlashOn
-            },
-            contentDescription = null,
-            tint = Color(0xFF00796B),
-            modifier = Modifier.size(size * 0.6f)
-        )
-    }
-}
-
-@Composable
-fun ChallengeBadge(text: String, containerColor: Color, contentColor: Color) {
-    Surface(color = containerColor, shape = RoundedCornerShape(4.dp)) {
-        Text(text = text, color = contentColor, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-    }
-}
-
-@Composable
 fun DetailItemSmall(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+        Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.width(4.dp))
-        Text(text, fontSize = 11.sp, color = Color.Gray)
+        Text(text, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

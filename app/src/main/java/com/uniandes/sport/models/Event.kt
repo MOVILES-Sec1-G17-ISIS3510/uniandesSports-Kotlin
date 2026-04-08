@@ -16,5 +16,6 @@ data class Event(
     var sport: String = "",
     var status: String = "",
     var title: String = "",
-    var updatedAt: Timestamp? = null
+    var updatedAt: Timestamp? = null,
+    var finishedAt: Timestamp? = null
 )

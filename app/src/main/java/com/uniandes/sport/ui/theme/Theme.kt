@@ -17,24 +17,24 @@ import androidx.core.view.WindowCompat
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    onPrimary = BackgroundDark, // Dark background on vibrant primary looks good
-    primaryContainer = Color(0xFF1E1B4B), // Indigo 950
-    onPrimaryContainer = Color(0xFFC7D2FE), // Indigo 200
-    secondary = SecondaryDark,
-    onSecondary = BackgroundDark,
-    secondaryContainer = Color(0xFF0C4A6E), // Sky 950
-    onSecondaryContainer = Color(0xFFBAE6FD), // Sky 200
-    tertiary = TertiaryDark,
+    primary = PrimaryDark, // Slate 100
+    onPrimary = BackgroundDark, 
+    primaryContainer = ContainerDark, // Slate 800
+    onPrimaryContainer = OnContainerDark, // Slate 300
+    secondary = TertiaryDark, // Brand Teal
+    onSecondary = Color.White,
+    secondaryContainer = ContainerDark,
+    onSecondaryContainer = OnSurfaceDark,
+    tertiary = SecondaryDark, // Slate 400
     onTertiary = BackgroundDark,
-    tertiaryContainer = Color(0xFF134E4A), // Teal 950
-    onTertiaryContainer = Color(0xFF99F6E4), // Teal 200
+    tertiaryContainer = ContainerDark, 
+    onTertiaryContainer = OnSurfaceDark,
     background = BackgroundDark,
     surface = SurfaceDark,
     surfaceVariant = SurfaceVariantDark,
-    onBackground = Color(0xFFF1F5F9), // Slate 100
-    onSurface = Color(0xFFF1F5F9), // Slate 100
-    onSurfaceVariant = Color(0xFF94A3B8) // Slate 400
+    onBackground = OnSurfaceDark,
+    onSurface = OnSurfaceDark,
+    onSurfaceVariant = SecondaryDark // Slate 400 for secondary text
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -42,17 +42,17 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = SecondaryUniandes,
     onPrimaryContainer = PrimaryUniandes,
-    secondary = TertiaryUniandes,
+    secondary = TertiaryUniandes, // Teal for CTAs
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF1F5F9),
-    onSecondaryContainer = Color(0xFF64748B),
-    tertiary = TertiaryUniandes,
+    secondaryContainer = SecondaryUniandes, // Mint Green for tags/chips
+    onSecondaryContainer = PrimaryUniandes,
+    tertiary = TertiaryUniandes, // Teal for CTAs
     background = BackgroundLight,
     surface = BackgroundLight,
-    surfaceVariant = MutedLight,
+    surfaceVariant = MutedLight, // Gray for inactive/dividers
     onBackground = ForegroundLight,
     onSurface = ForegroundLight,
-    onSurfaceVariant = Color(0xFF64748B)
+    onSurfaceVariant = MutedForegroundLight // Gray for metadata
 )
 
 enum class ThemeMode {

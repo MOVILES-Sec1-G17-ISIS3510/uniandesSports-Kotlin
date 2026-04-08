@@ -68,25 +68,16 @@ fun ChallengesScreen(
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showDialog = true },
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = MaterialTheme.colorScheme.onTertiary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Challenge")
-            }
-        }
-    ) { padding ->
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .background(Color(0xFFF8F9FA)),
-            contentPadding = PaddingValues(bottom = 80.dp)
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
         ) {
+
             // --- SECTION: ACTIVE CHALLENGES ---
             if (activeChallenges.isNotEmpty()) {
                 item {
@@ -179,7 +170,21 @@ fun ChallengesScreen(
                 }
             }
         }
+        
+        FloatingActionButton(
+            onClick = { showDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New Challenge")
+        }
+
     }
+
 
     if (selectedReto != null) {
         ChallengeDetailModal(
@@ -235,11 +240,11 @@ fun FilterTab(text: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
-        color = if (selected) Color(0xFF0D1B3E) else Color(0xFFE9F1F5),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.height(36.dp)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 20.dp)) {
-            Text(text = text, color = if (selected) Color.White else Color(0xFF0D1B3E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(text = text, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }
@@ -249,9 +254,41 @@ fun SportChip(text: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(text, fontSize = 12.sp) },
-        leadingIcon = if (selected) { { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) } } else null,
-        shape = RoundedCornerShape(12.dp)
+        label = { Text(text, fontSize = 12.sp, fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium) },
+        leadingIcon = {
+            if (text == "All Sports") {
+                Surface(
+                    modifier = Modifier.size(24.dp),
+                    shape = CircleShape,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Sports, 
+                            contentDescription = null, 
+                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            } else {
+                com.uniandes.sport.ui.components.SportIconBox(sport = text, size = 24.dp)
+            }
+        },
+        shape = CircleShape,
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+            selectedLabelColor = Color.White,
+            selectedLeadingIconColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = Color.Transparent,
+            selectedBorderColor = MaterialTheme.colorScheme.secondary
+        )
     )
 }
 
@@ -270,7 +307,7 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth().padding(16.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {

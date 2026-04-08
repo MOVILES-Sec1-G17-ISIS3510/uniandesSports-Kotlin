@@ -46,7 +46,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-@OptIn(ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfesoresScreen(
     profesoresViewModel: ProfesoresViewModelInterface,
@@ -92,29 +92,13 @@ fun ProfesoresScreen(
         profesores.filter { it.deporte == selectedFilter }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { isFabExpanded = !isFabExpanded },
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Menu",
-                    modifier = Modifier.rotate(rotation)
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding).pullRefresh(pullRefreshState)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+    Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+
             // Sport Filter
             LazyRow(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -122,21 +106,46 @@ fun ProfesoresScreen(
             ) {
                 items(deportes) { dep ->
                     val isSelected = selectedFilter == dep
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant) else null,
-                        shadowElevation = if (isSelected) 4.dp else 1.dp,
-                        modifier = Modifier.clickable { selectedFilter = dep }
-                    ) {
-                        Text(
-                            text = if (dep == "All") "All Coaches" else dep,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                    
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedFilter = dep },
+                        label = { Text(if (dep == "All") "All Coaches" else dep, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
+                        leadingIcon = {
+                            if (dep == "All") {
+                                Surface(
+                                    modifier = Modifier.size(24.dp),
+                                    shape = CircleShape,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Sports, 
+                                            contentDescription = null, 
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                com.uniandes.sport.ui.components.SportIconBox(sport = dep, size = 24.dp)
+                            }
+                        },
+                        shape = CircleShape,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = Color.Transparent,
+                            selectedBorderColor = MaterialTheme.colorScheme.secondary
                         )
-                    }
+                    )
                 }
             }
 
@@ -172,17 +181,15 @@ fun ProfesoresScreen(
         if (isFabExpanded) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { isFabExpanded = false },
+                        .fillMaxSize(),
                     contentAlignment = Alignment.BottomEnd
                 ) {
                     Column(
-                        modifier = Modifier.padding(end = 16.dp, bottom = 80.dp),
+                        modifier = Modifier.padding(end = 20.dp, bottom = 100.dp),
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+
                         FabMenuItem(
                             text = "Book Class",
                             icon = Icons.Default.CalendarToday,
@@ -231,8 +238,27 @@ fun ProfesoresScreen(
                 contentColor = MaterialTheme.colorScheme.primary,
                 backgroundColor = MaterialTheme.colorScheme.surface
             )
+
+            // Standardized FAB
+            FloatingActionButton(
+                onClick = { isFabExpanded = !isFabExpanded },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 20.dp),
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabScale")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Menu",
+                    modifier = Modifier.rotate(rotation)
+                )
+            }
         }
-    }
+
+
 
 
 

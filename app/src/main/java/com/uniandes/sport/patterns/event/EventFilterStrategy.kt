@@ -21,12 +21,12 @@ class AllActiveEventsStrategy : EventFilterStrategy {
     }
 }
 
-class SportFilterStrategy(private val targetSport: String) : EventFilterStrategy {
+class MultiSportFilterStrategy(private val targetSports: Set<String>) : EventFilterStrategy {
     override fun filter(events: List<Event>): List<Event> {
         val now = com.google.firebase.Timestamp.now()
         return events.filter { 
             it.status == "active" && 
-            it.sport.lowercase() == targetSport.lowercase() &&
+            (targetSports.isEmpty() || targetSports.contains(it.sport.lowercase())) &&
             (it.scheduledAt ?: com.google.firebase.Timestamp(0, 0)) > now
         }.sortedBy { it.scheduledAt }
     }

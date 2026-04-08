@@ -1,13 +1,19 @@
 package com.uniandes.sport.ui.screens.tabs.play
 
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -26,31 +32,45 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
+import com.uniandes.sport.models.Event
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 
-@OptIn(ExperimentalMaterialApi::class)
+import com.uniandes.sport.ui.components.FabMenuItem
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
-    openMatchEventId: String? = null,
-    onOpenMatchConsumed: () -> Unit = {},
+    openEventId: String? = null,
+    onOpenEventConsumed: () -> Unit = {},
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
     val events by viewModel.events.collectAsState()
+    val inProgressEvents by viewModel.inProgressEvents.collectAsState()
     val finishedEvents by viewModel.finishedEvents.collectAsState()
+    val myReviewsByEventId by viewModel.myReviewsByEventId.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val selectedSport by viewModel.selectedSport.collectAsState()
+    val selectedSports by viewModel.selectedSports.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
     
-    var selectedMode by remember { mutableStateOf<String?>(null) }
+    var activeModal by remember { mutableStateOf<PlayModalType?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var selectedMode by remember { mutableStateOf<String?>(null) }
     var isPullRefreshing by remember { mutableStateOf(false) }
-    var showAllJoinedMatches by remember { mutableStateOf(false) }
-    var showAllFinishedMatches by remember { mutableStateOf(false) }
+    var isFabExpanded by remember { mutableStateOf(false) }
+    
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    var reviewEvent by remember { mutableStateOf<Event?>(null) }
+    var editingEvent by remember { mutableStateOf<Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
@@ -65,17 +85,14 @@ fun PlayScreen(
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
-    val visibleJoinedEvents = remember(joinedEvents, showAllJoinedMatches) {
-        if (showAllJoinedMatches) joinedEvents else joinedEvents.take(2)
-    }
-    val visibleFinishedEvents = remember(finishedEvents, showAllFinishedMatches) {
-        if (showAllFinishedMatches) finishedEvents else finishedEvents.take(2)
+    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
+        finishedEvents.filter { joinedEventIds.contains(it.id) }
     }
 
-    val onMatchSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
+    val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
         logViewModel.log(
             screen = "PlayScreen",
-            action = "MATCH_VIEWED",
+            action = "EVENT_VIEWED",
             params = mapOf(
                 "sport_category" to event.sport,
                 "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
@@ -99,28 +116,34 @@ fun PlayScreen(
         }
     }
 
-    // If a deep-link asks to open a specific match, clear sport filter to avoid hiding it.
-    LaunchedEffect(openMatchEventId) {
-        if (!openMatchEventId.isNullOrBlank() && selectedSport != null) {
-            viewModel.setSportFilter(null)
+    LaunchedEffect(openEventId) {
+        if (!openEventId.isNullOrBlank() && selectedSports.isNotEmpty()) {
+            viewModel.clearSportFilters()
         }
     }
 
-    LaunchedEffect(openMatchEventId, events) {
-        val pendingId = openMatchEventId ?: return@LaunchedEffect
+    LaunchedEffect(openEventId, events) {
+        val pendingId = openEventId ?: return@LaunchedEffect
         if (events.isEmpty()) return@LaunchedEffect
 
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
-            onOpenMatchConsumed()
+            onOpenEventConsumed()
         }
     }
 
+    LaunchedEffect(inProgressEvents, finishedEvents) {
+        val ids = (inProgressEvents + finishedEvents).map { it.id }.distinct()
+        viewModel.fetchMyReviewsForEvents(ids)
+    }
+
     if (selectedEventUIModel != null) {
-        MatchDetailModal(
+        EventDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
+            onEditClick = { editingEvent = selectedEventUIModel?.rawEvent },
+            onReviewClick = { reviewEvent = selectedEventUIModel?.rawEvent },
             onDismiss = {
                 selectedEventUIModel = null
                 viewModel.refreshEvents()
@@ -128,47 +151,104 @@ fun PlayScreen(
         )
     }
 
-    if (showCreateDialog && selectedSport != null && selectedMode != null) {
-        CreateMatchDialog(
-            sport = selectedSport!!,
+    val reviewEventLocal = reviewEvent
+    if (reviewEventLocal != null) {
+        val existingReview = myReviewsByEventId[reviewEventLocal.id]
+        ReviewDialog(
+            event = reviewEventLocal,
+            existingReview = existingReview,
+            viewModel = viewModel,
+            onDismiss = { reviewEvent = null },
+            onSubmit = { text, rating, attendanceByUserId, source, onDone ->
+                viewModel.submitReview(
+                    eventId = reviewEventLocal.id,
+                    reviewText = text,
+                    rating = rating,
+                    attendanceByUserId = attendanceByUserId,
+                    source = source,
+                    onSuccess = {
+                        android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
+                        onDone(true)
+                    },
+                    onError = { e ->
+                        android.widget.Toast.makeText(context, "Could not save review: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        onDone(false)
+                    }
+                )
+            }
+        )
+    }
+
+    if (showCreateDialog && selectedMode != null) {
+        val creationSport = selectedSports.firstOrNull() ?: "soccer" 
+        CreateEventDialog(
+            sport = creationSport,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
-            onCreate = { title, location, description, date, skillLevel, maxParticipants, dialogOnSuccess, dialogOnError ->
+            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
                     description = description,
                     location = location,
-                    sport = selectedSport!!,
+                    sport = finalSport,
                     modality = selectedMode!!,
                     scheduledAt = date,
+                    finishedAt = endDate,
                     skillLevel = skillLevel,
                     maxParticipants = maxParticipants,
+                    shouldJoin = shouldJoin,
                     onSuccess = { 
-                        // Analytics Engine: BQ4 (Registration / Funnel Conversion tracking)
                         logViewModel.log(
                             screen = "PlayScreen",
                             action = "EVENT_REGISTERED",
                             params = mapOf(
                                 "source" to "organic",
                                 "challenge_type" to selectedMode!!,
-                                "sport_category" to selectedSport!!
+                                "sport_category" to finalSport
                             )
                         )
                         dialogOnSuccess()
-                        showCreateDialog = false 
                     },
                     onError = { e ->
                         dialogOnError(e)
-                        android.widget.Toast.makeText(
-                            context, 
-                            "Error creating match: ${e.message}", 
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                     }
                 )
             }
         )
     }
+
+    val editingEventLocal = editingEvent
+    if (editingEventLocal != null) {
+        CreateEventDialog(
+            sport = editingEventLocal.sport,
+            modality = editingEventLocal.modality,
+            initialEvent = editingEventLocal,
+            onDismiss = { editingEvent = null },
+            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, _, dialogOnSuccess, dialogOnError ->
+                viewModel.updateEvent(
+                    eventId = editingEventLocal.id,
+                    title = title,
+                    description = description,
+                    location = location,
+                    sport = finalSport,
+                    scheduledAt = date,
+                    finishedAt = endDate,
+                    skillLevel = skillLevel,
+                    maxParticipants = maxParticipants,
+                    onSuccess = { 
+                        android.widget.Toast.makeText(context, "Event updated!", android.widget.Toast.LENGTH_SHORT).show()
+                        dialogOnSuccess()
+                        editingEvent = null
+                    },
+                    onError = { e ->
+                        dialogOnError(e)
+                    }
+                )
+            }
+        )
+    }
+
 
     Box(
         modifier = Modifier
@@ -178,285 +258,194 @@ fun PlayScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp), // padding bottom for sticky bar
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = "ACTIVE NOW",
-                        value = joinedEvents.size.toString(),
-                        subtitle = if (joinedEvents.isEmpty()) "You have no joined matches" else "Joined open matches",
-                        metric = "${joinedEvents.size} of ${events.size} total",
-                        icon = Icons.Default.Bolt,
-                        iconTint = Color(0xFFF5B041)
-                    )
-                    SummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = "OPEN MATCHES",
-                        value = events.size.toString(),
-                        subtitle = if (otherEvents.isEmpty()) "No additional matches now" else "Ready to join nearby",
-                        metric = "${otherEvents.size} available to join",
-                        icon = Icons.Default.EmojiEvents,
-                        iconTint = Color(0xFF45B39D)
-                    )
-                }
-            }
-
-            // Section: Choose Your Sport
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (selectedSport != null) "1. SPORT ✓" else "1. CHOOSE YOUR SPORT",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                
+                Text(
+                    text = "EXPLORE BY SPORT",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary // Navy Blue (#012567)
+                )
                 Spacer(modifier = Modifier.height(12.dp))
-                
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SportButton(Modifier.weight(1f), "Fútbol", Icons.Default.SportsSoccer, Color(0xFF2ECC71), selectedSport == "fútbol") { viewModel.setSportFilter(if (selectedSport == "fútbol") null else "fútbol"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Basketball", Icons.Default.SportsBasketball, Color(0xFFE67E22), selectedSport == "basketball") { viewModel.setSportFilter(if (selectedSport == "basketball") null else "basketball"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Tennis", Icons.Default.SportsTennis, Color(0xFFF1C40F), selectedSport == "tennis") { viewModel.setSportFilter(if (selectedSport == "tennis") null else "tennis"); selectedMode = null }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SportButton(Modifier.weight(1f), "Calistenia", Icons.Default.FitnessCenter, Color(0xFF9B59B6), selectedSport == "calistenia") { viewModel.setSportFilter(if (selectedSport == "calistenia") null else "calistenia"); selectedMode = null }
-                        SportButton(Modifier.weight(1f), "Running", Icons.Default.DirectionsRun, Color(0xFFE74C3C), selectedSport == "running") { viewModel.setSportFilter(if (selectedSport == "running") null else "running"); selectedMode = null }
-                        Box(Modifier.weight(1f))
-                    }
-                }
+                SportFilterRow(
+                    selectedSports = selectedSports,
+                    onSportSelected = { viewModel.toggleSportFilter(it) }
+                )
             }
 
-            if (selectedSport == null) {
-                if (joinedEvents.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "MY OPEN MATCHES",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "You are already in these matches",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            visibleJoinedEvents.forEach { event ->
-                                val remainingMillis = remainingTimeMillis(event, nowMillis)
-                                val urgency = countdownUrgency(remainingMillis)
-
-                                JoinedMatchListCard(
-                                    uiModel = EventUIAdapter.toUIModel(event),
-                                    countdownText = "STARTS IN ${formatRemainingTime(event, nowMillis)}",
-                                    urgency = urgency,
-                                    onClick = { onMatchSelected(event) }
-                                )
-                            }
-
-                            if (joinedEvents.size > 2) {
-                                TextButton(
-                                    onClick = { showAllJoinedMatches = !showAllJoinedMatches },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    val label = if (showAllJoinedMatches) {
-                                        "Show less"
-                                    } else {
-                                        "Show all (${joinedEvents.size})"
-                                    }
-                                    Text(label, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Section: Open Matches
+            if (inProgressEvents.isNotEmpty()) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Text(
+                        text = "LIVE NOW",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
-                        Text(
-                            text = "OPEN MATCHES",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer
-                        ) {
-                            Text(
-                                text = "${otherEvents.size} available",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        items(inProgressEvents, key = { it.id }) { event ->
+                            val uiModel = EventUIAdapter.toUIModel(event)
+                            CompactEventCard(
+                                modifier = Modifier.width(280.dp),
+                                uiModel = uiModel,
+                                badgeText = "IN PROGRESS",
+                                onClick = { onEventSelected(event) }
                             )
                         }
                     }
                 }
+            }
 
-                if (isLoading) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                } else if (otherEvents.isEmpty()) {
-                    item {
-                        Text(
-                            if (joinedEvents.isNotEmpty()) "No additional open matches right now." else "Not recent matches found. Create one!",
-                            modifier = Modifier.padding(16.dp),
-                            color = Color.Gray
-                        )
-                    }
-                } else {
-                    items(otherEvents, key = { it.id }) { event ->
-                        val uiModel = EventUIAdapter.toUIModel(event)
-                        MatchCard(
-                            uiModel = uiModel,
-                            onMatchClick = { onMatchSelected(event) }
-                        )
-                    }
-                }
-
-                if (finishedEvents.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "FINISHED OPEN MATCHES",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Most recent completed matches",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    items(visibleFinishedEvents, key = { it.id }) { event ->
-                        val uiModel = EventUIAdapter.toUIModel(event)
-                        MatchCard(
-                            uiModel = uiModel,
-                            highlighted = false,
-                            badgeText = "FINISHED",
-                            onMatchClick = { onMatchSelected(event) }
-                        )
-                    }
-
-                    if (finishedEvents.size > 2) {
-                        item {
-                            TextButton(
-                                onClick = { showAllFinishedMatches = !showAllFinishedMatches },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                val label = if (showAllFinishedMatches) {
-                                    "Show less"
-                                } else {
-                                    "Show all (${finishedEvents.size})"
-                                }
-                                Text(label, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Section: Mode Selection
-                item {
-                    Text(
-                        text = if (selectedMode != null) "2. MODE ✓" else "2. CHOOSE MODE",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+            item {
+                Text(
+                    text = "YOUR DASHBOARD",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ActionCard(
+                        title = "My Schedule",
+                        subtitle = if (joinedEvents.isEmpty()) "No upcoming matches" else "${joinedEvents.size} confirmed events",
+                        icon = Icons.Default.CalendarToday,
+                        badgeCount = if (joinedEvents.isNotEmpty()) joinedEvents.size else null,
+                        color = Color(0xFF2F8C89), // Brand Teal
+                        onClick = { activeModal = PlayModalType.MY_SCHEDULE }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ModeButton(Modifier.weight(1f), "Casual", "Just for fun", Icons.Default.Handshake, selectedMode == "casual") { selectedMode = "casual" }
-                            ModeButton(Modifier.weight(1f), "Amateur", "Competitive but relaxed", Icons.Default.Groups, selectedMode == "amateur") { selectedMode = "amateur" }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ModeButton(Modifier.weight(1f), "Torneo", "Competitive match", Icons.Default.EmojiEvents, selectedMode == "torneo") { selectedMode = "torneo" }
-                            ModeButton(Modifier.weight(1f), "Training", "Practice & improve", Icons.Default.TrackChanges, selectedMode == "training") { selectedMode = "training" }
-                        }
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ActionCard(
+                            modifier = Modifier.weight(1f),
+                            title = "Find Match",
+                            subtitle = "${otherEvents.size} open matches",
+                            icon = Icons.Default.Search,
+                            color = MaterialTheme.colorScheme.secondary,
+                            onClick = { activeModal = PlayModalType.SEARCH }
+                        )
+                        val pendingReviews = joinedFinishedEvents.count { !myReviewsByEventId.containsKey(it.id) }
+                        ActionCard(
+                            modifier = Modifier.weight(1f),
+                            title = "History",
+                            subtitle = if (pendingReviews > 0) "$pendingReviews pending reviews" else "View past play",
+                            icon = Icons.Default.History,
+                            badgeCount = if (pendingReviews > 0) pendingReviews else null,
+                            color = if (pendingReviews > 0) MaterialTheme.colorScheme.error else Color(0xFF012567),
+                            onClick = { activeModal = PlayModalType.HISTORY }
+                        )
                     }
                 }
             }
         }
         
-        // Sticky Bottom Bar
-        if (selectedMode != null) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                shadowElevation = 16.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            viewModel.setSportFilter(selectedSport) // ensures the search executes
-                            // To actually search, we would reset modes or navigate. For now just clear mode to show matches.
-                            selectedMode = null
-                        },
-                        modifier = Modifier.weight(2f).height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Search", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        // Modals management
+        when (activeModal) {
+            PlayModalType.MY_SCHEDULE -> {
+                CategoryModal(
+                    title = "My Schedule",
+                    onDismiss = { 
+                        activeModal = null 
+                        viewModel.clearSportFilters()
                     }
-                    
-                    OutlinedButton(
-                        onClick = { showCreateDialog = true },
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Create", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                ) {
+                    SportFilterRow(
+                        selectedSports = selectedSports,
+                        onSportSelected = { viewModel.toggleSportFilter(it) }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (joinedEvents.isEmpty()) {
+                        EmptyState(Icons.Default.EventBusy, "Nothing here yet", "Join an event to see it in your schedule!")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            joinedEvents.forEach { event ->
+                                CompactEventCard(
+                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    onClick = { 
+                                        activeModal = null
+                                        onEventSelected(event) 
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
+            PlayModalType.SEARCH -> {
+                CategoryModal(
+                    title = "Find Matches",
+                    onDismiss = { 
+                        activeModal = null
+                        viewModel.clearSportFilters()
+                    }
+                ) {
+                    SportFilterRow(
+                        selectedSports = selectedSports,
+                        onSportSelected = { viewModel.toggleSportFilter(it) }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (otherEvents.isEmpty()) {
+                        EmptyState(Icons.Default.SearchOff, "No matches found", "Try changing the sport filter above.")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            otherEvents.forEach { event ->
+                                CompactEventCard(
+                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    onClick = { 
+                                        activeModal = null
+                                        onEventSelected(event) 
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            PlayModalType.HISTORY -> {
+                CategoryModal(
+                    title = "Match History",
+                    onDismiss = { 
+                        activeModal = null
+                        viewModel.clearSportFilters()
+                    }
+                ) {
+                    SportFilterRow(
+                        selectedSports = selectedSports,
+                        onSportSelected = { viewModel.toggleSportFilter(it) }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (joinedFinishedEvents.isEmpty()) {
+                        EmptyState(Icons.Default.History, "No past events", "Completed matches you join will appear here.")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            joinedFinishedEvents.forEach { event ->
+                                FullWidthEventCard(
+                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    badgeText = "FINISHED",
+                                    reviewLabel = if (myReviewsByEventId.containsKey(event.id)) "Edit review" else "Write review",
+                                    onReviewClick = { 
+                                        activeModal = null
+                                        reviewEvent = event 
+                                    },
+                                    onClick = { 
+                                        activeModal = null
+                                        onEventSelected(event) 
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            null -> {}
         }
+        
 
         PullRefreshIndicator(
             refreshing = isPullRefreshing,
@@ -465,7 +454,80 @@ fun PlayScreen(
             backgroundColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary
         )
+
+        // FAB Menu Overlay
+        if (isFabExpanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable { isFabExpanded = false },
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Column(
+                    modifier = Modifier.padding(end = 20.dp, bottom = 100.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    FabMenuItem(
+                        text = "Training",
+                        icon = Icons.Default.TrackChanges,
+                        onClick = { 
+                            selectedMode = "training"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Tournament",
+                        icon = Icons.Default.EmojiEvents,
+                        onClick = { 
+                            selectedMode = "torneo"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Amateur Match",
+                        icon = Icons.Default.Groups,
+                        onClick = { 
+                            selectedMode = "amateur"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                    FabMenuItem(
+                        text = "Casual Match",
+                        icon = Icons.Default.Handshake,
+                        onClick = { 
+                            selectedMode = "casual"
+                            showCreateDialog = true
+                            isFabExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // Standardized Expanding FAB
+        FloatingActionButton(
+            onClick = { isFabExpanded = !isFabExpanded },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = Color.White,
+            shape = CircleShape
+        ) {
+            val rotation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "fabRotation")
+            Icon(
+                Icons.Default.Add, 
+                contentDescription = "Create Event",
+                modifier = Modifier.rotate(rotation)
+            )
+        }
     }
+
 }
 
 private fun formatRemainingTime(event: com.uniandes.sport.models.Event, nowMillis: Long): String {
@@ -500,10 +562,12 @@ private fun countdownUrgency(remainingMillis: Long): CountdownUrgency {
 }
 
 @Composable
-private fun JoinedMatchListCard(
+private fun JoinedEventListCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     countdownText: String,
     urgency: CountdownUrgency,
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val event = uiModel.rawEvent
@@ -523,21 +587,27 @@ private fun JoinedMatchListCard(
         tonalElevation = 4.dp,
         shadowElevation = 3.dp
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = event.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-                Icon(Icons.Default.ChevronRight, contentDescription = "View", tint = MaterialTheme.colorScheme.outline)
-            }
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
+            
+            Spacer(modifier = Modifier.width(14.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(Icons.Default.ChevronRight, contentDescription = "View", tint = MaterialTheme.colorScheme.outline)
+                }
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -559,8 +629,21 @@ private fun JoinedMatchListCard(
                     color = urgencyText
                 )
             }
+
+            if (onReviewClick != null) {
+                TextButton(
+                    onClick = onReviewClick,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(reviewLabel, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
+}
 }
 
 @Composable
@@ -609,8 +692,7 @@ fun SummaryCard(
 
             Text(
                 value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.displayMedium, // Now Bebas Neue
                 color = MaterialTheme.colorScheme.onSurface
             )
 
@@ -725,27 +807,20 @@ fun ModeButton(
 }
 
 @Composable
-fun MatchCard(
+fun EventCard(
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     highlighted: Boolean = false,
     badgeText: String? = null,
-    onMatchClick: () -> Unit = {}
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
+    onEventClick: () -> Unit = {}
 ) {
     val event = uiModel.rawEvent
-    
-    val (icon, color) = when (event.sport.lowercase()) {
-        "fútbol", "futbol", "soccer" -> Icons.Default.SportsSoccer to Color(0xFF2ECC71)
-        "basketball", "baloncesto" -> Icons.Default.SportsBasketball to Color(0xFFE67E22)
-        "tennis", "tenis" -> Icons.Default.SportsTennis to Color(0xFFF1C40F)
-        "calistenia", "calisthenics" -> Icons.Default.FitnessCenter to Color(0xFF9B59B6)
-        "running", "correr" -> Icons.Default.DirectionsRun to Color(0xFFE74C3C)
-        else -> Icons.Default.Sports to Color.Gray
-    }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onMatchClick() },
+            .clickable { onEventClick() },
         shape = RoundedCornerShape(16.dp),
         color = if (highlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
         border = if (highlighted) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)) else null,
@@ -756,15 +831,7 @@ fun MatchCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(color),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = event.sport, tint = Color.White)
-            }
+            com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
             
             Spacer(modifier = Modifier.width(16.dp))
             
@@ -796,9 +863,533 @@ fun MatchCard(
                         )
                     }
                 }
+
+                if (onReviewClick != null) {
+                    TextButton(
+                        onClick = onReviewClick,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Icon(Icons.Default.RateReview, contentDescription = "Review", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(reviewLabel, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             
             Icon(Icons.Default.ChevronRight, contentDescription = "View Details", tint = MaterialTheme.colorScheme.outline)
+        }
+    }
+}
+
+@Composable
+private fun ReviewDialog(
+    event: com.uniandes.sport.models.Event,
+    existingReview: com.uniandes.sport.models.OpenMatchReview?,
+    viewModel: PlayViewModelInterface,
+    onDismiss: () -> Unit,
+    onSubmit: (text: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String, onDone: (Boolean) -> Unit) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var reviewText by remember(existingReview?.text) { mutableStateOf(existingReview?.text.orEmpty()) }
+    var rating by remember(existingReview?.rating) { mutableIntStateOf(existingReview?.rating ?: 0) }
+    var submitting by remember { mutableStateOf(false) }
+    var inputSource by remember { mutableStateOf(existingReview?.source ?: "text") }
+    var members by remember { mutableStateOf<List<com.uniandes.sport.models.MatchMember>>(emptyList()) }
+    var loadingMembers by remember { mutableStateOf(true) }
+    val attendanceByUserId = remember { mutableStateMapOf<String, Boolean>() }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(event.id, existingReview?.attendanceByUserId) {
+        loadingMembers = true
+        viewModel.fetchEventMembersOnce(
+            eventId = event.id,
+            onSuccess = { list ->
+                members = list
+                attendanceByUserId.clear()
+                list.forEach { member ->
+                    attendanceByUserId[member.userId] = existingReview?.attendanceByUserId?.get(member.userId) ?: false
+                }
+                loadingMembers = false
+            },
+            onError = {
+                members = emptyList()
+                loadingMembers = false
+            }
+        )
+    }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+            if (spoken.isNotBlank()) {
+                reviewText = spoken
+                inputSource = "microphone"
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Event review",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Rate the Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            (1..5).forEach { star ->
+                                FilledIconButton(
+                                    onClick = { rating = star },
+                                    modifier = Modifier.size(34.dp),
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "Star $star",
+                                        tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (rating == 0) "Select" else "$rating/5",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Your review", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your review")
+                                    }
+                                    try {
+                                        speechLauncher.launch(intent)
+                                    } catch (_: Exception) {
+                                        android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Voice")
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = reviewText,
+                            onValueChange = {
+                                reviewText = it
+                                inputSource = "text"
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 7,
+                            placeholder = { Text("Tell us what happened in this Event") }
+                        )
+
+                        if (inputSource == "microphone") {
+                            AssistChip(onClick = {}, label = { Text("Voice input") })
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Attendance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            if (loadingMembers) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            }
+                        }
+
+                        if (!loadingMembers && members.isEmpty()) {
+                            Text("No members found for this Event", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        members.forEach { member ->
+                            val checked = attendanceByUserId[member.userId] == true
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    attendanceByUserId[member.userId] = !checked
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (checked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { value -> attendanceByUserId[member.userId] = value }
+                                    )
+                                    Text(
+                                        text = if (member.userId == viewModel.currentUserId) "You" else member.displayName.ifBlank { member.userId.take(8) },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (member.userId == viewModel.currentUserId) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = reviewText.isNotBlank() && rating in 1..5 && !submitting,
+                onClick = {
+                    submitting = true
+                    onSubmit(reviewText, rating, attendanceByUserId.toMap(), inputSource) { success ->
+                        submitting = false
+                        if (success) onDismiss()
+                    }
+                }
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!submitting) onDismiss() }) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+
+enum class PlayModalType { MY_SCHEDULE, SEARCH, HISTORY }
+
+@Composable
+private fun ActionCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    badgeCount: Int? = null,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() },
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(color.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                }
+                
+                if (badgeCount != null) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = badgeCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun CategoryModal(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Modal Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Close")
+                    }
+                    Text(
+                        text = title.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp)
+                    )
+                }
+                
+                // Content
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(icon: ImageVector, title: String, description: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(
+            description, 
+            style = MaterialTheme.typography.bodyMedium, 
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 32.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun CompactEventCard(
+    modifier: Modifier = Modifier,
+    uiModel: com.uniandes.sport.patterns.event.EventUIModel,
+    badgeText: String? = null,
+    onClick: () -> Unit
+) {
+    val event = uiModel.rawEvent
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 42.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(event.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(
+                    text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}", 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (badgeText != null) {
+                    Text(
+                        text = badgeText, 
+                        style = MaterialTheme.typography.labelSmall, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+}
+
+@Composable
+private fun FullWidthEventCard(
+    uiModel: com.uniandes.sport.patterns.event.EventUIModel,
+    badgeText: String? = null,
+    reviewLabel: String = "Write review",
+    onReviewClick: (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    val event = uiModel.rawEvent
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}", 
+                        style = MaterialTheme.typography.bodySmall, 
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            if (badgeText != null || onReviewClick != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (badgeText != null) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = badgeText,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    
+                    if (onReviewClick != null) {
+                        TextButton(onClick = onReviewClick) {
+                            Icon(Icons.Default.RateReview, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(reviewLabel, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun SportFilterRow(
+    selectedSports: Set<String>,
+    onSportSelected: (String) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = 8.dp)
+    ) {
+        val categories = listOf("soccer", "basketball", "tennis", "calisthenics", "running", "other")
+        
+        items(categories) { name ->
+            val isSelected = selectedSports.contains(name.lowercase())
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSportSelected(name.lowercase()) },
+                label = { Text(name.replaceFirstChar { it.uppercase() }, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
+                leadingIcon = { 
+                    com.uniandes.sport.ui.components.SportIconBox(
+                        sport = name, 
+                        size = 24.dp
+                    ) 
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                    selectedLabelColor = Color.White,
+                    selectedLeadingIconColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isSelected,
+                    borderColor = Color.Transparent,
+                    selectedBorderColor = MaterialTheme.colorScheme.secondary
+                )
+            )
         }
     }
 }
