@@ -49,7 +49,7 @@ fun SectionHeader(title: String, subtitle: String) {
 @Composable
 fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit) {
     val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
-    val progressPercent = (progressRaw * 100).toInt()
+    val progressPercent = progressRaw.toInt()
     val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary // Teal
 
     Column(
@@ -68,10 +68,11 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
             
             // Anillo de progreso
             Canvas(modifier = Modifier.fillMaxSize().padding(2.dp)) {
+                // Dividimos por 100.0 porque los valores en DB ahora son de 0 a 100
                 drawArc(
                     color = indicatorColor,
                     startAngle = -90f,
-                    sweepAngle = (progressRaw * 360).toFloat(),
+                    sweepAngle = (progressRaw / 100.0 * 360).toFloat(),
                     useCenter = false,
                     style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                 )

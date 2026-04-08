@@ -31,4 +31,6 @@ interface PlayViewModelInterface {
     fun kickMember(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
 
     fun submitReview(eventId: String, reviewText: String, rating: Int, attendanceByUserId: Map<String, Boolean>, source: String = "text", onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
+    
+    fun updateReviewAiAnalysis(eventId: String, userId: String, analysis: Map<String, Double>)
 }

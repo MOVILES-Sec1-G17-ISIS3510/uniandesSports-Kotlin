@@ -197,4 +197,47 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                 _creationStatus.value = "ERROR: ${e.message}"
             }
     }
+
+    override fun addProgressToChallenge(retoId: String, addedProgress: Double, reviewText: String, eventId: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val docRef = db.collection("challenges").document(retoId)
+        val reviewLogRef = docRef.collection("reviews").document() // ID aleatorio para cada log
+        
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(docRef)
+            
+            // Verificamos si el usuario es participante (Seguridad restaurada)
+            val rawParticipants = snapshot.get("participants") as? List<*> ?: emptyList<Any>()
+            val participants = rawParticipants.map { it.toString() }
+            
+            if (participants.contains(uid)) {
+                // Obtenemos el progreso actual de este usuario de forma segura
+                val progressByUser = snapshot.get("progressByUser") as? Map<*, *>
+                val currentProgress = (progressByUser?.get(uid) as? Number)?.toDouble() ?: 0.0
+                
+                val increment = addedProgress
+                val newProgress = minOf(100.0, currentProgress + increment)
+                
+                // 1. Actualizar el progreso específico usando notación de punto (atómico)
+                transaction.update(docRef, "progressByUser.$uid", newProgress)
+                transaction.update(docRef, "updatedAt", com.google.firebase.firestore.FieldValue.serverTimestamp())
+                
+                // 2. Crear el log en la sub-colección del reto para trazabilidad
+                val reviewLog = mapOf(
+                    "userId" to uid,
+                    "eventId" to eventId,
+                    "addedProgress" to addedProgress,
+                    "reviewText" to reviewText,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+                transaction.set(reviewLogRef, reviewLog)
+            } else {
+                Log.w("RetosVM", "El usuario $uid no participa en el reto $retoId. Ignorando actualización.")
+            }
+        }.addOnSuccessListener {
+            Log.i("RetosVM", "Progreso sincronizado con éxito para reto: $retoId")
+        }.addOnFailureListener { e ->
+            Log.e("RetosVM", "Fallo crítico al actualizar reto $retoId", e)
+        }
+    }
 }

@@ -101,4 +101,8 @@ class DummyRetosViewModel : ViewModel(), RetosViewModelInterface {
     override fun addReto(reto: Reto) {
         _retos.value = _retos.value + reto
     }
+
+    override fun addProgressToChallenge(retoId: String, addedProgress: Double, reviewText: String, eventId: String) {
+        // dummy implementation
+    }
 }

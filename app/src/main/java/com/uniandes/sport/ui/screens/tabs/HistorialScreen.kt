@@ -45,7 +45,7 @@ fun HistorialScreen(
     val finishedChallenges = retos.filter { reto ->
         val isParticipant = reto.participants.contains(uid)
         val isExpired = (reto.endDate?.toDate()?.time ?: 0) < Date().time
-        val isCompleted = (reto.progressByUser[uid] ?: 0.0) >= 1.0
+        val isCompleted = (reto.progressByUser[uid] ?: 0.0) >= 100.0
         isParticipant && (isExpired || isCompleted)
     }
 
@@ -168,7 +168,7 @@ private fun OpenMatchHistoryCard(event: com.uniandes.sport.models.Event, review:
 
 @Composable
 fun HistoryCard(reto: com.uniandes.sport.models.Reto, uid: String) {
-    val progress = (reto.progressByUser[uid] ?: 0.0) * 100
+    val progress = reto.progressByUser[uid] ?: 0.0
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

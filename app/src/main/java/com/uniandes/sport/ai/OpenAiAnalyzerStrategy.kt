@@ -1,0 +1,98 @@
+package com.uniandes.sport.ai
+
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.uniandes.sport.models.Reto
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
+
+    private val api: OpenAiReviewApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(AiConstants.OPENAI_BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(OpenAiReviewApi::class.java)
+    }
+
+    override suspend fun analyzeReview(
+        reviewText: String,
+        activeChallenges: List<Reto>
+    ): AiReviewAnalysisResult {
+        try {
+            if (activeChallenges.isEmpty()) {
+                return AiReviewAnalysisResult(success = true, progressByChallengeId = emptyMap(), errorMessage = null)
+            }
+
+            // Construimos el prompt igual que con Gemini
+            val prompt = buildPrompt(reviewText, activeChallenges)
+
+            // Petición de OpenAI (usando gpt-4o-mini o gpt-3.5-turbo)
+            val request = OpenAiRequest(
+                model = "gpt-4o-mini",
+                messages = listOf(
+                    OpenAiMessage(role = "system", content = "You are a helpful AI assistant that analyzes sports activities and outputs JSON strictly."),
+                    OpenAiMessage(role = "user", content = prompt)
+                )
+            )
+
+            val authHeader = "Bearer ${AiConstants.OPENAI_API_KEY}"
+            val response = api.analyzeReviewWithOpenAi(authHeader, request)
+
+            if (response.isSuccessful) {
+                val openAiResponse = response.body()
+                
+                // Extraer el String JSON de la respuesta de OpeanAI
+                val jsonText = openAiResponse?.choices?.firstOrNull()?.message?.content ?: "{}"
+                Log.d("OpenAiStrategy", "Raw JSON string from AI: $jsonText")
+
+                // Parsear el JSON
+                val type = object : TypeToken<Map<String, Double>>() {}.type
+                val progressMap: Map<String, Double> = Gson().fromJson(jsonText, type)
+
+                return AiReviewAnalysisResult(
+                    success = true,
+                    progressByChallengeId = progressMap
+                )
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("OpenAiStrategy", "API Error: $errorBody")
+                return AiReviewAnalysisResult(success = false, errorMessage = "Error ${response.code()}: No autorizado o cuota excedida. Revisa tu API Key de OpenAI.")
+            }
+        } catch (e: Exception) {
+            Log.e("OpenAiStrategy", "Exception in API", e)
+            return AiReviewAnalysisResult(success = false, errorMessage = e.message)
+        }
+    }
+
+    private fun buildPrompt(review: String, challenges: List<Reto>): String {
+        val challengesDescriptions = challenges.joinToString(separator = "\n") {
+            "- ID: ${it.id}, Sport: ${it.sport}, Title: ${it.title}, Goal: ${it.goalLabel}"
+        }
+
+        return """
+            The user has just completed a sports event and provided the following review: 
+            "$review"
+            
+            The user has the following active challenges:
+            $challengesDescriptions
+            
+            Analyze the review and determine how much NEW progress percentage (0 to 100) the user made towards each challenge IN THIS SPECIFIC SESSION.
+            
+            CRITICAL INSTRUCTIONS:
+            1. Look for numeric values in the review (e.g., "30 pushups", "5km", "10 reps").
+            2. Match these values against the 'Goal' (goalLabel) of each challenge.
+            3. Calculate the percentage: (Amount from Review) / (Total Goal) * 100.
+            4. If the goal is "1000 reps" and the review says "300 reps", the progress is 30.
+            5. If the goal is "10 km" and the review says "1 km", the progress is 10.
+            6. If the review doesn't mention a specific number but mentions the activity, return a very small reasonable increment (e.g., 1) or 0.
+            7. Return 0 if the activity doesn't match the challenge's sport or title.
+            
+            RETURN ONLY A VALID JSON OBJECT where the keys are the challenge IDs and the values are numbers (0 to 100) representing the INCREMENTAL percentage made.
+            Do not wrap in markdown tags. Do not add explanations.
+            Example: {"ch_1": 30, "ch_2": 5}
+        """.trimIndent()
+    }
+}

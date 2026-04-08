@@ -487,6 +487,31 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         }.addOnFailureListener { onError(it as? Exception ?: Exception(it.message)) }
     }
 
+    override fun updateReviewAiAnalysis(eventId: String, userId: String, analysis: Map<String, Double>) {
+        if (eventId.isBlank() || userId.isBlank()) return
+        
+        val reviewRef = db.collection("events")
+            .document(eventId)
+            .collection("reviews")
+            .document(userId)
+
+        reviewRef.update("aiAnalysis", analysis)
+            .addOnSuccessListener {
+                Log.d("PlayVM", "AI Analysis updated for event $eventId and user $userId")
+                
+                // Actualizar el estado local si es necesario
+                val currentReviews = _myReviewsByEventId.value.toMutableMap()
+                val existing = currentReviews[eventId]
+                if (existing != null) {
+                    currentReviews[eventId] = existing.copy(aiAnalysis = analysis)
+                    _myReviewsByEventId.value = currentReviews
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("PlayVM", "Error updating AI Analysis for event $eventId", e)
+            }
+    }
+
     override fun onCleared() {
         super.onCleared()
         joinedEventsListener?.remove()

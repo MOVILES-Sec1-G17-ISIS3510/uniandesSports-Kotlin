@@ -62,6 +62,19 @@ fun PlayScreen(
     val selectedSports by viewModel.selectedSports.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
     
+    val firestoreVM: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val aiViewModel: com.uniandes.sport.viewmodels.retos.AiReviewViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return com.uniandes.sport.viewmodels.retos.AiReviewViewModel(
+                    com.uniandes.sport.ai.OpenAiAnalyzerStrategy(),
+                    firestoreVM,
+                    viewModel // Pasamos el PlayViewModel actual
+                ) as T
+            }
+        }
+    )
+    
     var activeModal by remember { mutableStateOf<PlayModalType?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<String?>(null) }
@@ -70,6 +83,8 @@ fun PlayScreen(
     
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     var reviewEvent by remember { mutableStateOf<Event?>(null) }
+    var aiReviewTextToAnalyze by remember { mutableStateOf<String?>(null) }
+    var aiReviewEventId by remember { mutableStateOf<String?>(null) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -168,6 +183,8 @@ fun PlayScreen(
                     source = source,
                     onSuccess = {
                         android.widget.Toast.makeText(context, "Review saved", android.widget.Toast.LENGTH_SHORT).show()
+                        aiReviewEventId = reviewEventLocal.id
+                        aiReviewTextToAnalyze = text
                         onDone(true)
                     },
                     onError = { e ->
@@ -175,6 +192,19 @@ fun PlayScreen(
                         onDone(false)
                     }
                 )
+            }
+        )
+    }
+
+    aiReviewTextToAnalyze?.let { text ->
+        val eventId = aiReviewEventId ?: ""
+        com.uniandes.sport.ui.screens.AiReviewDialog(
+            reviewText = text,
+            eventId = eventId,
+            viewModel = aiViewModel,
+            onDismiss = { 
+                aiReviewTextToAnalyze = null
+                aiReviewEventId = null
             }
         )
     }

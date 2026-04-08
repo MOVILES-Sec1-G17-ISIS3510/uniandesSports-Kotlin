@@ -38,4 +38,8 @@ interface RetosViewModelInterface {
     
     // para crear retos nuevos desde el celular
     fun addReto(reto: Reto)
+    
+    // para actualizar progreso (analizado por IA)
+    // para actualizar progreso (analizado por IA)
+    fun addProgressToChallenge(retoId: String, addedProgress: Double, reviewText: String, eventId: String)
 }

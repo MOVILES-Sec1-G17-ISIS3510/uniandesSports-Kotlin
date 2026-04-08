@@ -11,5 +11,6 @@ data class OpenMatchReview(
     val attendanceByUserId: Map<String, Boolean> = emptyMap(),
     val source: String = "text",
     val createdAt: Timestamp? = null,
-    val updatedAt: Timestamp? = null
+    val updatedAt: Timestamp? = null,
+    val aiAnalysis: Map<String, Double> = emptyMap()
 )
