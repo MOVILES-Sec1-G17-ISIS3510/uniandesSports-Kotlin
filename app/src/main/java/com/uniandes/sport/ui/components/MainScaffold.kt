@@ -136,6 +136,7 @@ fun MainScaffold(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 if (isMainTabsRoute && currentRoute != Screen.Perfil.route) {
                     TopAppBarDynamic(

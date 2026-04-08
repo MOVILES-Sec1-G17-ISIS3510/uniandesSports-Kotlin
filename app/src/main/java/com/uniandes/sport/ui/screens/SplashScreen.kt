@@ -67,6 +67,7 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .systemBarsPadding()
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {

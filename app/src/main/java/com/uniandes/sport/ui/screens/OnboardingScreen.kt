@@ -91,6 +91,7 @@ fun OnboardingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
+            .statusBarsPadding()
     ) {
         Column(
             modifier = Modifier

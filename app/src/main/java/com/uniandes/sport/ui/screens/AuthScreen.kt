@@ -163,6 +163,7 @@ fun AuthScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
+            .statusBarsPadding()
     ) {
         Column(
             modifier = Modifier
