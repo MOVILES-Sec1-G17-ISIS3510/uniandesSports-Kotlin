@@ -113,9 +113,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             navController = navController,
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
-                            themeMode = themeMode.value,
+                            themeMode = themeMode,
                             onThemeChange = {
-                                themeMode.value = it
+                                themeModeState.value = it
                                 saveThemeMode(it)
                             },
                             onLoginSuccess = { isNewUser ->
@@ -132,9 +132,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         OnboardingScreen(
                             authViewModel = authViewModel,
                             logViewModel = logViewModel,
-                            themeMode = themeMode.value,
+                            themeMode = themeMode,
                             onThemeChange = {
-                                themeMode.value = it
+                                themeModeState.value = it
                                 saveThemeMode(it)
                             },
                             onFinishOnboarding = {
