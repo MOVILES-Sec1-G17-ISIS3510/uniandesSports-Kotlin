@@ -65,8 +65,8 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onSuccess: (result: User) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
-        if (fullName.isBlank() || program.isBlank() || semester.isBlank() || mainSport.isBlank() || email.isBlank() || password.isBlank()) {
-            onFailure(IllegalArgumentException("All registration fields are required."))
+        if (fullName.isBlank() || email.isBlank() || password.isBlank()) {
+            onFailure(IllegalArgumentException("Full Name, Email and password are required."))
             return
         }
 
