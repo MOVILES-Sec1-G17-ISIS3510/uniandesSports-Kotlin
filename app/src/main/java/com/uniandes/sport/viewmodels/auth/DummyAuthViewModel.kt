@@ -68,13 +68,16 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
         }
     }
 
-    override fun login(onSuccess: (result: User) -> Unit, onFailure: (exception: Exception) -> Unit) {
-        register(onSuccess, onFailure)
+    override fun login(onSuccess: (result: User, isNewUser: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
+        register(
+            onSuccess = { onSuccess(it, false) },
+            onFailure = onFailure
+        )
     }
 
     override fun loginWithGoogleIdToken(
         idToken: String,
-        onSuccess: (result: User) -> Unit,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
         viewModelScope.launch {
@@ -88,13 +91,18 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
                     uid = "google-123",
                     email = if (email.isNotBlank()) email else "google.user@example.com",
                     fullName = if (fullName.isNotBlank()) fullName else "Google User"
-                )
+                ),
+                true // dummy logic simulates a new user
             )
         }
     }
 
-    override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
-        onSuccess(false)
+    override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
+        onSuccess()
+    }
+
+    override fun isUserLoggedIn(onSuccess: (isLoggedIn: Boolean, isNewUser: Boolean) -> Unit, onFailure: (exception: Exception) -> Unit) {
+        onSuccess(false, false)
     }
 
     override fun recoverPassword(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {

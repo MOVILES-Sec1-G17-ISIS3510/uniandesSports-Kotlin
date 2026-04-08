@@ -65,6 +65,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onSuccess: (result: User) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
+        if (fullName.isBlank() || program.isBlank() || semester.isBlank() || mainSport.isBlank() || email.isBlank() || password.isBlank()) {
+            onFailure(IllegalArgumentException("All registration fields are required."))
+            return
+        }
+
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -92,9 +97,14 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
     }
 
     override fun login(
-        onSuccess: (result: User) -> Unit,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
+        if (email.isBlank() || password.isBlank()) {
+            onFailure(IllegalArgumentException("Email and password are required."))
+            return
+        }
+
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -104,15 +114,18 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                             if (document != null && document.exists()) {
                                 val userProfile = document.toObject(User::class.java)
                                 if (userProfile != null) {
-                                    onSuccess(userProfile)
+                                    email = userProfile.email
+                                    fullName = userProfile.fullName
+                                    val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
+                                    onSuccess(userProfile, isNew)
                                     return@addOnSuccessListener
                                 }
                             }
                             // Fallback if no extended profile exists
-                            onSuccess(User(uid = uid, email = email))
+                            onSuccess(User(uid = uid, email = email), false)
                         }
                         .addOnFailureListener {
-                            onSuccess(User(uid = uid, email = email))
+                            onSuccess(User(uid = uid, email = email), false)
                         }
                 } else {
                     onFailure(task.exception ?: Exception("Unknown exception."))
@@ -122,7 +135,7 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
 
     override fun loginWithGoogleIdToken(
         idToken: String,
-        onSuccess: (result: User) -> Unit,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -152,30 +165,74 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                         if (document != null && document.exists()) {
                             val userProfile = document.toObject(User::class.java)
                             if (userProfile != null) {
-                                onSuccess(userProfile)
+                                email = userProfile.email
+                                fullName = userProfile.fullName
+                                val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
+                                onSuccess(userProfile, isNew)
                                 return@addOnSuccessListener
                             }
                         }
 
                         val newProfile = fallbackUser
+                        email = newProfile.email
+                        fullName = newProfile.fullName
 
                         db.collection("users").document(uid).set(newProfile)
-                            .addOnSuccessListener { onSuccess(newProfile) }
+                            .addOnSuccessListener { onSuccess(newProfile, true) }
                             // Do not block login on profile write issues.
-                            .addOnFailureListener { onSuccess(fallbackUser) }
+                            .addOnFailureListener { onSuccess(fallbackUser, true) }
                     }
                     .addOnFailureListener {
-                        onSuccess(fallbackUser)
+                        onSuccess(fallbackUser, true)
                     }
             }
     }
 
+    override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            onFailure(Exception("Usuario no autenticado"))
+            return
+        }
+
+        val updates = mapOf(
+            "program" to program,
+            "semester" to (semester.toIntOrNull() ?: 0),
+            "mainSport" to mainSport
+        )
+
+        db.collection("users").document(uid)
+            .update(updates)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { e -> onFailure(e) }
+    }
+
     override fun isUserLoggedIn(
-        onSuccess: (isLoggedIn: Boolean) -> Unit,
+        onSuccess: (isLoggedIn: Boolean, isNewUser: Boolean) -> Unit,
         onFailure: (exception: Exception) -> Unit
     ) {
         val currentUser = auth.currentUser
-        onSuccess(currentUser != null)
+        if (currentUser != null) {
+            db.collection("users").document(currentUser.uid).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        val userProfile = document.toObject(User::class.java)
+                        if (userProfile != null) {
+                            email = userProfile.email
+                            fullName = userProfile.fullName
+                            val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
+                            onSuccess(true, isNew)
+                            return@addOnSuccessListener
+                        }
+                    }
+                    onSuccess(true, true) // if document missing, they need onboarding
+                }
+                .addOnFailureListener {
+                    onSuccess(true, false) // fallback, avoid locking them out completely
+                }
+        } else {
+            onSuccess(false, false)
+        }
     }
 
     override fun recoverPassword(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
