@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface ProfesoresViewModelInterface {
     val profesores: StateFlow<List<Profesor>>
     val reviews: StateFlow<List<Review>>
+    val bookingRequests: StateFlow<List<com.uniandes.sport.models.BookingRequest>>
 
     fun fetchProfesores(
         onSuccess: (List<Profesor>) -> Unit = {},
@@ -16,6 +17,10 @@ interface ProfesoresViewModelInterface {
     fun refreshProfesores(onComplete: () -> Unit = {})
     
     fun fetchReviews(profesorId: String)
+
+    fun fetchBookingRequestsBySport(sport: String)
+
+    fun syncCoachingLeadsTopic(sport: String)
 
     fun createProfesor(
         profesor: Profesor,

@@ -22,7 +22,8 @@ fun MainTabsScreen(
     onOpenEventConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
     onNavigate: (String) -> Unit,
-    searchQuery: String = ""
+    searchQuery: String = "",
+    modifier: Modifier = Modifier
 ) {
     val coreScreens = listOf(Screen.Home, Screen.Challenges, Screen.Play, Screen.Comunidades, Screen.Profesores)
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { coreScreens.size })
@@ -41,7 +42,7 @@ fun MainTabsScreen(
 
     HorizontalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         userScrollEnabled = true
     ) { page ->
         when (coreScreens[page]) {

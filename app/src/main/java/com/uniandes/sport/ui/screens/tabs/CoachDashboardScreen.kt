@@ -15,6 +15,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.NotificationImportant
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,10 +46,18 @@ fun CoachDashboardScreen(
     val context = LocalContext.current
     val profesores by profesoresViewModel.profesores.collectAsState()
     val profesor = profesores.find { it.id == profesorId }
+    val bookingRequests by profesoresViewModel.bookingRequests.collectAsState()
 
     LaunchedEffect(Unit) {
         if (profesores.isEmpty()) {
             profesoresViewModel.fetchProfesores()
+        }
+    }
+
+    LaunchedEffect(profesor) {
+        profesor?.deporte?.let { sport ->
+            profesoresViewModel.fetchBookingRequestsBySport(sport)
+            profesoresViewModel.syncCoachingLeadsTopic(sport)
         }
     }
 
@@ -126,7 +137,7 @@ fun CoachDashboardScreen(
                 ) {
                     Text(
                         "ESTIMATED REVENUE", 
-                        color = Color.White.copy(alpha = 0.7f), 
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), 
                         fontSize = 11.sp, 
                         fontWeight = FontWeight.Black, 
                         letterSpacing = 1.5.sp
@@ -134,7 +145,7 @@ fun CoachDashboardScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         formattedIngresos, 
-                        color = Color.White, 
+                        color = MaterialTheme.colorScheme.onPrimary, 
                         fontSize = 42.sp, 
                         fontWeight = FontWeight.Black
                     )
@@ -144,13 +155,13 @@ fun CoachDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("SESSIONS", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text(profesor.sessionsDelivered.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("SESSIONS", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(profesor.sessionsDelivered.toString(), color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
-                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)))
+                        Box(modifier = Modifier.height(32.dp).width(1.dp).background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("NEXT PAYOUT", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("MONTH END", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("NEXT PAYOUT", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("MONTH END", color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
@@ -196,6 +207,59 @@ fun CoachDashboardScreen(
                     iconColor = Color(0xFF8B5CF6),
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            // Incoming Leads Section
+            Text(
+                "INCOMING LEADS", 
+                fontWeight = FontWeight.Black, 
+                fontSize = 13.sp, 
+                color = MaterialTheme.colorScheme.onSurfaceVariant, 
+                letterSpacing = 1.sp
+            )
+
+            if (bookingRequests.isEmpty()) {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(32.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.Mail, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f), modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text("No new leads yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                bookingRequests.forEach { request ->
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha=0.2f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.NotificationImportant, null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${request.studentName} is looking for a coach", fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                Text("Sport: ${request.sport} • Level: ${request.skillLevel}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Schedule: ${request.schedule}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
             }
 
             // Manage Schedule Action
