@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.ui.screens.AuthScreen
 import com.uniandes.sport.ui.screens.OnboardingScreen
 import com.uniandes.sport.ui.screens.SplashScreen
@@ -103,10 +104,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             
             UniandesSportsKotlinTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
-                val authViewModel = FirebaseAuthViewModel()
-                val tweetsViewModel = FirestoreTweetsViewModel()
-                val storageViewModel = FirebaseStorageViewModel()
-                val logViewModel = FirebaseLogViewModel()
+                val authViewModel: FirebaseAuthViewModel = viewModel()
+                val tweetsViewModel: FirestoreTweetsViewModel = viewModel()
+                val storageViewModel: FirebaseStorageViewModel = viewModel()
+                val logViewModel: FirebaseLogViewModel = viewModel()
 
                 NavHost(navController = navController, startDestination = Routes.SPLASH_SCREEN){
                     composable(Routes.SPLASH_SCREEN) {
