@@ -953,50 +953,77 @@ private fun TrackDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = { if (!submitting) onDismiss() },
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { if (!submitting) onDismiss() }
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .padding(horizontal = 4.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.background, // Pure background (no purple tint)
+            tonalElevation = 0.dp // Prevent Material 3 automatic purple tinting
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header Segment
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 48.dp)
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
-                    text = "Session Track",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black
+                    text = "Activity Log",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = event.title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Section 1: Participation (The Gatekeeper)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Participation Card
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (participated) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    border = if (participated) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (participated) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) 
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    border = if (participated) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Did you participate?", 
-                                style = MaterialTheme.typography.titleSmall, 
-                                fontWeight = FontWeight.Bold
+                                "Participation", 
+                                style = MaterialTheme.typography.labelLarge, 
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                if (participated) "I attended this session" else "I missed this session",
+                                if (participated) "I completed this session" else "I couldn't attend",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1018,135 +1045,166 @@ private fun TrackDialog(
                 }
 
                 if (participated) {
-                    // Section 2: Rating
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Rating Section
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Text(
+                            "Session Quality",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Performance Rating", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                (1..5).forEach { star ->
-                                    FilledIconButton(
-                                        onClick = { rating = star },
-                                        modifier = Modifier.size(34.dp),
-                                        colors = IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = if (star <= rating) Color(0xFFFFE082) else MaterialTheme.colorScheme.surface
+                            (1..5).forEach { star ->
+                                IconButton(
+                                    onClick = { rating = star },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (star <= rating) Color(0xFFFFD54F).copy(alpha = 0.1f)
+                                            else Color.Transparent
                                         )
-                                    ) {
-                                        Icon(
-                                            imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
-                                            contentDescription = "Star $star",
-                                            tint = if (star <= rating) Color(0xFFF9A825) else MaterialTheme.colorScheme.outline
-                                        )
-                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "Star $star",
+                                        tint = if (star <= rating) Color(0xFFFBC02D) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(28.dp)
+                                    )
                                 }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (rating == 0) "Select" else "$rating/5",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
                     }
 
-                    // Section 3: Activity Log
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Activity Text Section
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Activity Log", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                OutlinedButton(
-                                    onClick = {
-                                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your activity")
-                                        }
-                                        try {
-                                            speechLauncher.launch(intent)
-                                        } catch (_: Exception) {
-                                            android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                                ) {
-                                    Icon(Icons.Default.Mic, contentDescription = "Mic", modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Voice")
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = trackText,
-                                onValueChange = {
-                                    trackText = it
-                                    inputSource = "text"
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                minLines = 4,
-                                maxLines = 7,
-                                placeholder = { Text("What did you accomplish in this session?") }
+                            Text(
+                                "Track Details",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 4.dp)
                             )
-
-                            if (inputSource == "microphone") {
-                                AssistChip(onClick = {}, label = { Text("Voice input") })
+                            
+                            IconButton(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your activity")
+                                    }
+                                    try {
+                                        speechLauncher.launch(intent)
+                                    } catch (_: Exception) {
+                                        android.widget.Toast.makeText(context, "Speech recognition not available", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer)
+                            ) {
+                                Icon(Icons.Default.Mic, contentDescription = "Voice input", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                         }
+
+                        OutlinedTextField(
+                            value = trackText,
+                            onValueChange = {
+                                trackText = it
+                                inputSource = "text"
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            maxLines = 5,
+                            shape = RoundedCornerShape(16.dp),
+                            placeholder = { 
+                                Text(
+                                    "E.g.: I did 200 reps of push-ups...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                ) 
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+                            )
+                        )
                     }
                 } else {
-                    // Missed session message
-                    Text(
-                        "You've marked this session as missed. Your status will be saved, but no progress will be tracked for your challenges.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = (!participated || (trackText.isNotBlank() && rating in 1..5)) && !submitting,
-                onClick = {
-                    submitting = true
-                    onSubmit(trackText, rating, participated, inputSource) { success ->
-                        submitting = false
-                        if (success) onDismiss()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Recording as 'Missed'. No progress will be tracked for challenges in this session.",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
-            ) {
-                if (submitting) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(6.dp))
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Actions
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    TextButton(
+                        modifier = Modifier.weight(1f),
+                        enabled = !submitting,
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel", color = MaterialTheme.colorScheme.outline)
+                    }
+                    
+                    Button(
+                        modifier = Modifier.weight(1.5f),
+                        enabled = (!participated || (trackText.isNotBlank() && rating in 1..5)) && !submitting,
+                        onClick = {
+                            submitting = true
+                            onSubmit(trackText, rating, participated, inputSource) { success ->
+                                submitting = false
+                                if (success) onDismiss()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        if (submitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        } else {
+                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (participated) "Save Track" else "Save Status")
+                        }
+                    }
                 }
-                Text(if (participated) "Save Activity" else "Save Status")
-            }
-        },
-        dismissButton = {
-            TextButton(enabled = !submitting, onClick = onDismiss) {
-                Text("Cancel")
             }
         }
-    )
+    }
 }
 
 enum class PlayModalType { MY_SCHEDULE, SEARCH, HISTORY }
