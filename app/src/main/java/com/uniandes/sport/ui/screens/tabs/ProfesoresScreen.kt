@@ -56,10 +56,7 @@ fun ProfesoresScreen(
     val context = LocalContext.current
     val profesores by profesoresViewModel.profesores.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
-    var selectedProfesor by remember { mutableStateOf<Profesor?>(null) }
-    var showReviewDialog by remember { mutableStateOf(false) }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
-    var reviewsRefreshKey by remember { mutableStateOf(0) }
     var isFabExpanded by remember { mutableStateOf(false) }
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
@@ -173,7 +170,7 @@ fun ProfesoresScreen(
                     items(filteredProfesores) { prof ->
                         CoachCard(
                             profesor = prof,
-                            onViewProfile = { selectedProfesor = prof }
+                            onViewProfile = { onNavigate(Screen.CoachProfile.route.replace("{profesorId}", prof.id)) }
                         )
                     }
                 }
@@ -263,54 +260,7 @@ fun ProfesoresScreen(
 
 
 
-    // Coach Detail Modal
-    selectedProfesor?.let { prof ->
-        CoachDetailDialog(
-            profesor = prof,
-            profesoresViewModel = profesoresViewModel,
-            refreshKey = reviewsRefreshKey,
-            onDismiss = { selectedProfesor = null },
-            onAddReview = { showReviewDialog = true },
-            onBookClass = { profId ->
-                selectedProfesor = null
-                onNavigate("book_class/$profId")
-            }
-        )
-    }
 
-    // Add Review Modal
-    if (showReviewDialog && selectedProfesor != null) {
-        val profId = selectedProfesor!!.id
-        var userEmail by remember { mutableStateOf("Anonymous") }
-        
-        LaunchedEffect(Unit) {
-            authViewModel.getUser(
-                onSuccess = { user -> userEmail = user.fullName.takeIf { it.isNotBlank() } ?: user.email },
-                onFailure = {}
-            )
-        }
-
-        AddReviewDialog(
-            profesor = selectedProfesor!!,
-            onDismiss = { showReviewDialog = false },
-            onSubmit = { rating, comment -> 
-                val newReview = Review(
-                    estudiante = userEmail,
-                    rating = rating,
-                    comentario = comment,
-                    fecha = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date())
-                )
-                profesoresViewModel.addReview(profId, newReview, 
-                    onSuccess = {
-                        showReviewDialog = false
-                    },
-                    onFailure = { e -> 
-                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                )
-            }
-        )
-    }
 
     // Become Coach Modal
     if (showBecomeCoachDialog) {
@@ -375,10 +325,24 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
             // Header
             Row(verticalAlignment = Alignment.Top) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    com.uniandes.sport.ui.components.SportIconBox(
-                        sport = profesor.deporte,
-                        size = 64.dp
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = profesor.nombre.split(" ").joinToString("") { it.take(1) },
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp
+                        )
+                    }
                     if (profesor.verified) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
@@ -488,247 +452,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
     }
 }
 
-@Composable
-fun CoachDetailDialog(
-    profesor: Profesor,
-    profesoresViewModel: ProfesoresViewModelInterface,
-    refreshKey: Int = 0,
-    onDismiss: () -> Unit,
-    onAddReview: () -> Unit,
-    onBookClass: (String) -> Unit
-) {
-    val reviews by profesoresViewModel.reviews.collectAsState()
 
-    LaunchedEffect(profesor.id) {
-        profesoresViewModel.fetchReviews(profesor.id)
-        profesoresViewModel.syncReviewsCount(profesor.id)
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
-        ) {
-            LazyColumn(modifier = Modifier.padding(20.dp)) {
-                // Header
-                item {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Column {
-                            Text(profesor.nombre, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            if (profesor.totalReviews > 0) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                                    Icon(Icons.Default.Star, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
-                                    Text(" ${String.format(Locale.US, "%.1f", profesor.rating)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                                    Text("New Coach", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                                }
-                            }
-                            Text("${profesor.totalReviews} reviews", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(32.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // Stats Grid
-                item {
-                    val stats = listOf(
-                        "Sport" to profesor.deporte,
-                        "Price" to profesor.precio,
-                        "Experience" to profesor.experiencia,
-                        "Availability" to profesor.disponibilidad
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatBox(stats[0].first, stats[0].second, Modifier.weight(1f))
-                            StatBox(stats[1].first, stats[1].second, Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatBox(stats[2].first, stats[2].second, Modifier.weight(1f))
-                            StatBox(stats[3].first, stats[3].second, Modifier.weight(1f))
-                        }
-                        StatBox("Specialty", profesor.especialidad, Modifier.fillMaxWidth())
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // Performance
-                item {
-                    Text(
-                        text = "PERFORMANCE",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatBox("Sessions", profesor.sessionsDelivered.toString(), Modifier.weight(1f), isNumber = true)
-                        StatBox("Wins", profesor.tournamentWins.toString(), Modifier.weight(1f), isNumber = true)
-                        StatBox("Rank", "#" + profesor.rankInSport.toString(), Modifier.weight(1f), isNumber = true)
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // Reviews
-                item {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("REVIEWS", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                        TextButton(onClick = onAddReview) {
-                            Text("Add Review")
-                        }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        reviews.take(3).forEach { review ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(12.dp)
-                            ) {
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(review.estudiante, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                        Spacer(Modifier.width(8.dp))
-                                        Icon(Icons.Default.Star, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(12.dp))
-                                    }
-                                    Text(review.fecha, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
-                                    Text(review.comentario, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // Actions
-                item {
-                    val context = LocalContext.current
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = {
-                                val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}"
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface),
-                            modifier = Modifier.weight(1f).border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Contact")
-                        }
-                        Button(
-                            onClick = { 
-                                onBookClass(profesor.id)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Book Class")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StatBox(label: String, value: String, modifier: Modifier = Modifier, isNumber: Boolean = false) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(12.dp)
-    ) {
-        Column(horizontalAlignment = if (isNumber) Alignment.CenterHorizontally else Alignment.Start) {
-            if (isNumber) {
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
-                Text(label.uppercase(), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-            } else {
-                Text(label.uppercase(), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
-
-@Composable
-fun AddReviewDialog(profesor: Profesor, onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
-    var rating by remember { mutableStateOf(5) }
-    var comment by remember { mutableStateOf("") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("ADD REVIEW", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(16.dp))
-                
-                Text("Rating", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                Row(modifier = Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (1..5).forEach { i ->
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(if (i <= rating) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                                .clickable { rating = i },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Star, null, tint = if (i <= rating) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-                
-                Text("Comment", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    placeholder = { Text("Share your experience...") },
-                    modifier = Modifier.fillMaxWidth().height(100.dp).padding(top = 4.dp),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                
-                Spacer(Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Cancel")
-                    }
-                    Button(
-                        onClick = { onSubmit(rating, comment) },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Submit")
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, String, String) -> Unit) {

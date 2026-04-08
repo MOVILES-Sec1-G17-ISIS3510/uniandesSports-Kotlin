@@ -9,6 +9,8 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.ktx.messaging
 
 class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
@@ -20,8 +22,12 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     private val _reviews = MutableStateFlow<List<Review>>(emptyList())
     override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
 
+    private val _bookingRequests = MutableStateFlow<List<com.uniandes.sport.models.BookingRequest>>(emptyList())
+    override val bookingRequests: StateFlow<List<com.uniandes.sport.models.BookingRequest>> = _bookingRequests.asStateFlow()
+
     private var cachedProfesores: List<Profesor>? = null
     private var reviewsListener: ListenerRegistration? = null
+    private var requestsListener: ListenerRegistration? = null
 
     override fun fetchProfesores(
         onSuccess: (List<Profesor>) -> Unit, 
@@ -131,9 +137,41 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             }
     }
 
+    override fun fetchBookingRequestsBySport(sport: String) {
+        requestsListener?.remove()
+        requestsListener = db.collection("coach_requests")
+            .whereEqualTo("sport", sport)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.w("FirestoreProfesores", "Listen booking requests failed.", e)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val list = snapshot.map { doc ->
+                        doc.toObject(com.uniandes.sport.models.BookingRequest::class.java).apply { id = doc.id }
+                    }
+                    _bookingRequests.value = list.sortedByDescending { it.createdAt }
+                }
+            }
+    }
+
+    override fun syncCoachingLeadsTopic(sport: String) {
+        val topic = "sport_leads_${sport.lowercase().replace(Regex("[^a-z0-9]"), "_")}"
+        try {
+            Log.d("FirestoreProfesores", "Subscribing to topic: $topic")
+            Firebase.messaging.subscribeToTopic(topic)
+                .addOnSuccessListener { Log.d("FirestoreProfesores", "Successfully subscribed to $topic") }
+                .addOnFailureListener { e -> Log.e("FirestoreProfesores", "Failed to subscribe to $topic", e) }
+        } catch (e: Exception) {
+            Log.e("FirestoreProfesores", "Error in syncCoachingLeadsTopic", e)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         reviewsListener?.remove()
+        requestsListener?.remove()
     }
 
     override fun createProfesor(

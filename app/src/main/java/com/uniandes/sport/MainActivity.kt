@@ -38,12 +38,14 @@ class MainActivity : ComponentActivity() {
     private val themePrefsName = "app_prefs"
     private val themePrefsKey = "theme_mode"
     private val initialTabState = mutableStateOf(0)
-    private val pendingOpenEventIdState = mutableStateOf<String?>(null)
+    private val pendingOpenMatchEventIdState = mutableStateOf<String?>(null)
+    private val pendingCoachRequestState = mutableStateOf(false)
 
     companion object {
         const val EXTRA_NOTIFICATION_TYPE = "notification_type"
         const val EXTRA_EVENT_ID = "event_id"
         private const val PLAY_TAB_INDEX = 2
+        private const val COACHES_TAB_INDEX = 4
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -109,8 +111,10 @@ class MainActivity : ComponentActivity() {
                     composable(Routes.MAIN_TABS) {
                         MainScaffold(
                             initialTabIndex = initialTabState.value,
-                            pendingOpenEventId = pendingOpenEventIdState.value,
-                            onOpenEventConsumed = { pendingOpenEventIdState.value = null },
+                            pendingOpenMatchEventId = pendingOpenMatchEventIdState.value,
+                            onOpenMatchConsumed = { pendingOpenMatchEventIdState.value = null },
+                            pendingCoachRequest = pendingCoachRequestState.value,
+                            onCoachRequestConsumed = { pendingCoachRequestState.value = false },
                             themeMode = themeMode.value,
                             onThemeChange = {
                                 themeMode.value = it
@@ -186,6 +190,11 @@ class MainActivity : ComponentActivity() {
                 initialTabState.value = PLAY_TAB_INDEX
                 pendingOpenEventIdState.value = eventId
             }
+        } else if (notificationType == "coach_request") {
+            // Redirigir a la pestaña de Profesores (Dashboard del Coach)
+            initialTabState.value = COACHES_TAB_INDEX
+            pendingCoachRequestState.value = true
+            Log.d("FCM_NAV", "Coach request received, triggering navigation")
         }
     }
 }

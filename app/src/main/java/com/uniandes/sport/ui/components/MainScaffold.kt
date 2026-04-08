@@ -34,8 +34,10 @@ import com.uniandes.sport.ui.theme.ArchivoFamily
 @Composable
 fun MainScaffold(
     initialTabIndex: Int = 0,
-    pendingOpenEventId: String? = null,
-    onOpenEventConsumed: () -> Unit = {},
+    pendingOpenMatchEventId: String? = null,
+    onOpenMatchConsumed: () -> Unit = {},
+    pendingCoachRequest: Boolean = false,
+    onCoachRequestConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {},
     onExitApp: () -> Unit = {}
@@ -72,6 +74,19 @@ fun MainScaffold(
                 launchSingleTop = true
                 restoreState = true
             }
+            onOpenMatchConsumed()
+        }
+    }
+
+    // React to coach request notifications
+    LaunchedEffect(pendingCoachRequest) {
+        if (pendingCoachRequest) {
+            navController.navigate("main_tabs/4") {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            onCoachRequestConsumed()
         }
     }
 
@@ -156,9 +171,10 @@ fun MainScaffold(
             AppNavigation(
                 navController = navController, 
                 startTabIndex = initialTabIndex,
-                pendingOpenEventId = pendingOpenEventId,
-                onOpenEventConsumed = onOpenEventConsumed,
-                modifier = Modifier.padding(innerPadding),
+                pendingOpenMatchEventId = pendingOpenMatchEventId,
+                onOpenMatchConsumed = onOpenMatchConsumed,
+                innerPadding = innerPadding,
+                modifier = Modifier.fillMaxSize(),
                 onPageChanged = { page -> 
                     activeTabPageIndex = page
                 },
