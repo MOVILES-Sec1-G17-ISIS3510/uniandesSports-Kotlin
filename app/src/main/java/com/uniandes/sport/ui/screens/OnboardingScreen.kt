@@ -21,6 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.with
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.ui.components.ThemeModeToggle
@@ -28,7 +36,7 @@ import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun OnboardingScreen(
     authViewModel: AuthViewModelInterface,
@@ -40,12 +48,15 @@ fun OnboardingScreen(
 ) {
     val screenName = "OnboardingScreen"
     val colorScheme = MaterialTheme.colorScheme
+    var currentStep by remember { mutableStateOf(1) }
+    val totalSteps = 3
+
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    val isFormValid = authViewModel.program.isNotBlank() &&
-        authViewModel.semester.isNotBlank() &&
-        authViewModel.mainSport.isNotBlank()
+
+    val isStep1Valid = authViewModel.program.isNotBlank() && authViewModel.semester.isNotBlank()
+    val isStep2Valid = authViewModel.mainSport.isNotBlank()
 
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
@@ -54,7 +65,11 @@ fun OnboardingScreen(
     }
 
     BackHandler {
-        onBackToLogin()
+        if (currentStep > 1) {
+            currentStep--
+        } else {
+            onBackToLogin()
+        }
     }
 
     if (showDialog) {
@@ -82,21 +97,38 @@ fun OnboardingScreen(
                 .fillMaxSize()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // Progress Indicator
+            StepIndicator(currentStep = currentStep, totalSteps = totalSteps)
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Dynamic Header
             Text(
-                text = "Almost there...",
-                fontSize = 32.sp,
+                text = when(currentStep) {
+                    1 -> "Tell us about your studies"
+                    2 -> "What's your sport?"
+                    else -> "Review your profile"
+                },
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Black,
-                color = colorScheme.onBackground
+                color = colorScheme.onBackground,
+                textAlign = TextAlign.Center
             )
             
             Text(
-                text = "Complete these details to improve your experience",
+                text = when(currentStep) {
+                    1 -> "Help us personalize your academic schedule"
+                    2 -> "We'll suggest events based on your interests"
+                    else -> "Make sure everything looks correct"
+                },
                 fontSize = 14.sp,
                 color = colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
+                modifier = Modifier.padding(top = 8.dp, bottom = 32.dp),
+                textAlign = TextAlign.Center
             )
 
             Card(
@@ -109,67 +141,85 @@ fun OnboardingScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Show dynamically obtained Name and Email
-                    if (authViewModel.fullName.isNotBlank()) {
-                        Text(text = authViewModel.fullName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    AnimatedContent(
+                        targetState = currentStep,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                slideInHorizontally { it } + fadeIn() with
+                                        slideOutHorizontally { -it } + fadeOut()
+                            } else {
+                                slideInHorizontally { -it } + fadeIn() with
+                                        slideOutHorizontally { it } + fadeOut()
+                            }
+                        }
+                    ) { step ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            when (step) {
+                                1 -> {
+                                    ProgramSearchField(
+                                        value = authViewModel.program,
+                                        onValueChange = { authViewModel.program = it },
+                                        enabled = !isLoading
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    SemesterStepperField(
+                                        semesterValue = authViewModel.semester,
+                                        onSemesterChange = { authViewModel.semester = it },
+                                        enabled = !isLoading
+                                    )
+                                }
+                                2 -> {
+                                    MainSportLabelsField(
+                                        selectedSportsCsv = authViewModel.mainSport,
+                                        onSelectionChange = { authViewModel.mainSport = it },
+                                        enabled = !isLoading
+                                    )
+                                }
+                                3 -> {
+                                    SummaryStep(
+                                        fullName = authViewModel.fullName,
+                                        email = authViewModel.email,
+                                        program = authViewModel.program,
+                                        semester = authViewModel.semester,
+                                        sports = authViewModel.mainSport
+                                    )
+                                }
+                            }
+                        }
                     }
-                    if (authViewModel.email.isNotBlank()) {
-                        Text(text = authViewModel.email, color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
 
-                    ProgramSearchField(
-                        value = authViewModel.program,
-                        onValueChange = { authViewModel.program = it },
-                        enabled = !isLoading
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    SemesterStepperField(
-                        semesterValue = authViewModel.semester,
-                        onSemesterChange = { authViewModel.semester = it },
-                        enabled = !isLoading
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    MainSportLabelsField(
-                        selectedSportsCsv = authViewModel.mainSport,
-                        onSelectionChange = { authViewModel.mainSport = it },
-                        enabled = !isLoading
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
 
                     Button(
                         onClick = {
-                            if (!isFormValid) {
-                                dialogMessage = "Please complete all fields"
-                                showDialog = true
-                                return@Button
+                            if (currentStep < totalSteps) {
+                                currentStep++
+                            } else {
+                                isLoading = true
+                                authViewModel.saveOnboardingData(
+                                    onSuccess = {
+                                        isLoading = false
+                                        logViewModel.log(screenName, "ONBOARDING_COMPLETED")
+                                        onFinishOnboarding()
+                                    },
+                                    onFailure = { exception ->
+                                        isLoading = false
+                                        dialogMessage = exception.message.toString()
+                                        showDialog = true
+                                        logViewModel.crash(screenName, exception)
+                                    }
+                                )
                             }
-                            
-                            isLoading = true
-                            authViewModel.saveOnboardingData(
-                                onSuccess = {
-                                    isLoading = false
-                                    logViewModel.log(screenName, "ONBOARDING_COMPLETED")
-                                    onFinishOnboarding()
-                                },
-                                onFailure = { exception ->
-                                    isLoading = false
-                                    dialogMessage = exception.message.toString()
-                                    showDialog = true
-                                    logViewModel.crash(screenName, exception)
-                                }
-                            )
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
-                        enabled = !isLoading && isFormValid,
+                        enabled = !isLoading && when(currentStep) {
+                            1 -> isStep1Valid
+                            2 -> isStep2Valid
+                            else -> true
+                        },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = colorScheme.primary,
                             contentColor = colorScheme.onPrimary
@@ -179,25 +229,29 @@ fun OnboardingScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorScheme.onPrimary, strokeWidth = 2.dp)
                         } else {
                             Text(
-                                text = "Complete Registration",
+                                text = if (currentStep < totalSteps) "Next Step" else "Complete Profile",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    TextButton(
-                        onClick = { onBackToLogin() },
-                        enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Back to Login",
-                            fontWeight = FontWeight.SemiBold,
-                            color = colorScheme.primary
-                        )
+                    if (currentStep > 1) {
+                        TextButton(
+                            onClick = { currentStep-- },
+                            enabled = !isLoading,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Text("Previous Step", color = colorScheme.primary)
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { onBackToLogin() },
+                            enabled = !isLoading,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Text("Back to Login", color = colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -210,6 +264,71 @@ fun OnboardingScreen(
                 .align(Alignment.TopEnd)
                 .padding(top = 16.dp, end = 16.dp)
         )
+    }
+}
+
+@Composable
+fun StepIndicator(currentStep: Int, totalSteps: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(totalSteps) { index ->
+            val step = index + 1
+            val isActive = step <= currentStep
+            val isCurrent = step == currentStep
+            
+            Box(
+                modifier = Modifier
+                    .size(if (isCurrent) 12.dp else 8.dp)
+                    .background(
+                        color = if (isActive) MaterialTheme.colorScheme.primary 
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+            
+            if (index < totalSteps - 1) {
+                Box(
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(2.dp)
+                        .background(
+                            if (step < currentStep) MaterialTheme.colorScheme.primary 
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SummaryStep(
+    fullName: String,
+    email: String,
+    program: String,
+    semester: String,
+    sports: String
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start
+    ) {
+        SummaryItem(label = "Name", value = fullName)
+        SummaryItem(label = "Email", value = email)
+        SummaryItem(label = "Program", value = program)
+        SummaryItem(label = "Semester", value = semester)
+        SummaryItem(label = "Sports", value = sports)
+    }
+}
+
+@Composable
+fun SummaryItem(label: String, value: String) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

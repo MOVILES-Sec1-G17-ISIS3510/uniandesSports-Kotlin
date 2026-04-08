@@ -251,28 +251,6 @@ fun AuthScreen(
                             label = "Full Name",
                             icon = Icons.Default.Person
                         )
-
-                        CustomOutlinedTextField(
-                            value = authViewModel.program,
-                            onValueChange = { authViewModel.program = it },
-                            label = "Program (e.g. Systems Engineering)",
-                            icon = Icons.Default.School
-                        )
-
-                        CustomOutlinedTextField(
-                            value = authViewModel.semester,
-                            onValueChange = { authViewModel.semester = it },
-                            label = "Semester (e.g. 8)",
-                            icon = Icons.Default.FormatListNumbered,
-                            keyboardType = KeyboardType.Number
-                        )
-
-                        CustomOutlinedTextField(
-                            value = authViewModel.mainSport,
-                            onValueChange = { authViewModel.mainSport = it },
-                            label = "Main Sport",
-                            icon = Icons.Default.Sports
-                        )
                     }
 
                     CustomOutlinedTextField(
@@ -294,7 +272,46 @@ fun AuthScreen(
                         onPasswordVisibilityChange = { passwordVisible = !passwordVisible }
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    if (isLoginMode) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    if (authViewModel.email.isBlank()) {
+                                        dialogMessage = "Please enter your email to recover your password"
+                                        showDialog = true
+                                        return@TextButton
+                                    }
+                                    authViewModel.recoverPassword(
+                                        onSuccess = {
+                                            logViewModel.log(screenName, "PASSWORD_RECOVERED")
+                                            dialogMessage = "Password recovery link sent to your email"
+                                            showDialog = true
+                                        },
+                                        onFailure = { exception ->
+                                            dialogMessage = exception.message.toString()
+                                            showDialog = true
+                                            logViewModel.crash(screenName, exception)
+                                        }
+                                    )
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    "Forgot password?",
+                                    color = colorScheme.primary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Main Action Button
                     Button(
@@ -320,9 +337,6 @@ fun AuthScreen(
                             } else {
                                 val missingFields = buildList {
                                     if (authViewModel.fullName.isBlank()) add("full name")
-                                    if (authViewModel.program.isBlank()) add("program")
-                                    if (authViewModel.semester.isBlank()) add("semester")
-                                    if (authViewModel.mainSport.isBlank()) add("main sport")
                                     if (authViewModel.email.isBlank()) add("email")
                                     if (authViewModel.password.isBlank()) add("password")
                                 }
@@ -336,7 +350,7 @@ fun AuthScreen(
                                 authViewModel.register(
                                     onSuccess = { _ ->
                                         logViewModel.log(screenName, "USER_REGISTERED")
-                                        onLoginSuccess(false)
+                                        onLoginSuccess(true)
                                     },
                                     onFailure = { exception ->
                                         dialogMessage = exception.message.toString()
@@ -434,34 +448,6 @@ fun AuthScreen(
                     fontSize = 14.sp
                 )
             }
-
-                Text("Forgot your password?", color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-
-            // Recover Password Button
-            TextButton(
-                onClick = {
-                    if (authViewModel.email.isBlank()) {
-                        dialogMessage = "Please enter your email to recover your password"
-                        showDialog = true
-                        return@TextButton
-                    }
-                    authViewModel.recoverPassword(
-                        onSuccess = {
-                            logViewModel.log(screenName, "PASSWORD_RECOVERED")
-                            dialogMessage = "Password recovery link sent to your email"
-                            showDialog = true
-                        },
-                        onFailure = { exception ->
-                            dialogMessage = exception.message.toString()
-                            showDialog = true
-                            logViewModel.crash(screenName, exception)
-                        }
-                    )
-                }
-            ) {
-                Text("Forgot your password?", color = Color.Gray, fontWeight = FontWeight.Medium)
-            }
-            
             Spacer(modifier = Modifier.height(32.dp))
         }
 
