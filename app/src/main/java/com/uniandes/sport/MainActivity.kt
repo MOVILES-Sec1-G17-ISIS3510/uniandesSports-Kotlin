@@ -270,15 +270,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_LIGHT) {
             val lux = event.values[0]
-            val currentMode = loadThemeMode() // Check the stored preference
+            val currentMode = loadThemeMode() 
             
-            // Only apply sensor logic if the user has selected AUTO mode
+            // Debug log to see real-time lux values
+            Log.d("SENSOR_DEBUG", "Lux: $lux | Preferred Mode: $currentMode | Current State: ${themeModeState.value}")
+
             if (currentMode == ThemeMode.AUTO) {
-                // Hysteresis logic to prevent flickering
-                // Thresholds: < 10 lux for DARK, > 25 lux for LIGHT
-                if (lux < 10f && themeModeState.value != ThemeMode.DARK) {
+                // Thresholds: < 50 lux for DARK, > 80 lux for LIGHT (More sensitive for testing)
+                if (lux < 50f && themeModeState.value != ThemeMode.DARK) {
+                    Log.i("SENSOR_DEBUG", ">> Switching to DARK MODE")
                     themeModeState.value = ThemeMode.DARK
-                } else if (lux > 25f && themeModeState.value != ThemeMode.LIGHT) {
+                } else if (lux > 80f && themeModeState.value != ThemeMode.LIGHT) {
+                    Log.i("SENSOR_DEBUG", ">> Switching to LIGHT MODE")
                     themeModeState.value = ThemeMode.LIGHT
                 }
             }
