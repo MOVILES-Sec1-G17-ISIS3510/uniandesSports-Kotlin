@@ -58,7 +58,7 @@ fun HomeScreen(
     playViewModel: FirestorePlayViewModel = viewModel(),
     bookingViewModel: BookClassViewModel = viewModel(),
     stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
-    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>()
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     runningViewModel: FirestoreRunningViewModel = viewModel()
 ) {
     var currentUserId by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
@@ -546,13 +546,8 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
     }
-    Card(
-        modifier = Modifier.width(200.dp).clickable { onClick() }, 
-        shape = RoundedCornerShape(24.dp), 
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     Surface(
-        modifier = Modifier.width(200.dp),
+        modifier = Modifier.width(200.dp).clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
@@ -584,13 +579,8 @@ fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
     }
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }, 
-        shape = RoundedCornerShape(28.dp), 
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
