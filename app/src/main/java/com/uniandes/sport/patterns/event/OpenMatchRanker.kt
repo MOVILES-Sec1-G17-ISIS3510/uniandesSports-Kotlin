@@ -76,18 +76,18 @@ object OpenMatchRanker {
         val eventSport = normalizeSport(event.sport)
         if (primarySport != null && eventSport == primarySport) {
             score += 4.0
-            reasons += "Tu deporte favorito"
+            reasons += "Your favorite sport"
         }
 
         val minutesUntilStart = ((event.scheduledAt?.toDate()?.time ?: nowMillis) - nowMillis) / 60000.0
         when {
             minutesUntilStart <= 15 -> {
                 score += 4.0
-                reasons += "Empieza ya"
+                reasons += "Starting now"
             }
             minutesUntilStart <= 60 -> {
                 score += 3.0
-                reasons += "Empieza pronto"
+                reasons += "Starting soon"
             }
             minutesUntilStart <= 120 -> score += 1.5
         }
@@ -96,11 +96,11 @@ object OpenMatchRanker {
         when {
             remainingSpots <= 1 -> {
                 score += 3.5
-                reasons += "Ultimo cupo"
+                reasons += "Last spot"
             }
             remainingSpots <= 2 -> {
                 score += 2.0
-                reasons += "Casi lleno"
+                reasons += "Almost full"
             }
             remainingSpots <= 4 -> score += 1.0
         }
@@ -111,11 +111,11 @@ object OpenMatchRanker {
             when {
                 distanceKm <= 1.0 -> {
                     score += 4.0
-                    reasons += "Cerca de ti"
+                    reasons += "Near you"
                 }
                 distanceKm <= 3.0 -> {
                     score += 3.0
-                    reasons += "A buena distancia"
+                    reasons += "Good distance"
                 }
                 distanceKm <= 6.0 -> score += 1.0
                 else -> score -= 1.5
@@ -126,10 +126,10 @@ object OpenMatchRanker {
         if (nextBusyStartMillis != null) {
             if (eventEndMillis <= nextBusyStartMillis) {
                 score += 4.0
-                reasons += "Cabe en tu hueco"
+                reasons += "Fits your free window"
             } else {
                 score -= 3.0
-                reasons += "Choca con tu agenda"
+                reasons += "Schedule conflict"
             }
         } else {
             score += 1.5

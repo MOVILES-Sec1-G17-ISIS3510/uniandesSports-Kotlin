@@ -45,7 +45,7 @@ fun SmartMatchCard(
     val event = recommendation.event
     val timeLabel = event.scheduledAt?.toDate()?.let {
         SimpleDateFormat("EEE h:mm a", Locale.getDefault()).format(it)
-    } ?: "Sin hora"
+    } ?: "No time"
 
     Card(
         onClick = onClick,
@@ -73,7 +73,7 @@ fun SmartMatchCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "MEJOR PARTIDO PARA TI",
+                            text = "BEST MATCH FOR YOU",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Black,
                             color = MaterialTheme.colorScheme.primary

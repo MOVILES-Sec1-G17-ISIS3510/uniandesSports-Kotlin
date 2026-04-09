@@ -369,14 +369,6 @@ fun PlayScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-
-                if (featuredRecommendation != null) {
-                    SmartMatchCard(
-                        recommendation = featuredRecommendation!!,
-                        onClick = { onEventSelected(featuredRecommendation!!.event) }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
                 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     ActionCard(
@@ -408,6 +400,14 @@ fun PlayScreen(
                             onClick = { activeModal = PlayModalType.HISTORY }
                         )
                     }
+                }
+
+                if (featuredRecommendation != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SmartMatchCard(
+                        recommendation = featuredRecommendation,
+                        onClick = { onEventSelected(featuredRecommendation.event) }
+                    )
                 }
             }
         }
