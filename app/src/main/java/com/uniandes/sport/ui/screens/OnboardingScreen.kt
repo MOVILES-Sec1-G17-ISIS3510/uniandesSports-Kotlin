@@ -35,6 +35,7 @@ import com.uniandes.sport.ui.components.ThemeModeToggle
 import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
+import java.text.Normalizer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -313,6 +314,12 @@ fun SummaryStep(
     semester: String,
     sports: String
 ) {
+    val displaySports = sports
+        .split(",")
+        .map { displaySportLabel(it) }
+        .filter { it.isNotBlank() }
+        .joinToString(", ")
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start
@@ -321,7 +328,7 @@ fun SummaryStep(
         SummaryItem(label = "Email", value = email)
         SummaryItem(label = "Program", value = program)
         SummaryItem(label = "Semester", value = semester)
-        SummaryItem(label = "Sports", value = sports)
+        SummaryItem(label = "Sports", value = displaySports)
     }
 }
 
@@ -331,6 +338,33 @@ fun SummaryItem(label: String, value: String) {
         Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
+}
+
+private fun normalizeSportId(value: String): String {
+    val withoutAccents = Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+    val clean = withoutAccents.trim().lowercase()
+
+    return when (clean) {
+        "soccer", "football", "futbol" -> "soccer"
+        "basket", "basketball", "baloncesto" -> "basketball"
+        "tenis", "tennis" -> "tennis"
+        "calistenia", "calisthenics", "calistennics" -> "calisthenics"
+        "running", "correr" -> "running"
+        "other" -> "other"
+        else -> clean
+    }
+}
+
+private fun parseSportCsv(value: String): List<String> {
+    return value.split(",")
+        .map { normalizeSportId(it) }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun displaySportLabel(value: String): String {
+    return normalizeSportId(value).replaceFirstChar { ch -> ch.uppercase() }
 }
 
 @Composable
@@ -407,33 +441,30 @@ private fun MainSportLabelsField(
     enabled: Boolean
 ) {
     val sportOptions = remember {
-        listOf("Football", "Basketball", "Tenis", "Calistennics", "Running")
+        listOf(
+            "soccer" to "Soccer",
+            "basketball" to "Basketball",
+            "tennis" to "Tennis",
+            "calisthenics" to "Calisthenics",
+            "running" to "Running"
+        )
     }
     val customSports = remember { mutableStateListOf<String>() }
     var customSportInput by remember { mutableStateOf("") }
 
     val selectedSports = remember(selectedSportsCsv) {
-        selectedSportsCsv.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinctBy { it.lowercase() }
+        parseSportCsv(selectedSportsCsv).toSet()
     }
 
     LaunchedEffect(selectedSportsCsv) {
         selectedSports
-            .filter { selected -> sportOptions.none { it.equals(selected, ignoreCase = true) } }
+            .filter { selected -> sportOptions.none { it.first == selected } }
             .forEach { selectedCustom ->
-                if (customSports.none { it.equals(selectedCustom, ignoreCase = true) }) {
+                if (customSports.none { normalizeSportId(it) == selectedCustom }) {
                     customSports.add(selectedCustom)
                 }
             }
     }
-
-    val displaySports = sportOptions + customSports.filter { custom ->
-        sportOptions.none { it.equals(custom, ignoreCase = true) }
-    }
-
-
 
     Column(
         modifier = Modifier
@@ -464,28 +495,73 @@ private fun MainSportLabelsField(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            displaySports.forEach { sport ->
-                val selected = selectedSports.any { it.equals(sport, ignoreCase = true) }
+            sportOptions.forEach { (sportId, sportLabel) ->
+                val selected = selectedSports.contains(sportId)
                 FilterChip(
                     selected = selected,
                     onClick = {
                         val updated = if (selected) {
-                            selectedSports.filterNot { it.equals(sport, ignoreCase = true) }
+                            selectedSports.filterNot { it == sportId }
                         } else {
-                            selectedSports + sport
+                            selectedSports + sportId
                         }
                         onSelectionChange(updated.joinToString(", "))
                     },
                     enabled = enabled,
                     label = {
                         Text(
-                            sport,
+                            sportLabel,
                             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
                         )
                     },
                     leadingIcon = {
                         com.uniandes.sport.ui.components.SportIconBox(
-                            sport = sport,
+                            sport = sportId,
+                            size = 24.dp
+                        )
+                    },
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = enabled,
+                        selected = selected,
+                        borderColor = Color.Transparent,
+                        selectedBorderColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondary,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+
+            customSports.filter { custom ->
+                sportOptions.none { it.first == normalizeSportId(custom) }
+            }.forEach { customSport ->
+                val sportId = normalizeSportId(customSport)
+                val selected = selectedSports.contains(sportId)
+                FilterChip(
+                    selected = selected,
+                    onClick = {
+                        val updated = if (selected) {
+                            selectedSports.filterNot { it == sportId }
+                        } else {
+                            selectedSports + sportId
+                        }
+                        onSelectionChange(updated.joinToString(", "))
+                    },
+                    enabled = enabled,
+                    label = {
+                        Text(
+                            displaySportLabel(customSport),
+                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
+                        )
+                    },
+                    leadingIcon = {
+                        com.uniandes.sport.ui.components.SportIconBox(
+                            sport = sportId,
                             size = 24.dp
                         )
                     },
@@ -530,15 +606,23 @@ private fun MainSportLabelsField(
             Spacer(modifier = Modifier.width(8.dp))
             FilledIconButton(
                 onClick = {
-                    val newSport = customSportInput.trim()
+                    val newSport = normalizeSportId(customSportInput)
                     if (newSport.isBlank()) return@FilledIconButton
 
-                    if (customSports.none { it.equals(newSport, ignoreCase = true) }) {
+                    val isBuiltinSport = sportOptions.any { it.first == newSport }
+                    if (isBuiltinSport) {
+                        val updated = (selectedSports + newSport).distinct()
+                        onSelectionChange(updated.joinToString(", "))
+                        customSportInput = ""
+                        return@FilledIconButton
+                    }
+
+                    if (customSports.none { normalizeSportId(it) == newSport }) {
                         customSports.add(newSport)
                     }
 
                     val updated = (selectedSports + newSport)
-                        .distinctBy { it.lowercase() }
+                        .distinct()
                         .joinToString(", ")
                     onSelectionChange(updated)
                     customSportInput = ""
