@@ -226,8 +226,6 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
 
     override fun submitTrack(
         eventId: String, 
-        sport: String,
-        scheduledAt: com.google.firebase.Timestamp?,
         text: String, 
         rating: Int, 
         participated: Boolean, 
@@ -260,8 +258,6 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             "eventId" to eventId,
             "userId" to uid,
             "userEmail" to (user?.email ?: ""),
-            "sport" to sport.lowercase(),
-            "scheduledAt" to (scheduledAt ?: com.google.firebase.Timestamp.now()),
             "text" to cleanText,
             "rating" to rating,
             "participated" to participated,
@@ -289,8 +285,6 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
                         eventId = eventId,
                         userId = uid,
                         userEmail = user.email ?: "",
-                        sport = sport.lowercase(),
-                        scheduledAt = scheduledAt,
                         text = cleanText,
                         rating = rating,
                         participated = participated,

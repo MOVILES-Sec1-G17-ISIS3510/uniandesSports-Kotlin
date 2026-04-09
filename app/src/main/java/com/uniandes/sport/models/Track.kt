@@ -10,8 +10,6 @@ data class Track(
     val eventId: String = "",
     val userId: String = "",
     val userEmail: String = "",
-    val sport: String = "",
-    val scheduledAt: Timestamp? = null,
     val text: String = "", // Activity Details / Progress Log
     val rating: Int = 0, // Activity effort/satisfaction (1-5)
     val participated: Boolean = false, // Reemplaza attendanceByUserId

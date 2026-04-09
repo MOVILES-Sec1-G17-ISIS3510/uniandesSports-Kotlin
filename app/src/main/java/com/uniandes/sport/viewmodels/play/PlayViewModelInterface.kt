@@ -39,8 +39,6 @@ interface PlayViewModelInterface {
     /** Envía el registro de progreso (Track) de una sesión */
     fun submitTrack(
         eventId: String, 
-        sport: String,
-        scheduledAt: com.google.firebase.Timestamp?,
         text: String, 
         rating: Int, 
         participated: Boolean, 
