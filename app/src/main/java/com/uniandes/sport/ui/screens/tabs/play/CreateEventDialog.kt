@@ -151,7 +151,8 @@ fun CreateEventDialog(
     )
     
     val finishTimePickerState = rememberTimePickerState(
-        initialHour = initialEvent?.finishedAt?.toDate()?.let { Calendar.getInstance().apply { time = it }.get(Calendar.HOUR_OF_DAY) } ?: (Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + 1),
+        initialHour = initialEvent?.finishedAt?.toDate()?.let { Calendar.getInstance().apply { time = it }.get(Calendar.HOUR_OF_DAY) }
+            ?: ((Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + 1) % 24),
         initialMinute = initialEvent?.finishedAt?.toDate()?.let { Calendar.getInstance().apply { time = it }.get(Calendar.MINUTE) } ?: 0,
         is24Hour = false
     )
