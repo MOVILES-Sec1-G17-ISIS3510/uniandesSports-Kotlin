@@ -177,7 +177,7 @@ fun CommunitiesMainScreen(
                 showCreateCommunityDialog = true
             },
             containerColor = MaterialTheme.colorScheme.tertiary,
-            contentColor = MaterialTheme.colorScheme.onTertiary,
+            contentColor = Color.White,
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
