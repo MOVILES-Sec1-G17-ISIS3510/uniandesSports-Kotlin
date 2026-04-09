@@ -300,7 +300,7 @@ fun EventDetailModal(
                             onClick = {
                                 if (currentUserId != null) {
                                     isLoading = true
-                                    viewModel.joinEvent(event.id, currentUserId, 
+                                    viewModel.joinEvent(event.id, currentUserId, event.sport,
                                         onSuccess = { isLoading = false; onDismiss() },
                                         onError = { isLoading = false }
                                     )

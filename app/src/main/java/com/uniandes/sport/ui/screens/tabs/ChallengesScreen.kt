@@ -102,7 +102,14 @@ fun ChallengesScreen(
                             CircularChallengeItem(
                                 reto = reto,
                                 currentUserId = currentUserId,
-                                onClick = { selectedReto = reto }
+                                onClick = { 
+                                    logViewModel.log(
+                                        screen = "ChallengesScreen",
+                                        action = "MATCH_VIEWED",
+                                        params = mapOf("sport_category" to reto.sport)
+                                    )
+                                    selectedReto = reto 
+                                }
                             )
                         }
                     }
@@ -132,8 +139,22 @@ fun ChallengesScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         ExploreChallengeCard(
                             reto = reto,
-                            onJoin = { viewModel.joinReto(reto.id, currentUserId) },
-                            onClick = { selectedReto = reto }
+                            onJoin = { 
+                                viewModel.joinReto(reto.id, currentUserId)
+                                logViewModel.log(
+                                    screen = "ChallengesScreen",
+                                    action = "join_sport_event",
+                                    params = mapOf("sport_category" to reto.sport)
+                                )
+                            },
+                            onClick = { 
+                                logViewModel.log(
+                                    screen = "ChallengesScreen",
+                                    action = "MATCH_VIEWED",
+                                    params = mapOf("sport_category" to reto.sport)
+                                )
+                                selectedReto = reto 
+                            }
                         )
                     }
                 }
@@ -229,8 +250,8 @@ fun ChallengesScreen(
                 viewModel.addReto(newReto)
                 logViewModel.log(
                     screen = "RetosScreen",
-                    action = "EVENT_REGISTERED",
-                    params = mapOf("type" to newReto.type, "sport" to newReto.sport)
+                    action = "join_sport_event",
+                    params = mapOf("type" to newReto.type, "sport_category" to newReto.sport)
                 )
                 showDialog = false
             },
