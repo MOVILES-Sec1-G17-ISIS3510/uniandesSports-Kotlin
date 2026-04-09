@@ -35,8 +35,12 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
+import com.uniandes.sport.patterns.event.OpenMatchRanker
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
+import com.uniandes.sport.ui.components.SmartMatchCard
+import com.uniandes.sport.ui.components.rememberCurrentLocationState
+import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
 import androidx.compose.animation.core.animateFloatAsState
@@ -62,6 +66,7 @@ fun PlayScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSports by viewModel.selectedSports.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
+    val authViewModel: FirebaseAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     
     val firestoreVM: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val aiViewModel: com.uniandes.sport.viewmodels.retos.AiReviewViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -102,6 +107,18 @@ fun PlayScreen(
     }
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
+    }
+    val currentLocation by rememberCurrentLocationState()
+    val preferredSports = remember(authViewModel.mainSport) {
+        OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
+    }
+    val rankedOpenEvents = remember(otherEvents, joinedEvents, preferredSports, currentLocation) {
+        OpenMatchRanker.rank(
+            openEvents = otherEvents,
+            joinedEvents = joinedEvents,
+            preferredSports = preferredSports,
+            currentLocation = currentLocation
+        )
     }
     val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
         finishedEvents.filter { joinedEventIds.contains(it.id) }
@@ -258,6 +275,8 @@ fun PlayScreen(
         )
     }
 
+    val featuredRecommendation = rankedOpenEvents.firstOrNull()
+
     val editingEventLocal = editingEvent
     if (editingEventLocal != null) {
         CreateEventDialog(
@@ -350,6 +369,14 @@ fun PlayScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+
+                if (featuredRecommendation != null) {
+                    SmartMatchCard(
+                        recommendation = featuredRecommendation!!,
+                        onClick = { onEventSelected(featuredRecommendation!!.event) }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
                 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     ActionCard(
@@ -365,7 +392,7 @@ fun PlayScreen(
                         ActionCard(
                             modifier = Modifier.weight(1f),
                             title = "Find Match",
-                            subtitle = "${otherEvents.size} open matches",
+                            subtitle = "${rankedOpenEvents.size} ranked open matches",
                             icon = Icons.Default.Search,
                             color = MaterialTheme.colorScheme.secondary,
                             onClick = { activeModal = PlayModalType.SEARCH }
@@ -434,12 +461,12 @@ fun PlayScreen(
                         EmptyState(Icons.Default.SearchOff, "No matches found", "Try changing the sport filter above.")
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            otherEvents.forEach { event ->
+                            rankedOpenEvents.forEach { rankedEvent ->
                                 CompactEventCard(
-                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    uiModel = EventUIAdapter.toUIModel(rankedEvent.event),
                                     onClick = { 
                                         activeModal = null
-                                        onEventSelected(event) 
+                                        onEventSelected(rankedEvent.event) 
                                     }
                                 )
                             }

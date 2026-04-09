@@ -30,7 +30,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.Reto
 import com.uniandes.sport.models.RunSession
+import com.uniandes.sport.patterns.event.OpenMatchRanker
 import com.uniandes.sport.ui.theme.ArchivoFamily
+import com.uniandes.sport.ui.components.SmartMatchCard
+import com.uniandes.sport.ui.components.rememberCurrentLocationState
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel
 import com.uniandes.sport.viewmodels.play.FirestorePlayViewModel
@@ -140,6 +143,19 @@ fun HomeScreen(
         allEvents.filter { !joinedIds.contains(it.id) }
             .sortedBy { it.scheduledAt?.seconds ?: Long.MAX_VALUE }
     }
+    val currentLocation by rememberCurrentLocationState()
+    val preferredSports = remember(authViewModel.mainSport) {
+        OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
+    }
+    val rankedAvailableEvents = remember(availableEvents, upcomingMatches, preferredSports, currentLocation) {
+        OpenMatchRanker.rank(
+            openEvents = availableEvents,
+            joinedEvents = upcomingMatches,
+            preferredSports = preferredSports,
+            currentLocation = currentLocation
+        )
+    }
+    val featuredMatch = rankedAvailableEvents.firstOrNull()
 
     // Sessions count
     val sessionsCount = remember(upcomingMatches, pastRuns) {
@@ -339,18 +355,25 @@ fun HomeScreen(
             // Sections
             item {
                 SectionHeader(title = "Quick Activity", subtitle = "Suggested sessions you might like")
-                if (availableEvents.isEmpty()) {
+                if (featuredMatch != null) {
+                    SmartMatchCard(
+                        recommendation = featuredMatch!!,
+                        onClick = { onNavigate("play") }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                if (rankedAvailableEvents.isEmpty()) {
                     EmptyStateWideCard(title = "No events nearby", description = "Try searching in the Play tab.", icon = Icons.Default.Search, actionLabel = "Explore Play", onClick = { onNavigate("play") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        availableEvents.take(2).forEach { event -> 
+                        rankedAvailableEvents.take(2).forEach { rankedEvent -> 
                             ActivityCard(
-                                event = event, 
+                                event = rankedEvent.event, 
                                 onClick = { 
                                     logViewModel.log(
                                         screen = "HomeScreen",
                                         action = "MATCH_VIEWED",
-                                        params = mapOf("sport_category" to event.sport)
+                                        params = mapOf("sport_category" to rankedEvent.event.sport)
                                     )
                                     // Detail navigation logic normally goes here
                                 }
@@ -391,18 +414,18 @@ fun HomeScreen(
 
             item {
                 SectionHeader(title = "Recommended for You")
-                if (availableEvents.size <= 2) {
+                if (rankedAvailableEvents.size <= 2) {
                      EmptyStateCard(title = "Looking for matches", description = "We'll show you more sports soon.", icon = Icons.Default.AutoAwesome)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                        items(availableEvents.drop(2).take(4)) { event -> 
+                        items(rankedAvailableEvents.drop(2).take(4)) { rankedEvent -> 
                             RecommendedItemCard(
-                                event = event,
+                                event = rankedEvent.event,
                                 onClick = {
                                     logViewModel.log(
                                         screen = "HomeScreen",
                                         action = "MATCH_VIEWED",
-                                        params = mapOf("sport_category" to event.sport)
+                                        params = mapOf("sport_category" to rankedEvent.event.sport)
                                     )
                                 }
                             ) 
