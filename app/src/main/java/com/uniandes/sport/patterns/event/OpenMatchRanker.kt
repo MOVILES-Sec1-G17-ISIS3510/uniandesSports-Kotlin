@@ -9,10 +9,25 @@ import kotlin.math.min
 
 private val locationRegex = Regex("""Lat:\s*(-?\d+(?:\.\d+)?),\s*Lng:\s*(-?\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE)
 
+data class ScoreContribution(
+    val label: String,
+    val points: Double
+)
+
+data class PhoneCalendarEvent(
+    val title: String,
+    val startMillis: Long,
+    val endMillis: Long,
+    val isAllDay: Boolean
+)
+
 data class RankedOpenMatch(
     val event: Event,
     val score: Double,
-    val reasons: List<String>
+    val reasons: List<String>,
+    val contributions: List<ScoreContribution>,
+    val dayCalendarEvents: List<PhoneCalendarEvent>,
+    val conflictingCalendarEvents: List<PhoneCalendarEvent>
 )
 
 object OpenMatchRanker {
@@ -20,6 +35,7 @@ object OpenMatchRanker {
         openEvents: List<Event>,
         joinedEvents: List<Event>,
         preferredSports: Set<String>,
+        phoneCalendarEvents: List<PhoneCalendarEvent> = emptyList(),
         currentLocation: Location? = null,
         nowMillis: Long = System.currentTimeMillis()
     ): List<RankedOpenMatch> {
@@ -48,6 +64,7 @@ object OpenMatchRanker {
                     primarySport = primarySport,
                     currentLocation = currentLocation,
                     nextBusyStartMillis = nextBusyStartMillis,
+                    phoneCalendarEvents = phoneCalendarEvents,
                     nowMillis = nowMillis
                 )
             }
@@ -68,41 +85,65 @@ object OpenMatchRanker {
         primarySport: String?,
         currentLocation: Location?,
         nextBusyStartMillis: Long?,
+        phoneCalendarEvents: List<PhoneCalendarEvent>,
         nowMillis: Long
     ): RankedOpenMatch {
-        val reasons = mutableListOf<String>()
+        val contributions = mutableListOf<ScoreContribution>()
         var score = 0.0
+
+        val eventStartMillis = event.scheduledAt?.toDate()?.time ?: nowMillis
+        val eventEndMillis = event.finishedAt?.toDate()?.time ?: (eventStartMillis + 60 * 60 * 1000L)
+
+        val dayCalendarEvents = phoneCalendarEvents
+            .filter { !it.isAllDay }
+            .filter {
+            isSameDay(it.startMillis, eventStartMillis)
+            }
+        val conflictingCalendarEvents = dayCalendarEvents.filter {
+            overlaps(
+                startA = eventStartMillis,
+                endA = eventEndMillis,
+                startB = it.startMillis,
+                endB = if (it.isAllDay) endOfDay(it.startMillis) else it.endMillis
+            )
+        }
 
         val eventSport = normalizeSport(event.sport)
         if (primarySport != null && eventSport == primarySport) {
             score += 4.0
-            reasons += "Your favorite sport"
+            contributions += ScoreContribution("Your favorite sport", 4.0)
         }
 
-        val minutesUntilStart = ((event.scheduledAt?.toDate()?.time ?: nowMillis) - nowMillis) / 60000.0
+        val minutesUntilStart = (eventStartMillis - nowMillis) / 60000.0
         when {
             minutesUntilStart <= 15 -> {
                 score += 4.0
-                reasons += "Starting now"
+                contributions += ScoreContribution("Starting now", 4.0)
             }
             minutesUntilStart <= 60 -> {
                 score += 3.0
-                reasons += "Starting soon"
+                contributions += ScoreContribution("Starting soon", 3.0)
             }
-            minutesUntilStart <= 120 -> score += 1.5
+            minutesUntilStart <= 120 -> {
+                score += 1.5
+                contributions += ScoreContribution("Good start time", 1.5)
+            }
         }
 
         val remainingSpots = max(0, event.maxParticipants.toInt() - event.membersCount.toInt())
         when {
             remainingSpots <= 1 -> {
                 score += 3.5
-                reasons += "Last spot"
+                contributions += ScoreContribution("Last spot", 3.5)
             }
             remainingSpots <= 2 -> {
                 score += 2.0
-                reasons += "Almost full"
+                contributions += ScoreContribution("Almost full", 2.0)
             }
-            remainingSpots <= 4 -> score += 1.0
+            remainingSpots <= 4 -> {
+                score += 1.0
+                contributions += ScoreContribution("Limited spots", 1.0)
+            }
         }
 
         val eventLocation = extractLocation(event.location)
@@ -111,39 +152,67 @@ object OpenMatchRanker {
             when {
                 distanceKm <= 1.0 -> {
                     score += 4.0
-                    reasons += "Near you"
+                    contributions += ScoreContribution("Near you", 4.0)
                 }
                 distanceKm <= 3.0 -> {
                     score += 3.0
-                    reasons += "Good distance"
+                    contributions += ScoreContribution("Good distance", 3.0)
                 }
-                distanceKm <= 6.0 -> score += 1.0
-                else -> score -= 1.5
+                distanceKm <= 6.0 -> {
+                    score += 1.0
+                    contributions += ScoreContribution("Reachable distance", 1.0)
+                }
+                else -> {
+                    score -= 1.5
+                    contributions += ScoreContribution("Far from current location", -1.5)
+                }
             }
         }
 
-        val eventEndMillis = event.finishedAt?.toDate()?.time ?: (event.scheduledAt?.toDate()?.time?.plus(60 * 60 * 1000L) ?: nowMillis)
         if (nextBusyStartMillis != null) {
             if (eventEndMillis <= nextBusyStartMillis) {
                 score += 4.0
-                reasons += "Fits your free window"
+                contributions += ScoreContribution("Fits your free window", 4.0)
             } else {
                 score -= 3.0
-                reasons += "Schedule conflict"
+                contributions += ScoreContribution("Schedule conflict", -3.0)
             }
         } else {
             score += 1.5
+            contributions += ScoreContribution("No upcoming conflict", 1.5)
+        }
+
+        if (conflictingCalendarEvents.isNotEmpty()) {
+            score -= 4.0
+            contributions += ScoreContribution("Conflicts with phone calendar", -4.0)
+        } else if (dayCalendarEvents.isNotEmpty()) {
+            score += 1.0
+            contributions += ScoreContribution("Compatible with phone calendar day", 1.0)
         }
 
         if (event.scheduledAt?.toDate()?.time != null) {
             val eventCalendar = Calendar.getInstance().apply { time = event.scheduledAt!!.toDate() }
             if (eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY || eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
                 score += 0.5
+                contributions += ScoreContribution("Weekend flexibility", 0.5)
             }
         }
 
         val cappedScore = min(20.0, score)
-        return RankedOpenMatch(event = event, score = cappedScore, reasons = reasons.distinct().take(3))
+        val reasons = contributions
+            .filter { it.points > 0 }
+            .sortedByDescending { it.points }
+            .map { it.label }
+            .distinct()
+            .take(3)
+        return RankedOpenMatch(
+            event = event,
+            score = cappedScore,
+            reasons = reasons,
+            contributions = contributions,
+            dayCalendarEvents = dayCalendarEvents,
+            conflictingCalendarEvents = conflictingCalendarEvents
+        )
     }
 
     private fun normalizeSport(value: String): String {
@@ -169,6 +238,26 @@ object OpenMatchRanker {
 
     private fun distanceKm(from: Location, to: Location): Double {
         return from.distanceTo(to).toDouble() / 1000.0
+    }
+
+    private fun isSameDay(aMillis: Long, bMillis: Long): Boolean {
+        val a = Calendar.getInstance().apply { timeInMillis = aMillis }
+        val b = Calendar.getInstance().apply { timeInMillis = bMillis }
+        return a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun overlaps(startA: Long, endA: Long, startB: Long, endB: Long): Boolean {
+        return startA < endB && startB < endA
+    }
+
+    private fun endOfDay(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
     }
 
     private fun Event.isInCurrentWeek(nowMillis: Long): Boolean {

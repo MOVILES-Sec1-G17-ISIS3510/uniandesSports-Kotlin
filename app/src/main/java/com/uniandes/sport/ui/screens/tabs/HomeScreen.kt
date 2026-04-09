@@ -33,6 +33,7 @@ import com.uniandes.sport.models.RunSession
 import com.uniandes.sport.patterns.event.OpenMatchRanker
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.ui.components.SmartMatchCard
+import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
 import com.uniandes.sport.ui.components.rememberCurrentLocationState
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel
@@ -144,14 +145,16 @@ fun HomeScreen(
             .sortedBy { it.scheduledAt?.seconds ?: Long.MAX_VALUE }
     }
     val currentLocation by rememberCurrentLocationState()
+    val phoneCalendarEvents by rememberPhoneCalendarEventsState()
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
     }
-    val rankedAvailableEvents = remember(availableEvents, upcomingMatches, preferredSports, currentLocation) {
+    val rankedAvailableEvents = remember(availableEvents, upcomingMatches, preferredSports, currentLocation, phoneCalendarEvents) {
         OpenMatchRanker.rank(
             openEvents = availableEvents,
             joinedEvents = upcomingMatches,
             preferredSports = preferredSports,
+            phoneCalendarEvents = phoneCalendarEvents,
             currentLocation = currentLocation
         )
     }

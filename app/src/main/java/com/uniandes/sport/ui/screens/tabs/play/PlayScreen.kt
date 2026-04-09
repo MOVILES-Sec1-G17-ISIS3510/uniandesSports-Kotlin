@@ -40,6 +40,7 @@ import com.uniandes.sport.models.Event
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 import com.uniandes.sport.ui.components.SmartMatchCard
 import com.uniandes.sport.ui.components.rememberCurrentLocationState
+import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
@@ -109,14 +110,16 @@ fun PlayScreen(
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
     val currentLocation by rememberCurrentLocationState()
+    val phoneCalendarEvents by rememberPhoneCalendarEventsState()
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
     }
-    val rankedOpenEvents = remember(otherEvents, joinedEvents, preferredSports, currentLocation) {
+    val rankedOpenEvents = remember(otherEvents, joinedEvents, preferredSports, currentLocation, phoneCalendarEvents) {
         OpenMatchRanker.rank(
             openEvents = otherEvents,
             joinedEvents = joinedEvents,
             preferredSports = preferredSports,
+            phoneCalendarEvents = phoneCalendarEvents,
             currentLocation = currentLocation
         )
     }
