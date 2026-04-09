@@ -28,6 +28,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.viewmodels.booking.BookClassViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Calendar
+import java.util.TimeZone
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.window.Dialog
 
 // Opciones predefinidas
 val sports = listOf("Soccer", "Tennis", "Basketball", "Swimming", "Running")
@@ -65,6 +72,44 @@ fun BookClassScreen(
             onFailure = { /* Not logged in */ }
         )
     }
+
+    // Native Calendar & Time State
+    val todayStart = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                // Bloquear días pasados (comparado con el inicio del día de hoy en UTC)
+                return utcTimeMillis >= todayStart
+            }
+        }
+    )
+    
+    var showTimePicker by remember { mutableStateOf(false) }
+    val timePickerState = rememberTimePickerState(
+        initialHour = 10,
+        initialMinute = 0,
+        is24Hour = false
+    )
+
+    var showEndTimePicker by remember { mutableStateOf(false) }
+    val endTimePickerState = rememberTimePickerState(
+        initialHour = 11,
+        initialMinute = 0,
+        is24Hour = false
+    )
+
+    var tempStartTime by remember { mutableStateOf("") }
+    
+    val dateFormatter = remember { SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()) }
     val selectedSport = viewModel.selectedSport
     val selectedSkillLevel = viewModel.selectedSkillLevel
     val preferredSchedule = viewModel.preferredSchedule
@@ -250,34 +295,190 @@ fun BookClassScreen(
                 }
             }
 
-            // Schedule Input
+            // Calendar Dialog
+            if (showDatePicker) {
+                DatePickerDialog(
+                    onDismissRequest = { showDatePicker = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            if (datePickerState.selectedDateMillis != null) {
+                                showTimePicker = true // Move to time selection
+                            }
+                            showDatePicker = false
+                        }) {
+                            Text("Next", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDatePicker = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                ) {
+                    DatePicker(state = datePickerState)
+                }
+            }
+
+            // Time Picker Dialog
+            if (showTimePicker) {
+                Dialog(onDismissRequest = { showTimePicker = false }) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 6.dp,
+                        modifier = Modifier.width(IntrinsicSize.Min)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "SELECT TIME",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.align(Alignment.Start).padding(bottom = 16.dp)
+                            )
+                            
+                            TimePicker(state = timePickerState)
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                                TextButton(onClick = {
+                                    // Validar si es hoy y la hora ya pasó
+                                    val isToday = datePickerState.selectedDateMillis?.let { millis ->
+                                        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = millis }
+                                        val today = Calendar.getInstance()
+                                        cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) && 
+                                        cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
+                                    } ?: false
+
+                                    if (isToday) {
+                                        val now = Calendar.getInstance()
+                                        val selectedTime = Calendar.getInstance().apply {
+                                            set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                                            set(Calendar.MINUTE, timePickerState.minute)
+                                        }
+                                        if (selectedTime.before(now)) {
+                                            android.widget.Toast.makeText(context, "Start time must be in the future", android.widget.Toast.LENGTH_SHORT).show()
+                                            return@TextButton
+                                        }
+                                    }
+
+                                    val hour = String.format("%02d", if (timePickerState.hour > 12) timePickerState.hour - 12 else if (timePickerState.hour == 0) 12 else timePickerState.hour)
+                                    val minute = String.format("%02d", timePickerState.minute)
+                                    val amPm = if (timePickerState.hour >= 12) "PM" else "AM"
+                                    
+                                    tempStartTime = "$hour:$minute $amPm"
+                                    showTimePicker = false
+                                    showEndTimePicker = true
+                                }) { 
+                                    Text("Next", fontWeight = FontWeight.Bold) 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // End Time Picker Dialog
+            if (showEndTimePicker) {
+                Dialog(onDismissRequest = { showEndTimePicker = false }) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 6.dp,
+                        modifier = Modifier.width(IntrinsicSize.Min)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "SELECT END TIME",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.align(Alignment.Start).padding(bottom = 16.dp)
+                            )
+                            
+                            TimePicker(state = endTimePickerState)
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { showEndTimePicker = false }) { Text("Cancel") }
+                                TextButton(onClick = {
+                                    // Validar que hora fin sea después de hora inicio
+                                    val startTotalMinutes = timePickerState.hour * 60 + timePickerState.minute
+                                    val endTotalMinutes = endTimePickerState.hour * 60 + endTimePickerState.minute
+                                    
+                                    if (endTotalMinutes <= startTotalMinutes) {
+                                        android.widget.Toast.makeText(context, "End time must be after start time", android.widget.Toast.LENGTH_SHORT).show()
+                                        return@TextButton
+                                    }
+
+                                    datePickerState.selectedDateMillis?.let { millis ->
+                                        val datePart = dateFormatter.format(Date(millis))
+                                        val hourStr = String.format("%02d", if (endTimePickerState.hour > 12) endTimePickerState.hour - 12 else if (endTimePickerState.hour == 0) 12 else endTimePickerState.hour)
+                                        val minuteStr = String.format("%02d", endTimePickerState.minute)
+                                        val amPmStr = if (endTimePickerState.hour >= 12) "PM" else "AM"
+                                        
+                                        val endTimeFormatted = "$hourStr:$minuteStr $amPmStr"
+                                        viewModel.preferredSchedule = "$datePart from $tempStartTime to $endTimeFormatted"
+                                    }
+                                    showEndTimePicker = false
+                                }) { 
+                                    Text("Confirm", fontWeight = FontWeight.Bold) 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Schedule Input (Read Only + Calendar Trigger)
             OutlinedTextField(
                 value = preferredSchedule,
-                onValueChange = { viewModel.preferredSchedule = it },
+                onValueChange = { },
+                readOnly = true, // Force calendar usage
                 label = { Text("Preferred Schedule") },
-                placeholder = { Text("e.g. Mon & Wed 4-6 PM") },
-                leadingIcon = { Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+                placeholder = { Text("Tap to select date...") },
+                leadingIcon = { 
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) 
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Next
-                ),
+                modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true },
+                enabled = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    disabledBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface
                 )
             )
 
             // Notes Input
+            val maxNotesChars = 200
             OutlinedTextField(
                 value = notes,
-                onValueChange = { viewModel.notes = it },
+                onValueChange = { if (it.length <= maxNotesChars) viewModel.notes = it },
                 label = { Text("Additional Notes") },
                 placeholder = { Text("Any specific goals or questions...") },
+                supportingText = {
+                    Text(
+                        text = "${notes.length} / $maxNotesChars",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -315,6 +516,11 @@ fun BookClassScreen(
                     onClick = { 
                         if (userUid.isBlank()) {
                             android.widget.Toast.makeText(context, "Please sign in to book", android.widget.Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        if (preferredSchedule.isBlank() || !preferredSchedule.contains("from") || !preferredSchedule.contains("to")) {
+                            android.widget.Toast.makeText(context, "Please use the calendar to select a valid schedule range", android.widget.Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         
