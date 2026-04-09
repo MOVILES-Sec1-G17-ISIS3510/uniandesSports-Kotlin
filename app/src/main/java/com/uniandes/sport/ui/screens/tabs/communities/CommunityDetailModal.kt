@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.animation.animateContentSize
@@ -212,9 +213,8 @@ fun CommunityDetailModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        val windowInsets = WindowInsets.systemBars
         Scaffold(
-            contentWindowInsets = windowInsets,
+            contentWindowInsets = WindowInsets.systemBars,
             modifier = Modifier.imePadding(),
             topBar = {
                 androidx.compose.material3.TopAppBar(
@@ -476,7 +476,7 @@ private fun FeedTab(
                 }
             }
 
-            items(posts) { post ->
+            items(posts, key = { it.id }) { post ->
                 val authorIsAdmin = post.role.equals("Admin", ignoreCase = true)
                 val isExpanded = post.id == selectedPostForComments?.id
                 FeedPostItem(
@@ -532,7 +532,7 @@ private fun ChannelsTab(
                     Text("No channels available", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                items(channels) { channel ->
+                items(channels, key = { it.id }) { channel ->
                     androidx.compose.material3.Card(
                         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth().clickable { onOpenChannel(channel) }
@@ -587,7 +587,7 @@ private fun MembersTab(
                 Text("No members yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            items(members) { member ->
+                items(members, key = { it.userId.ifBlank { it.id } }) { member ->
                 val canRemove = isAdmin && member.userId != currentUserId && !member.role.equals("admin", ignoreCase = true)
                 MemberRow(
                     member = member,
@@ -617,7 +617,7 @@ private fun ChannelRoomScreen(
     hasMoreOldMessages: Boolean,
     isLoadingOlderMessages: Boolean
 ) {
-    var messageInput by remember { mutableStateOf("") }
+    var messageInput by rememberSaveable(channel.id) { mutableStateOf("") }
     var reactionTarget by remember { mutableStateOf<ChannelMessage?>(null) }
     val listState = rememberLazyListState()
 
@@ -727,7 +727,7 @@ private fun ChannelRoomScreen(
                     Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                items(messages) { msg ->
+                items(messages, key = { it.id }) { msg ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -930,7 +930,7 @@ private fun FeedPostItem(
     onSendComment: (String) -> Unit
 ) {
     val bgColor = if (post.pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-    var input by remember { mutableStateOf("") }
+    var input by rememberSaveable(post.id) { mutableStateOf("") }
     
     val focusRequester = remember { FocusRequester() }
     var shouldFocus by remember { mutableStateOf(false) }
