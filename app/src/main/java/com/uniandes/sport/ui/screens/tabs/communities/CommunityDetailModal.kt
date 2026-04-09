@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.animation.animateContentSize
@@ -155,7 +156,7 @@ fun CommunityDetailModal(
         val channel = selectedChannel!!
         Dialog(
             onDismissRequest = { selectedChannel = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
         ) {
         ChannelRoomScreen(
             community = community,
@@ -210,11 +211,10 @@ fun CommunityDetailModal(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
     ) {
-        val windowInsets = WindowInsets.systemBars
         Scaffold(
-            contentWindowInsets = windowInsets,
+            contentWindowInsets = WindowInsets.systemBars,
             modifier = Modifier.imePadding(),
             topBar = {
                 androidx.compose.material3.TopAppBar(
@@ -224,13 +224,16 @@ fun CommunityDetailModal(
                         navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     title = {
-                        Column {
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
                             Text(community.name, fontWeight = FontWeight.Bold)
                             Text("Community Space", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onDismiss) {
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
                             Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Back to communities")
                         }
                     }
@@ -334,7 +337,7 @@ fun CommunityDetailModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(if (selectedTabIndex == 1) 2.dp else 8.dp))
+            Spacer(modifier = Modifier.height(if (selectedTabIndex == 1) 16.dp else 10.dp))
 
             when (selectedTabIndex) {
                 0 -> FeedTab(
@@ -476,7 +479,7 @@ private fun FeedTab(
                 }
             }
 
-            items(posts) { post ->
+            items(posts, key = { it.id }) { post ->
                 val authorIsAdmin = post.role.equals("Admin", ignoreCase = true)
                 val isExpanded = post.id == selectedPostForComments?.id
                 FeedPostItem(
@@ -532,7 +535,7 @@ private fun ChannelsTab(
                     Text("No channels available", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                items(channels) { channel ->
+                items(channels, key = { it.id }) { channel ->
                     androidx.compose.material3.Card(
                         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth().clickable { onOpenChannel(channel) }
@@ -587,7 +590,7 @@ private fun MembersTab(
                 Text("No members yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            items(members) { member ->
+                items(members, key = { it.userId.ifBlank { it.id } }) { member ->
                 val canRemove = isAdmin && member.userId != currentUserId && !member.role.equals("admin", ignoreCase = true)
                 MemberRow(
                     member = member,
@@ -617,7 +620,7 @@ private fun ChannelRoomScreen(
     hasMoreOldMessages: Boolean,
     isLoadingOlderMessages: Boolean
 ) {
-    var messageInput by remember { mutableStateOf("") }
+    var messageInput by rememberSaveable(channel.id) { mutableStateOf("") }
     var reactionTarget by remember { mutableStateOf<ChannelMessage?>(null) }
     val listState = rememberLazyListState()
 
@@ -627,6 +630,12 @@ private fun ChannelRoomScreen(
 
     LaunchedEffect(channel.id) {
         onLoadMessages()
+    }
+
+    LaunchedEffect(channel.id, messages.lastOrNull()?.id) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
+        }
     }
 
     LaunchedEffect(listState, hasMoreOldMessages, isLoadingOlderMessages) {
@@ -649,13 +658,16 @@ private fun ChannelRoomScreen(
                     navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 title = {
-                    Column {
+                    Column(modifier = Modifier.padding(top = 4.dp)) {
                         Text("#${channel.name}", fontWeight = FontWeight.Bold)
                         Text("${community.name} Channel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -665,19 +677,19 @@ private fun ChannelRoomScreen(
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 12.dp,
-                shadowElevation = 4.dp,
+                tonalElevation = 8.dp,
+                shadowElevation = 2.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
                     .navigationBarsPadding(),
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -720,6 +732,7 @@ private fun ChannelRoomScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp, vertical = 2.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 104.dp, top = 6.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (messages.isEmpty()) {
@@ -727,7 +740,7 @@ private fun ChannelRoomScreen(
                     Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                items(messages) { msg ->
+                items(messages, key = { it.id }) { msg ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -771,7 +784,7 @@ private fun ChannelRoomScreen(
                                     Icon(
                                         com.uniandes.sport.ui.theme.CrownIcon,
                                         contentDescription = "Admin",
-                                        tint = Color(0xFFFFB300),
+                                        tint = MaterialTheme.colorScheme.tertiary,
                                         modifier = Modifier.size(13.dp)
                                     )
                                 }
@@ -930,7 +943,7 @@ private fun FeedPostItem(
     onSendComment: (String) -> Unit
 ) {
     val bgColor = if (post.pinned) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-    var input by remember { mutableStateOf("") }
+    var input by rememberSaveable(post.id) { mutableStateOf("") }
     
     val focusRequester = remember { FocusRequester() }
     var shouldFocus by remember { mutableStateOf(false) }
@@ -954,7 +967,7 @@ private fun FeedPostItem(
                 Text(post.author, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (isAdminPost) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(14.dp))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(post.role, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1019,7 +1032,7 @@ private fun FeedPostItem(
                                         Text(c.authorName, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                                         if (isCommentAdmin) {
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(12.dp))
+                                            Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(12.dp))
                                         }
                                     }
                                     Text(c.content, fontSize = 12.sp)
@@ -1088,7 +1101,7 @@ private fun InlinePostComposer(
                 Text(currentUserDisplayName, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (isAdmin) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+                    Icon(com.uniandes.sport.ui.theme.CrownIcon, contentDescription = "Admin", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(14.dp))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(if (isAdmin) "Admin" else "Member", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

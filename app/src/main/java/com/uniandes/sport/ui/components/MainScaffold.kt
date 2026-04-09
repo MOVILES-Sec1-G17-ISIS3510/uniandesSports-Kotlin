@@ -108,8 +108,8 @@ fun MainScaffold(
     // Back gesture handler - TikTok style
     BackHandler {
         if (isMainTabsRoute) {
-            if (activeTabPageIndex == 0) {
-                // Estamos en HOME
+            if (activeTabPageIndex == 0 || currentRoute == Screen.Comunidades.route) {
+                // En HOME o Social, salir directamente en vez de cambiar de pestaña.
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastBackPressTime < 2000) {
                     // Segunda pulsación en menos de 2 segundos - salir

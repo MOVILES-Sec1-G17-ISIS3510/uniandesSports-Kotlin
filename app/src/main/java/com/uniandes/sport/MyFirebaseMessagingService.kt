@@ -33,6 +33,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val body = data["body"] ?: remoteMessage.notification?.body ?: "Tap to view details"
         val notificationType = data["type"] ?: ""
         val eventId = data["eventId"] ?: ""
+        val authorId = data["authorId"] ?: ""
+
+        if (notificationType == "community_message") {
+            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            if (authorId.isNotBlank() && currentUserId.isNotBlank() && authorId == currentUserId) {
+                Log.d("FCM", "Skipping self community message notification for user=$currentUserId")
+                return
+            }
+        }
 
         showLocalNotification(
             title = title,
