@@ -463,7 +463,14 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(sportColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                 Icon(imageVector = when(event.sport.lowercase()) {
@@ -497,7 +504,14 @@ fun RecommendedItemCard(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.width(200.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.width(200.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Surface(color = sportColor.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
                 Text(event.sport.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = sportColor)
@@ -523,7 +537,14 @@ fun UpcomingMatchItem(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha=0.5f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.primary)
