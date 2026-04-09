@@ -437,6 +437,12 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
+                    val displayPrice = profesor.precio
+                        .replace("$", "")
+                        .replace("/hour", "")
+                        .replace("COP", "")
+                        .trim()
+                        
                     Text(
                         text = profesor.nombre,
                         fontWeight = FontWeight.Black,
@@ -444,7 +450,7 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "${profesor.deporte} • ${profesor.precio}",
+                        text = "${profesor.deporte} • $${displayPrice}/hour",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.tertiary
@@ -490,10 +496,16 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
             ) {
                 Column {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        val displayExp = profesor.experiencia
+                            .replace("years", "")
+                            .replace("year", "")
+                            .replace("exp.", "")
+                            .trim()
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AccountBalance, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("${profesor.experiencia} exp.", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            Text("$displayExp years exp.", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFFF97316), modifier = Modifier.size(16.dp))
@@ -590,12 +602,12 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
 
                 // Price
                 item {
-                    Text("Hourly Price (COP)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    Text("Hourly Price (USD)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = precio, 
                         onValueChange = { if (it.all { char -> char.isDigit() }) precio = it }, 
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. 50000") },
+                        placeholder = { Text("e.g. 15") },
                         prefix = { Text("$ ") },
                         isError = precio.isNotEmpty() && !isPriceValid,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -610,7 +622,7 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
                         value = experiencia, 
                         onValueChange = { if (it.all { char -> char.isDigit() }) experiencia = it }, 
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. 5") },
+                        placeholder = { Text("e.g. 3") },
                         suffix = { Text("years") },
                         isError = experiencia.isNotEmpty() && !isExperienceValid,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
