@@ -1,5 +1,6 @@
 package com.uniandes.sport.viewmodels.log
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.ktx.analytics
@@ -19,6 +20,7 @@ class FirebaseLogViewModel(): ViewModel(), LogViewModelInterface {
     private val firebaseCrashlytics = Firebase.crashlytics
 
     override fun log(screen: String, action: String, params: Map<String, String>) {
+        Log.d("TELEMETRY_LOG", "Logging Event: $action | Screen: $screen | Params: $params")
         firebaseAnalytics.logEvent(action){
             param(FirebaseAnalytics.Param.SCREEN_NAME, screen)
             params.forEach { (key, value) ->

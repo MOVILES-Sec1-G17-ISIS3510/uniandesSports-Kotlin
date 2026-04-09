@@ -1,6 +1,7 @@
 package com.uniandes.sport.viewmodels.play
 
 import android.util.Log
+import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,7 +18,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
+class FirestorePlayViewModel(
+    private val logViewModel: LogViewModelInterface? = null
+) : ViewModel(), PlayViewModelInterface {
     private val db = FirebaseFirestore.getInstance()
 
     private val _rawEvents = MutableStateFlow<List<Event>>(emptyList())
@@ -158,6 +161,8 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     override fun toggleSportFilter(sport: String) {
         val current = _selectedSports.value
         val normalized = sport.lowercase()
+        val isSelecting = !current.contains(normalized)
+        
         val next = if (current.contains(normalized)) {
             current - normalized
         } else {
@@ -165,6 +170,15 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
         }
         _selectedSports.value = next
         
+        // Log interaction if selecting a new sport
+        if (isSelecting) {
+            logViewModel?.log(
+                screen = "PlayScreen",
+                action = "SPORT_FILTER_APPLIED",
+                params = mapOf("sport_category" to normalized)
+            )
+        }
+
         currentFilterStrategy = if (next.isNotEmpty()) {
             MultiSportFilterStrategy(next)
         } else {
@@ -312,7 +326,7 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             }
     }
 
-    override fun joinEvent(eventId: String, userId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    override fun joinEvent(eventId: String, userId: String, sport: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val docRef = db.collection("events").document(eventId)
         val memberRef = docRef.collection("members").document(userId)
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
@@ -346,6 +360,14 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             }
         }.addOnSuccessListener {
             Log.d("PlayVM", "User $userId successfully JOINED event $eventId")
+            
+            // Log telemetry
+            logViewModel?.log(
+                screen = "PlayScreen",
+                action = "join_sport_event",
+                params = mapOf("sport_category" to sport)
+            )
+
             _joinedEventIds.value = _joinedEventIds.value + eventId
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
             com.uniandes.sport.repositories.EventCacheRepository.fetchEventsIfNeeded(forceRefresh = true)
@@ -430,7 +452,18 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
             batch.commit()
                 .addOnSuccessListener { 
                     Log.d("PlayVM", "Batch commit SUCCESS: Event creation finished (shouldJoin=$shouldJoin).")
+                    
+                    // Log telemetry
                     if (shouldJoin) {
+                        logViewModel?.log(
+                            screen = "PlayScreen",
+                            action = "join_sport_event",
+                            params = mapOf(
+                                "sport_category" to sport,
+                                "modality" to modality,
+                                "max_participants" to maxParticipants.toString()
+                            )
+                        )
                         _joinedEventIds.value = _joinedEventIds.value + event.id
                     }
                     com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
@@ -530,5 +563,15 @@ class FirestorePlayViewModel : ViewModel(), PlayViewModelInterface {
     override fun onCleared() {
         super.onCleared()
         joinedEventsListener?.remove()
+    }
+
+    companion object {
+        fun provideFactory(logViewModel: LogViewModelInterface): androidx.lifecycle.ViewModelProvider.Factory = 
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    return FirestorePlayViewModel(logViewModel) as T
+                }
+            }
     }
 }
