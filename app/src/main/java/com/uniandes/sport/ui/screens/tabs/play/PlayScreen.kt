@@ -110,7 +110,7 @@ fun PlayScreen(
     val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
         logViewModel.log(
             screen = "PlayScreen",
-            action = "EVENT_VIEWED",
+            action = "MATCH_VIEWED",
             params = mapOf(
                 "sport_category" to event.sport,
                 "available_capacity" to (event.maxParticipants - event.membersCount).toString(),
@@ -247,15 +247,6 @@ fun PlayScreen(
                     maxParticipants = maxParticipants,
                     shouldJoin = shouldJoin,
                     onSuccess = { 
-                        logViewModel.log(
-                            screen = "PlayScreen",
-                            action = "EVENT_REGISTERED",
-                            params = mapOf(
-                                "source" to "organic",
-                                "challenge_type" to selectedMode!!,
-                                "sport_category" to finalSport
-                            )
-                        )
                         dialogOnSuccess()
                     },
                     onError = { e ->

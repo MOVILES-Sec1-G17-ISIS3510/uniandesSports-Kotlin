@@ -52,7 +52,8 @@ fun HomeScreen(
     retosViewModel: FirestoreRetosViewModel = viewModel(),
     playViewModel: FirestorePlayViewModel = viewModel(),
     bookingViewModel: BookClassViewModel = viewModel(),
-    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel()
+    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>()
 ) {
     val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
     var userName by remember { mutableStateOf("User") }
@@ -246,7 +247,14 @@ fun HomeScreen(
             // Start Live Run Button
             item {
                 Button(
-                    onClick = { onNavigate("live_run") },
+                    onClick = { 
+                        logViewModel.log(
+                            screen = "HomeScreen",
+                            action = "MATCH_VIEWED",
+                            params = mapOf("sport_category" to "running")
+                        )
+                        onNavigate("live_run") 
+                    },
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -277,7 +285,19 @@ fun HomeScreen(
                     EmptyStateWideCard(title = "No events nearby", description = "Try searching in the Play tab.", icon = Icons.Default.Search, actionLabel = "Explore Play", onClick = { onNavigate("play") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        availableEvents.take(2).forEach { event -> ActivityCard(event = event, onClick = { /* Detail */ }) }
+                        availableEvents.take(2).forEach { event -> 
+                            ActivityCard(
+                                event = event, 
+                                onClick = { 
+                                    logViewModel.log(
+                                        screen = "HomeScreen",
+                                        action = "MATCH_VIEWED",
+                                        params = mapOf("sport_category" to event.sport)
+                                    )
+                                    // Detail navigation logic normally goes here
+                                }
+                            ) 
+                        }
                     }
                 }
             }
@@ -302,7 +322,18 @@ fun HomeScreen(
                      EmptyStateCard(title = "Looking for matches", description = "We'll show you more sports soon.", icon = Icons.Default.AutoAwesome)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                        items(availableEvents.drop(2).take(4)) { event -> RecommendedItemCard(event = event) }
+                        items(availableEvents.drop(2).take(4)) { event -> 
+                            RecommendedItemCard(
+                                event = event,
+                                onClick = {
+                                    logViewModel.log(
+                                        screen = "HomeScreen",
+                                        action = "MATCH_VIEWED",
+                                        params = mapOf("sport_category" to event.sport)
+                                    )
+                                }
+                            ) 
+                        }
                     }
                 }
             }
@@ -313,7 +344,18 @@ fun HomeScreen(
                     EmptyStateWideCard(title = "Your field is empty", description = "Join a match or schedule one with your friends.", icon = Icons.Default.SportsSoccer, actionLabel = "Find Match", onClick = { onNavigate("play") })
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        upcomingMatches.forEach { match -> UpcomingMatchItem(event = match) }
+                        upcomingMatches.forEach { match -> 
+                            UpcomingMatchItem(
+                                event = match,
+                                onClick = {
+                                    logViewModel.log(
+                                        screen = "HomeScreen",
+                                        action = "MATCH_VIEWED",
+                                        params = mapOf("sport_category" to match.sport)
+                                    )
+                                }
+                            ) 
+                        }
                     }
                 }
             }
@@ -426,13 +468,18 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
 }
 
 @Composable
-fun RecommendedItemCard(event: Event) {
+fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
     val sportColor = getSportAccentColor(event.sport)
     val dateStr = remember(event.scheduledAt) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.width(200.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Card(
+        modifier = Modifier.width(200.dp).clickable { onClick() }, 
+        shape = RoundedCornerShape(24.dp), 
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Surface(color = sportColor.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
                 Text(event.sport.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = sportColor)
@@ -453,12 +500,17 @@ fun RecommendedItemCard(event: Event) {
 }
 
 @Composable
-fun UpcomingMatchItem(event: Event) {
+fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
     val dateStr = remember(event.scheduledAt) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }, 
+        shape = RoundedCornerShape(28.dp), 
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha=0.5f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.primary)

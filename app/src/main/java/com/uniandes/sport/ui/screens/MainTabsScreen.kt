@@ -47,14 +47,18 @@ fun MainTabsScreen(
     ) { page ->
         when (coreScreens[page]) {
             Screen.Home -> {
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = viewModel()
                 val authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = viewModel()
                 val retosViewModel: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = viewModel()
-                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = viewModel()
+                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = viewModel(
+                    factory = com.uniandes.sport.viewmodels.play.FirestorePlayViewModel.provideFactory(logViewModel)
+                )
                 HomeScreen(
                     onNavigate = onNavigate,
                     authViewModel = authViewModel,
                     retosViewModel = retosViewModel,
-                    playViewModel = playViewModel
+                    playViewModel = playViewModel,
+                    logViewModel = logViewModel
                 )
             }
             Screen.Challenges -> {
@@ -73,11 +77,15 @@ fun MainTabsScreen(
                 )
             }
             Screen.Play -> {
-                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = viewModel()
+                val playViewModel: com.uniandes.sport.viewmodels.play.FirestorePlayViewModel = viewModel(
+                    factory = com.uniandes.sport.viewmodels.play.FirestorePlayViewModel.provideFactory(logViewModel)
+                )
                 com.uniandes.sport.ui.screens.tabs.play.PlayScreen(
                     viewModel = playViewModel,
                     openEventId = pendingOpenEventId,
                     onOpenEventConsumed = onOpenEventConsumed,
+                    logViewModel = logViewModel,
                     onNavigate = onNavigate
                 )
             }
