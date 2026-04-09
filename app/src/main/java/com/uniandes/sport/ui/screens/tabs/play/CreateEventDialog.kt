@@ -126,8 +126,36 @@ fun CreateEventDialog(
         context.startActivity(intent)
     }
 
+    var showTimePicker by remember { mutableStateOf(false) }
+    var showFinishTimePicker by remember { mutableStateOf(false) }
+    var timePickerError by remember { mutableStateOf<String?>(null) }
+    var dateValidationError by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(dateString, timeString, finishTimeString, endDateString, isMultiDay) {
         scheduleCheckResult = null
+        
+        // Date Cross-Validation Logic
+        if (dateString.isNotBlank() && timeString.isNotBlank()) {
+            val startMillis = parseDateTime(dateString, timeString)
+            val targetEndDateStr = if (isMultiDay && endDateString.isNotBlank()) endDateString else dateString
+            val endMillis = if (finishTimeString.isNotBlank()) {
+                parseDateTime(targetEndDateStr, finishTimeString)
+            } else {
+                null
+            }
+
+            if (startMillis != null && endMillis != null) {
+                if (endMillis <= startMillis) {
+                    dateValidationError = "End time must be after start time"
+                } else {
+                    dateValidationError = null
+                }
+            } else {
+                dateValidationError = null
+            }
+        } else {
+            dateValidationError = null
+        }
     }
 
     
@@ -156,9 +184,7 @@ fun CreateEventDialog(
         initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
         is24Hour = false
     )
-    var showTimePicker by remember { mutableStateOf(false) }
-    var showFinishTimePicker by remember { mutableStateOf(false) }
-    var timePickerError by remember { mutableStateOf<String?>(null) }
+
 
     val endDatePickerState = rememberDatePickerState(
         selectableDates = object : SelectableDates {
@@ -190,6 +216,14 @@ fun CreateEventDialog(
             onDismiss()
         }
     }
+
+    // Validation patterns (aligned with Challenges)
+    val emojiRegex = "[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+".toRegex()
+    val alphanumericRegex = "^[a-zA-Z0-9\\s]*$".toRegex()
+
+    val isTitleValid = title.isNotBlank() && !emojiRegex.containsMatchIn(title) && alphanumericRegex.matches(title)
+    val isCustomSportValid = selectedSport != "other" || (customSportName.isNotBlank() && !emojiRegex.containsMatchIn(customSportName) && alphanumericRegex.matches(customSportName))
+    val isDescriptionValid = description.isEmpty() || !emojiRegex.containsMatchIn(description)
 
     // --- Date Picker Dialog ---
     if (showDatePicker) {
@@ -421,9 +455,9 @@ fun CreateEventDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
+                .fillMaxWidth(0.94f)
                 .wrapContentHeight(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
@@ -487,15 +521,25 @@ fun CreateEventDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = customSportName,
-                        onValueChange = { customSportName = it },
+                        onValueChange = { if (it.length <= 20) customSportName = it },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         placeholder = { Text("Sport name (e.g., Pádel, Golf)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                         shape = RoundedCornerShape(12.dp),
+                        isError = customSportName.isNotEmpty() && !isCustomSportValid,
+                        trailingIcon = {
+                            Text(
+                                text = "${customSportName.length}/20",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (customSportName.length > 20 || (customSportName.isNotEmpty() && !isCustomSportValid)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            errorBorderColor = MaterialTheme.colorScheme.error
                         )
                     )
                 }
@@ -506,15 +550,25 @@ fun CreateEventDialog(
                 FormLabel("Title")
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { if (it.length <= 40) title = it },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     placeholder = { Text("Event title (e.g., Sunday morning game)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                     shape = RoundedCornerShape(12.dp),
+                    isError = title.isNotEmpty() && !isTitleValid,
+                    trailingIcon = {
+                        Text(
+                            text = "${title.length}/40",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (title.length > 40 || (title.isNotEmpty() && !isTitleValid)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        errorBorderColor = MaterialTheme.colorScheme.error
                     )
                 )
                 
@@ -651,6 +705,15 @@ fun CreateEventDialog(
                     }
                 }
                 
+                if (dateValidationError != null) {
+                    Text(
+                        text = dateValidationError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
                 
                 // Skill Level
                 FormLabel("Skill Level")
@@ -710,15 +773,26 @@ fun CreateEventDialog(
                 FormLabel("Notes")
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it },
+                    onValueChange = { if (it.length <= 250) description = it },
                     modifier = Modifier.fillMaxWidth().height(90.dp),
                     placeholder = { Text("Extra details...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                     shape = RoundedCornerShape(12.dp),
+                    isError = description.isNotEmpty() && !isDescriptionValid,
+                    trailingIcon = {
+                        Box(modifier = Modifier.fillMaxHeight().padding(bottom = 8.dp, end = 8.dp), contentAlignment = Alignment.BottomEnd) {
+                            Text(
+                                text = "${description.length}/250",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (description.length > 250 || (description.isNotEmpty() && !isDescriptionValid)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        errorBorderColor = MaterialTheme.colorScheme.error
                     )
                 )
                 
@@ -843,11 +917,13 @@ fun CreateEventDialog(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                val isFormValid = title.isNotBlank() &&
+                val isFormValid = isTitleValid &&
                     selectedSport != null &&
-                    (selectedSport != "other" || customSportName.isNotBlank()) &&
+                    isCustomSportValid &&
+                    isDescriptionValid &&
                     (!isLocationSpecific || location.isNotBlank()) &&
                     dateString.isNotBlank() &&
+                    dateValidationError == null &&
                     timeString.isNotBlank() &&
                     (!isMultiDay || endDateString.isNotBlank())
 

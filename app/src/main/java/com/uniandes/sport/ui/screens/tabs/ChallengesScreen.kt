@@ -337,15 +337,17 @@ fun SearchChallengesDialog(
     
     val sports = listOf("All Sports", "Soccer", "Running", "Calisthenics", "Tennis", "Basketball", "Swimming", "Other")
     
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(horizontal = 4.dp),
+                .fillMaxWidth(0.94f)
+                .wrapContentHeight(),
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.background,
-            tonalElevation = 0.dp
+            tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
@@ -565,15 +567,17 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
 
     val canCreate = isNameValid && isGoalValid && isDateValid && isSportValid
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(horizontal = 4.dp),
+                .fillMaxWidth(0.94f)
+                .wrapContentHeight(),
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.background,
-            tonalElevation = 0.dp
+            tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
@@ -855,15 +859,17 @@ fun LeaveChallengeDialog(
     onDismiss: () -> Unit,
     onLeaveClicked: (Reto) -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(horizontal = 4.dp),
+                .fillMaxWidth(0.94f)
+                .wrapContentHeight(),
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.background,
-            tonalElevation = 0.dp
+            tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
