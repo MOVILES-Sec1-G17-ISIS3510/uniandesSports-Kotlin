@@ -3,6 +3,7 @@ package com.uniandes.sport.ui.screens.tabs.play
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -468,9 +469,11 @@ fun PlayScreen(
                         EmptyState(Icons.Default.SearchOff, "No matches found", "Try changing the sport filter above.")
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            rankedOpenEvents.forEach { rankedEvent ->
+                            rankedOpenEvents.forEachIndexed { index, rankedEvent ->
                                 CompactEventCard(
                                     uiModel = EventUIAdapter.toUIModel(rankedEvent.event),
+                                    badgeText = "#${index + 1}",
+                                    rankedEvent = rankedEvent,
                                     onClick = { 
                                         activeModal = null
                                         onEventSelected(rankedEvent.event) 
@@ -1371,9 +1374,11 @@ private fun CompactEventCard(
     modifier: Modifier = Modifier,
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     badgeText: String? = null,
+    rankedEvent: com.uniandes.sport.patterns.event.RankedOpenMatch? = null,
     onClick: () -> Unit
 ) {
     val event = uiModel.rawEvent
+    var showScoreBreakdown by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
@@ -1385,7 +1390,28 @@ private fun CompactEventCard(
             com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 42.dp)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(event.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(event.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                    if (rankedEvent != null) {
+                        Surface(
+                            modifier = Modifier.combinedClickable(
+                                onClick = onClick,
+                                onLongClick = { showScoreBreakdown = true }
+                            ),
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text(String.format(Locale.getDefault(), "%.1f", rankedEvent.score), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
                 Text(
                     text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}", 
                     style = MaterialTheme.typography.labelSmall, 
@@ -1403,6 +1429,36 @@ private fun CompactEventCard(
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant)
         }
+    }
+
+    if (showScoreBreakdown && rankedEvent != null) {
+        AlertDialog(
+            onDismissRequest = { showScoreBreakdown = false },
+            title = { Text("Score breakdown") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rankedEvent.contributions.forEach { contribution ->
+                        val prefix = if (contribution.points >= 0) "+" else ""
+                        Text(
+                            text = "$prefix${String.format(Locale.getDefault(), "%.1f", contribution.points)}  ${contribution.label}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (contribution.points >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Total: ${String.format(Locale.getDefault(), "%.1f", rankedEvent.score)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showScoreBreakdown = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
