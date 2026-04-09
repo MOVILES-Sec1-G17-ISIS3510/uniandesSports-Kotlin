@@ -51,6 +51,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 fun ProfesoresScreen(
     profesoresViewModel: ProfesoresViewModelInterface,
     authViewModel: FirebaseAuthViewModel = viewModel(),
+    bookClassViewModel: com.uniandes.sport.viewmodels.booking.BookClassViewModel = viewModel(),
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -58,6 +59,9 @@ fun ProfesoresScreen(
     var selectedFilter by remember { mutableStateOf("All") }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
+
+    val smartTip by bookClassViewModel.smartCoachInsight.collectAsState()
+    val userBookings by bookClassViewModel.userBookings.collectAsState()
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
 
@@ -79,7 +83,10 @@ fun ProfesoresScreen(
     LaunchedEffect(Unit) {
         profesoresViewModel.fetchProfesores()
         authViewModel.getUser(
-            onSuccess = { user -> userUid = user.uid },
+            onSuccess = { user -> 
+                userUid = user.uid 
+                bookClassViewModel.fetchUserBookings(user.uid)
+            },
             onFailure = { /* Not logged in or error */ }
         )
     }
@@ -155,6 +162,34 @@ fun ProfesoresScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Smart Insight Section
+                item {
+                    SmartInsightCard(tip = smartTip)
+                }
+
+                // YOUR REQUESTS SECTION (G17 Rubric: User History)
+                if (userBookings.isNotEmpty()) {
+                    item {
+                        Text(
+                            "YOUR RECENT REQUESTS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            items(userBookings.sortedByDescending { it.createdAt }) { booking ->
+                                BookingHistoryCard(booking = booking, allCoaches = profesores)
+                            }
+                        }
+                        Divider(modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    }
+                }
+
                 if (filteredProfesores.isEmpty()) {
                     item {
                         Box(
@@ -197,12 +232,8 @@ fun ProfesoresScreen(
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
-                                val firstProfId = profesores.firstOrNull()?.id
-                                if (firstProfId != null) {
-                                    onNavigate("book_class/$firstProfId")
-                                } else {
-                                    android.widget.Toast.makeText(context, "No coaches available", android.widget.Toast.LENGTH_SHORT).show()
-                                }
+                                // Pass 'broadcast' instead of a specific ID when using the main FAB
+                                onNavigate("book_class/broadcast")
                             }
                         )
                         if (isCurrentUserCoach) {
@@ -531,3 +562,172 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
         }
     }
 }
+
+@Composable
+fun SmartInsightCard(tip: String?) {
+    if (tip == null) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "AI Insight",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    "SMART RECOMMENDATION",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = tip,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BookingHistoryCard(
+    booking: com.uniandes.sport.models.BookingRequest,
+    allCoaches: List<com.uniandes.sport.models.Profesor> = emptyList()
+) {
+    val statusColor = when(booking.status.lowercase()) {
+        "pending" -> Color(0xFFF59E0B) // Amber
+        "accepted" -> Color(0xFF10B981) // Emerald
+        "completed" -> Color(0xFF6B7280) // Gray
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Surface(
+        modifier = Modifier.width(240.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when(booking.sport.lowercase()) {
+                                "tennis" -> Icons.Default.SportsTennis
+                                "soccer" -> Icons.Default.SportsSoccer
+                                else -> Icons.Default.FitnessCenter
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    val resolvedCoachName = remember(booking, allCoaches) {
+                        when {
+                            booking.targetProfesorName.isNotBlank() -> booking.targetProfesorName
+                            booking.targetProfesorId.isNotBlank() -> {
+                                allCoaches.find { it.id == booking.targetProfesorId }?.nombre 
+                                    ?: "Coach Assigned"
+                            }
+                            else -> "Broadcast Content"
+                        }
+                    }
+                    Text(
+                        text = when {
+                            booking.targetProfesorName.isNotBlank() -> "COACH: ${booking.targetProfesorName.uppercase()}"
+                            booking.targetProfesorId.isNotBlank() -> "COACH ASSIGNED"
+                            else -> "SEARCHING FOR COACH..."
+                        },
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                        color = if (booking.targetProfesorId.isBlank()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (booking.targetProfesorId.isBlank()) {
+                        Text(
+                            text = "Broadcast active for ${booking.sport}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = "Student: ${booking.studentName}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (booking.targetProfesorId.isBlank()) "Wait for a coach to accept your request" else "Sport: ${booking.sport}",
+                        fontSize = 10.sp, 
+                        lineHeight = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            Spacer(Modifier.height(12.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = statusColor.copy(alpha = 0.1f)
+                ) {
+                    Text(
+                        text = booking.status.uppercase(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = statusColor,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+                
+                Text(
+                    text = SimpleDateFormat("MMM d", Locale.getDefault()).format(booking.createdAt.toDate()),
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+

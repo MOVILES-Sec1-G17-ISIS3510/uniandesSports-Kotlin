@@ -41,7 +41,8 @@ fun BookClassScreen(
     authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = viewModel(),
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigateBack: () -> Unit = {},
-    onOpenProfile: () -> Unit = {}
+    onOpenProfile: () -> Unit = {},
+    profesoresViewModel: com.uniandes.sport.viewmodels.profesores.FirestoreProfesoresViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -49,7 +50,13 @@ fun BookClassScreen(
     var userUid by remember { mutableStateOf("") }
     var userName by remember { mutableStateOf("") }
     
+    val currentProfesores by profesoresViewModel.profesores.collectAsState()
+    val profesorName = remember(currentProfesores, profesorId) {
+        currentProfesores.find { it.id == profesorId }?.nombre ?: "Coach"
+    }
+
     LaunchedEffect(Unit) {
+        profesoresViewModel.fetchProfesores()
         authViewModel.getUser(
             onSuccess = { user -> 
                 userUid = user.uid
@@ -325,6 +332,7 @@ fun BookClassScreen(
 
                         viewModel.submitBooking(
                             profesorId = profesorId,
+                            profesorName = profesorName,
                             studentId = userUid,
                             studentName = userName,
                             onSuccess = {
