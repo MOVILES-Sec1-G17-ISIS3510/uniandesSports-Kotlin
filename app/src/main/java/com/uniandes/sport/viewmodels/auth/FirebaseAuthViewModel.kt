@@ -267,6 +267,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                     if (document != null && document.exists()) {
                         val userProfile = document.toObject(User::class.java)
                         if (userProfile != null) {
+                            _email = userProfile.email
+                            _fullName = userProfile.fullName
+                            _program = userProfile.program
+                            _semester = userProfile.semester.toString()
+                            _mainSport = userProfile.mainSport
                             onSuccess(userProfile)
                             return@addOnSuccessListener
                         }

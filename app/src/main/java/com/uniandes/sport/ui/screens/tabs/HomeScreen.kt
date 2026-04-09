@@ -230,7 +230,10 @@ fun HomeScreen(
         if (currentUserId.isBlank()) return@LaunchedEffect
         
         authViewModel.getUser(
-            onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
+            onSuccess = { user ->
+                userName = user.fullName.split(" ").firstOrNull() ?: "User"
+                authViewModel.mainSport = user.mainSport
+            },
             onFailure = { /* Fail silent */ }
         )
         

@@ -4,6 +4,8 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,7 +79,8 @@ fun PerfilUsuarioScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(24.dp),
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Profile Picture Placeholder
@@ -124,7 +127,8 @@ fun PerfilUsuarioScreen(
                         authViewModel.updateMainSports(
                             newMainSportsCsv = selectedSportsCsv,
                             onSuccess = {
-                                user = user?.copy(mainSport = selectedSportsCsv)
+                                selectedSportsCsv = authViewModel.mainSport
+                                user = user?.copy(mainSport = authViewModel.mainSport)
                                 isSavingSports = false
                                 Toast.makeText(context, "Main sports updated", Toast.LENGTH_SHORT).show()
                             },
@@ -137,7 +141,7 @@ fun PerfilUsuarioScreen(
                 )
                 InfoRow(icon = Icons.Default.Badge, label = "Role", value = user?.role?.uppercase() ?: "ATHLETE")
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Logout Button
                 Button(
@@ -197,6 +201,8 @@ private fun EditableMainSportsCard(
             "running" to "Running"
         )
     }
+    val customSports = remember { mutableStateListOf<String>() }
+    var customSportInput by remember { mutableStateOf("") }
 
     val selectedSports = remember(selectedSportsCsv) {
         selectedSportsCsv
@@ -204,6 +210,16 @@ private fun EditableMainSportsCard(
             .map { normalizeSportId(it) }
             .filter { it.isNotBlank() }
             .toSet()
+    }
+
+    LaunchedEffect(selectedSportsCsv) {
+        selectedSports
+            .filter { selected -> sportOptions.none { it.first == selected } }
+            .forEach { selectedCustom ->
+                if (customSports.none { normalizeSportId(it) == selectedCustom }) {
+                    customSports.add(selectedCustom)
+                }
+            }
     }
 
     Column(
@@ -246,6 +262,68 @@ private fun EditableMainSportsCard(
                         )
                     }
                 )
+            }
+
+            customSports
+                .filter { custom -> sportOptions.none { it.first == normalizeSportId(custom) } }
+                .forEach { customSport ->
+                    val sportId = normalizeSportId(customSport)
+                    val selected = selectedSports.contains(sportId)
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            val updated = if (selected) {
+                                selectedSports.filterNot { it == sportId }
+                            } else {
+                                selectedSports + sportId
+                            }
+                            onSelectionChange(updated.joinToString(","))
+                        },
+                        label = { Text(displaySportLabel(customSport)) },
+                        leadingIcon = {
+                            com.uniandes.sport.ui.components.SportIconBox(
+                                sport = sportId,
+                                size = 20.dp,
+                                modifier = Modifier.padding(end = 2.dp)
+                            )
+                        }
+                    )
+                }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = customSportInput,
+                onValueChange = { customSportInput = it },
+                label = { Text("Add custom sport") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            FilledIconButton(
+                onClick = {
+                    val newSport = normalizeSportId(customSportInput)
+                    if (newSport.isBlank()) return@FilledIconButton
+
+                    if (sportOptions.any { it.first == newSport }) {
+                        onSelectionChange((selectedSports + newSport).distinct().joinToString(","))
+                        customSportInput = ""
+                        return@FilledIconButton
+                    }
+
+                    if (customSports.none { normalizeSportId(it) == newSport }) {
+                        customSports.add(newSport)
+                    }
+                    onSelectionChange((selectedSports + newSport).distinct().joinToString(","))
+                    customSportInput = ""
+                },
+                enabled = customSportInput.isNotBlank() && !isSaving
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add sport")
             }
         }
 

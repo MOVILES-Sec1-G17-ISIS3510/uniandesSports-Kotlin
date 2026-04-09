@@ -121,6 +121,14 @@ fun PlayScreen(
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
     }
+
+    LaunchedEffect(Unit) {
+        authViewModel.getUser(
+            onSuccess = { user -> authViewModel.mainSport = user.mainSport },
+            onFailure = { }
+        )
+    }
+
     val rankedOpenEvents = remember(otherEvents, joinedEvents, historyEvents, preferredSports, currentLocation, phoneCalendarEvents) {
         OpenMatchRanker.rank(
             openEvents = otherEvents,
