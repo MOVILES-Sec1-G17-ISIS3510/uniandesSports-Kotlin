@@ -611,14 +611,26 @@ fun RecentRunWidget(run: RunSession, onClick: () -> Unit) {
     }
 }
 
-fun getDynamicGreeting(): String {
+fun getDynamicGreeting(weatherCode: Int? = null): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return when (hour) {
+    val timeGreeting = when (hour) {
         in 5..11 -> "GOOD MORNING"
         in 12..17 -> "GOOD AFTERNOON"
         in 18..21 -> "GOOD EVENING"
         else -> "HELLO"
     }
+
+    // Context-Aware Suffix based on Environmental Context (Weather)
+    val suffix = when (weatherCode) {
+        null -> ""
+        0 -> ", ENJOY THE SUN! ☀️"
+        in 1..3 -> ", NICE DAY! ⛅"
+        in 51..67, in 80..82 -> ", STAY DRY! ⛈️"
+        in 95..99 -> ", STAY SAFE! ⚡"
+        else -> ", STAY ACTIVE!"
+    }
+
+    return "$timeGreeting$suffix"
 }
 
 private fun androidx.compose.ui.graphics.Color.toArgb(): Int {

@@ -47,6 +47,10 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import com.uniandes.sport.models.InsightType
+import com.uniandes.sport.models.CoachInsight
 
 @OptIn(ExperimentalMaterialApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +58,7 @@ fun ProfesoresScreen(
     profesoresViewModel: ProfesoresViewModelInterface,
     authViewModel: FirebaseAuthViewModel = viewModel(),
     bookClassViewModel: com.uniandes.sport.viewmodels.booking.BookClassViewModel = viewModel(),
+    weatherViewModel: com.uniandes.sport.viewmodels.weather.WeatherViewModel = viewModel(),
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -62,7 +67,7 @@ fun ProfesoresScreen(
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
 
-    val smartTip by bookClassViewModel.smartCoachInsight.collectAsState()
+    val smartInsights by bookClassViewModel.smartCoachInsights.collectAsState()
     val userBookings by bookClassViewModel.userBookings.collectAsState()
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
@@ -87,10 +92,28 @@ fun ProfesoresScreen(
         authViewModel.getUser(
             onSuccess = { user -> 
                 userUid = user.uid 
-                bookClassViewModel.fetchUserBookings(user.uid)
+                if (userUid != null) {
+                    bookClassViewModel.fetchUserBookings(userUid!!)
+                }
             },
             onFailure = { /* Not logged in or error */ }
         )
+    }
+
+    // Context-Aware Rubric: Sync weather code with BookClassViewModel
+    val weatherState by weatherViewModel.weatherState.collectAsState()
+    LaunchedEffect(weatherState) {
+        if (weatherState is com.uniandes.sport.viewmodels.weather.WeatherState.Success) {
+            val code = (weatherState as com.uniandes.sport.viewmodels.weather.WeatherState.Success).data.currentWeather.weatherCode
+            bookClassViewModel.updateWeatherContext(code)
+        }
+    }
+
+    // Connect Coaches context for personalized recommendation
+    LaunchedEffect(profesores) {
+        if (profesores.isNotEmpty()) {
+            bookClassViewModel.updateCoachesContext(profesores)
+        }
     }
 
     val isCurrentUserCoach = profesores.any { it.id == userUid }
@@ -164,9 +187,44 @@ fun ProfesoresScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Smart Insight Section
+                // Smart Insight Carousel
                 item {
-                    SmartInsightCard(tip = smartTip)
+                    if (smartInsights.isNotEmpty()) {
+                        val pagerState = rememberPagerState(pageCount = { smartInsights.size })
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 4.dp),
+                                pageSpacing = 12.dp
+                            ) { page ->
+                                SmartInsightCard(insight = smartInsights[page])
+                            }
+                            
+                            if (smartInsights.size > 1) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    repeat(smartInsights.size) { iteration ->
+                                        val color = if (pagerState.currentPage == iteration) 
+                                            MaterialTheme.colorScheme.primary 
+                                        else 
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                        
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(color)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // YOUR REQUESTS SECTION (G17 Rubric: User History)
@@ -628,16 +686,37 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
 }
 
 @Composable
-fun SmartInsightCard(tip: String?) {
-    if (tip == null) return
+fun SmartInsightCard(insight: CoachInsight) {
+    val isWeather = insight.type == InsightType.ENVIRONMENTAL
+    val isHabit = insight.type == InsightType.BEHAVIORAL
+    
+    val icon = when {
+        insight.icon != null -> insight.icon
+        insight.message.contains("raining", ignoreCase = true) -> Icons.Default.BeachAccess
+        insight.message.contains("Perfect day", ignoreCase = true) -> Icons.Default.WbSunny
+        insight.message.contains("cloudy", ignoreCase = true) -> Icons.Default.Cloud
+        isHabit -> Icons.Default.AutoAwesome
+        else -> Icons.Default.Lightbulb
+    }
+
+    val label = when (insight.type) {
+        InsightType.ENVIRONMENTAL -> "ENVIRONMENTAL CONTEXT"
+        InsightType.BEHAVIORAL -> "SPORT HABITS"
+        InsightType.WELCOME -> "SMART COACH"
+    }
+
+    val iconColor = when (insight.type) {
+        InsightType.ENVIRONMENTAL -> MaterialTheme.colorScheme.primary
+        InsightType.BEHAVIORAL -> MaterialTheme.colorScheme.tertiary
+        InsightType.WELCOME -> MaterialTheme.colorScheme.secondary
+    }
 
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+        color = iconColor.copy(alpha = 0.08f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, iconColor.copy(alpha = 0.15f))
     ) {
         Row(
             modifier = Modifier.padding(20.dp),
@@ -646,13 +725,13 @@ fun SmartInsightCard(tip: String?) {
             Surface(
                 modifier = Modifier.size(48.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)
+                color = iconColor.copy(alpha = 0.2f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = "AI Insight",
-                        tint = MaterialTheme.colorScheme.secondary,
+                        icon,
+                        contentDescription = "Context Icon",
+                        tint = iconColor,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -660,18 +739,18 @@ fun SmartInsightCard(tip: String?) {
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(
-                    "SMART RECOMMENDATION",
+                    label,
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.secondary
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp,
+                    color = iconColor
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = tip,
+                    text = insight.message,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                     lineHeight = 18.sp
                 )
             }
