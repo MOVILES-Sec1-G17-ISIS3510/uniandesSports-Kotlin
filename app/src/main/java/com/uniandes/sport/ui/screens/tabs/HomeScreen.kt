@@ -247,13 +247,6 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     )
-                    Text(
-                        text = "YOUR SPORTS DASHBOARD",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        letterSpacing = 1.sp
-                    )
                 }
             }
 
