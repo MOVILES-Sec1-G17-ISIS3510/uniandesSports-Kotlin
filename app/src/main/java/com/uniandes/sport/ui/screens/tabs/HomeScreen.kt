@@ -269,8 +269,13 @@ fun HomeScreen(
         ) {
             item {
                 Column {
+                    val weatherState by weatherViewModel.weatherState.collectAsState()
+                    val weatherCode = when (val s = weatherState) {
+                        is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> s.data.currentWeather.weatherCode
+                        else -> null
+                    }
                     Text(
-                        text = "${getDynamicGreeting()}, ${userName.uppercase()}",
+                        text = "${getDynamicGreeting(weatherCode)}, ${userName.uppercase()}",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontFamily = ArchivoFamily,

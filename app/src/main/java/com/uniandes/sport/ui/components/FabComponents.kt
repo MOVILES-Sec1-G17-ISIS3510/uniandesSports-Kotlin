@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.components
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +20,9 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun FabMenuItem(text: String, icon: ImageVector, onClick: () -> Unit) {
+    val isDark = MaterialTheme.colorScheme.surface != Color.White
+    val backgroundColor = if (isDark) Color.Black else MaterialTheme.colorScheme.surface
+    
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End,
@@ -26,7 +30,7 @@ fun FabMenuItem(text: String, icon: ImageVector, onClick: () -> Unit) {
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = backgroundColor,
             shadowElevation = 4.dp,
             modifier = Modifier.padding(end = 12.dp)
         ) {
@@ -34,12 +38,13 @@ fun FabMenuItem(text: String, icon: ImageVector, onClick: () -> Unit) {
                 text = text.uppercase(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
         }
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
+            color = backgroundColor,
             shadowElevation = 4.dp,
             modifier = Modifier.size(48.dp)
         ) {

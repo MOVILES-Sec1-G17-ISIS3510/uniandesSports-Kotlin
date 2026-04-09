@@ -249,6 +249,9 @@ fun MultiActionFAB(
 
 @Composable
 fun HomeFabItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val isDark = MaterialTheme.colorScheme.surface != Color.White
+    val backgroundColor = if (isDark) Color.Black else MaterialTheme.colorScheme.surface
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End,
@@ -256,7 +259,7 @@ fun HomeFabItem(label: String, icon: ImageVector, onClick: () -> Unit) {
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = backgroundColor,
             shadowElevation = 4.dp
         ) {
             Text(
@@ -264,14 +267,14 @@ fun HomeFabItem(label: String, icon: ImageVector, onClick: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.tertiary
+                color = MaterialTheme.colorScheme.primary
             )
         }
         Spacer(Modifier.width(12.dp))
         FloatingActionButton(
             onClick = onClick,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.tertiary,
+            containerColor = backgroundColor,
+            contentColor = MaterialTheme.colorScheme.primary,
             shape = CircleShape,
             modifier = Modifier.size(48.dp),
             elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
@@ -611,14 +614,26 @@ fun RecentRunWidget(run: RunSession, onClick: () -> Unit) {
     }
 }
 
-fun getDynamicGreeting(): String {
+fun getDynamicGreeting(weatherCode: Int? = null): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return when (hour) {
+    val timeGreeting = when (hour) {
         in 5..11 -> "GOOD MORNING"
         in 12..17 -> "GOOD AFTERNOON"
         in 18..21 -> "GOOD EVENING"
         else -> "HELLO"
     }
+
+    // Context-Aware Suffix based on Environmental Context (Weather)
+    val suffix = when (weatherCode) {
+        null -> ""
+        0 -> ", ENJOY THE SUN! ☀️"
+        in 1..3 -> ", NICE DAY! ⛅"
+        in 51..67, in 80..82 -> ", STAY DRY! ⛈️"
+        in 95..99 -> ", STAY SAFE! ⚡"
+        else -> ", STAY ACTIVE!"
+    }
+
+    return "$timeGreeting$suffix"
 }
 
 private fun androidx.compose.ui.graphics.Color.toArgb(): Int {
