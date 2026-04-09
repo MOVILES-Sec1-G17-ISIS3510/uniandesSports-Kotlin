@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.Reto
 import com.uniandes.sport.models.RunSession
+import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.OpenMatchRanker
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.ui.components.SmartMatchCard
@@ -535,9 +536,8 @@ fun HomeScreen(
 @Composable
 fun ActivityCard(event: Event, onClick: () -> Unit) {
     val sportColor = getSportAccentColor(event.sport)
-    val timeStr = remember(event.scheduledAt) {
-        val date = event.scheduledAt?.toDate() ?: Date()
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+    val timeStr = remember(event.scheduledAt, event.finishedAt) {
+        EventUIAdapter.formatSchedule(event)
     }
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
@@ -576,9 +576,8 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
 @Composable
 fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
     val sportColor = getSportAccentColor(event.sport)
-    val dateStr = remember(event.scheduledAt) {
-        val date = event.scheduledAt?.toDate() ?: Date()
-        SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
+    val dateStr = remember(event.scheduledAt, event.finishedAt) {
+        EventUIAdapter.formatSchedule(event)
     }
     Surface(
         modifier = Modifier.width(200.dp).clickable { onClick() },
@@ -595,7 +594,7 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
             Spacer(Modifier.height(12.dp))
             Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
             Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -609,9 +608,8 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
 
 @Composable
 fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
-    val dateStr = remember(event.scheduledAt) {
-        val date = event.scheduledAt?.toDate() ?: Date()
-        SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
+    val dateStr = remember(event.scheduledAt, event.finishedAt) {
+        EventUIAdapter.formatSchedule(event)
     }
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
