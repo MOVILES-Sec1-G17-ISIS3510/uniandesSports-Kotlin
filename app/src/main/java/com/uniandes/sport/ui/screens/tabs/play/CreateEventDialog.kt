@@ -850,6 +850,11 @@ fun CreateEventDialog(
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = { Text("Where is it?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                             leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            trailingIcon = {
+                                IconButton(onClick = { showLocationPicker = true }) {
+                                    Icon(Icons.Default.Map, contentDescription = "Pick on map", tint = MaterialTheme.colorScheme.primary)
+                                }
+                            },
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(

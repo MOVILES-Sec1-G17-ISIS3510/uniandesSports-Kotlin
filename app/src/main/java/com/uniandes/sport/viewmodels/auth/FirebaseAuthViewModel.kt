@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import java.text.Normalizer
 
 class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
     private val auth: FirebaseAuth = Firebase.auth
@@ -266,6 +267,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                     if (document != null && document.exists()) {
                         val userProfile = document.toObject(User::class.java)
                         if (userProfile != null) {
+                            _email = userProfile.email
+                            _fullName = userProfile.fullName
+                            _program = userProfile.program
+                            _semester = userProfile.semester.toString()
+                            _mainSport = userProfile.mainSport
                             onSuccess(userProfile)
                             return@addOnSuccessListener
                         }
@@ -286,6 +292,53 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
             onSuccess()
         } catch (e: Exception) {
             onFailure(e)
+        }
+    }
+
+    fun updateMainSports(
+        newMainSportsCsv: String,
+        onSuccess: () -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            onFailure(Exception("User is not logged in."))
+            return
+        }
+
+        val normalizedSports = newMainSportsCsv
+            .split(",", ";", "|")
+            .map { normalizeSportId(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(",")
+
+        if (normalizedSports.isBlank()) {
+            onFailure(IllegalArgumentException("Select at least one main sport."))
+            return
+        }
+
+        db.collection("users").document(currentUser.uid)
+            .update("mainSport", normalizedSports)
+            .addOnSuccessListener {
+                _mainSport = normalizedSports
+                onSuccess()
+            }
+            .addOnFailureListener { onFailure(it) }
+    }
+
+    private fun normalizeSportId(value: String): String {
+        val withoutAccents = Normalizer.normalize(value, Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+        val clean = withoutAccents.trim().lowercase()
+
+        return when (clean) {
+            "soccer", "football", "futbol" -> "soccer"
+            "basket", "basketball", "baloncesto" -> "basketball"
+            "tenis", "tennis" -> "tennis"
+            "calistenia", "calisthenics", "calistennics" -> "calisthenics"
+            "running", "correr" -> "running"
+            else -> clean
         }
     }
 }
