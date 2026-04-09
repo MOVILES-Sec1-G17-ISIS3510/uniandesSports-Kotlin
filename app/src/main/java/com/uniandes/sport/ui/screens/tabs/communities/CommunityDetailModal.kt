@@ -224,13 +224,16 @@ fun CommunityDetailModal(
                         navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     title = {
-                        Column {
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
                             Text(community.name, fontWeight = FontWeight.Bold)
                             Text("Community Space", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onDismiss) {
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
                             Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Back to communities")
                         }
                     }
@@ -655,13 +658,16 @@ private fun ChannelRoomScreen(
                     navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 title = {
-                    Column {
+                    Column(modifier = Modifier.padding(top = 4.dp)) {
                         Text("#${channel.name}", fontWeight = FontWeight.Bold)
                         Text("${community.name} Channel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
