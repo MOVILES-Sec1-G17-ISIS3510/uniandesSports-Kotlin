@@ -116,7 +116,7 @@ fun MainScaffold(
                     onExitApp()
                 } else {
                     // Primera pulsación - mostrar toast
-                    Toast.makeText(context, "Presiona de nuevo para salir", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Press again to exit", Toast.LENGTH_SHORT).show()
                     lastBackPressTime = currentTime
                     showBackToast = true
                 }
