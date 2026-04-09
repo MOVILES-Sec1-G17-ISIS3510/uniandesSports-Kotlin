@@ -27,12 +27,19 @@ import kotlinx.coroutines.flow.*
 import com.uniandes.sport.models.*
 import com.uniandes.sport.viewmodels.retos.RetosViewModelInterface
 import com.uniandes.sport.ui.components.FabMenuItem
+import com.uniandes.sport.ui.components.OptionSelectionRow
+import com.uniandes.sport.ui.components.SportIconPicker
 import com.uniandes.sport.ui.navigation.Screen
 import androidx.compose.ui.window.Dialog
 import java.util.*
 import java.text.SimpleDateFormat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * RETOS FEATURE IMPLEMENTATION SUMMARY:
@@ -378,11 +385,19 @@ fun SearchChallengesDialog(
                 )
 
                 // Word Search
+                val isSearchValid = searchQuery.all { it.isLetterOrDigit() || it.isWhitespace() }
                 CustomOutlinedTextField(
                     value = searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
+                    onValueChange = { 
+                        if (it.length <= 50) { // Limit search query to 50 chars
+                            viewModel.setSearchQuery(it) 
+                        }
+                    },
                     label = "Search by words...",
-                    icon = Icons.Default.TextFields
+                    icon = Icons.Default.TextFields,
+                    isError = !isSearchValid,
+                    errorText = if (!isSearchValid) "Keep it simple! Use letters/digits only." else null,
+                    maxChar = 50
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -521,13 +536,34 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Individual") }
     var difficulty by remember { mutableStateOf("Beginner") }
-    var sport by remember { mutableStateOf("Soccer") }
+    var selectedSport by remember { mutableStateOf("soccer") }
+    var customSportName by remember { mutableStateOf("") }
     var goalLabel by remember { mutableStateOf("") }
-    var startDateStr by remember { mutableStateOf("20/03/2026") }
-    var endDateStr by remember { mutableStateOf("30/03/2026") }
+    
+    val today = Calendar.getInstance()
+    val tomorrow = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+
+    var startDate by remember { mutableStateOf(today.time) }
+    var endDate by remember { mutableStateOf(tomorrow.time) }
+    
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
 
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val scrollState = androidx.compose.foundation.rememberScrollState()
+
+    // Validation patterns
+    val emojiRegex = "[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+".toRegex()
+    val alphanumericRegex = "^[a-zA-Z0-9\\s]*$".toRegex()
+
+    val isNameValid = name.isNotBlank() && !emojiRegex.containsMatchIn(name) && alphanumericRegex.matches(name)
+    val isGoalValid = goalLabel.isNotBlank() && !emojiRegex.containsMatchIn(goalLabel)
+    val isDateValid = endDate.after(startDate)
+    
+    val finalSport = if (selectedSport == "other") customSportName else selectedSport
+    val isSportValid = finalSport.isNotBlank() && (selectedSport != "other" || !emojiRegex.containsMatchIn(customSportName))
+
+    val canCreate = isNameValid && isGoalValid && isDateValid && isSportValid
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -579,69 +615,104 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
 
                 CustomOutlinedTextField(
                     value = name, 
-                    onValueChange = { name = it }, 
+                    onValueChange = { if (it.length <= 30) name = it }, 
                     label = "Challenge Name",
-                    icon = Icons.Default.Edit
+                    icon = Icons.Default.Edit,
+                    maxChar = 30,
+                    isError = name.isNotEmpty() && !isNameValid,
+                    errorText = if (name.isNotEmpty() && !isNameValid) "Letters and digits only, no emojis." else null
                 )
                 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
+                // TYPE SELECTION
+                Text("CHALLENGE TYPE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionSelectionRow(
+                    options = listOf("Individual", "Team"),
+                    selectedOption = type,
+                    onOptionSelected = { type = it }
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // DIFFICULTY SELECTION
+                Text("DIFFICULTY LEVEL", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                OptionSelectionRow(
+                    options = listOf("Beginner", "Intermediate", "Advanced"),
+                    selectedOption = difficulty,
+                    onOptionSelected = { difficulty = it }
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // SPORT SELECTION
+                Text("SELECT SPORT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                SportIconPicker(
+                    selectedSport = selectedSport,
+                    onSportSelected = { selectedSport = it }
+                )
+                
+                if (selectedSport == "other") {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CustomOutlinedTextField(
+                        value = customSportName,
+                        onValueChange = { if (it.length <= 20) customSportName = it },
+                        label = "Custom Sport Name",
+                        icon = Icons.Default.Add,
+                        maxChar = 20,
+                        isError = customSportName.isNotEmpty() && !isSportValid,
+                        errorText = if (customSportName.isNotEmpty() && !isSportValid) "Invalid input." else null
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                Text("GOAL & TARGET", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                CustomOutlinedTextField(
+                    value = goalLabel, 
+                    onValueChange = { if (it.length <= 50) goalLabel = it }, 
+                    label = "Meta (ej: 50 flexiones, 10km)",
+                    icon = Icons.Default.Flag,
+                    maxChar = 50,
+                    isError = goalLabel.isNotEmpty() && !isGoalValid,
+                    errorText = if (goalLabel.isNotEmpty() && !isGoalValid) "Describe your goal without emojis." else null
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                Text("TIMELINE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        CustomOutlinedTextField(
-                            value = type, 
-                            onValueChange = { type = it }, 
-                            label = "Type",
-                            icon = Icons.Default.Groups
+                        ReadOnlyTextField(
+                            value = dateFormat.format(startDate),
+                            label = "From (Start)",
+                            icon = Icons.Default.CalendarToday,
+                            onClick = { showStartDatePicker = true }
                         )
                     }
                     Box(modifier = Modifier.weight(1f)) {
-                        CustomOutlinedTextField(
-                            value = difficulty, 
-                            onValueChange = { difficulty = it }, 
-                            label = "Difficulty",
-                            icon = Icons.Default.Speed
+                        ReadOnlyTextField(
+                            value = dateFormat.format(endDate),
+                            label = "Until (End)",
+                            icon = Icons.Default.Event,
+                            onClick = { showEndDatePicker = true },
+                            isError = !isDateValid && endDate != tomorrow.time
                         )
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                CustomOutlinedTextField(
-                    value = sport, 
-                    onValueChange = { sport = it }, 
-                    label = "Sport",
-                    icon = Icons.Default.Sports
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                CustomOutlinedTextField(
-                    value = goalLabel, 
-                    onValueChange = { goalLabel = it }, 
-                    label = "Goal (e.g. 100 km)",
-                    icon = Icons.Default.Flag
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        CustomOutlinedTextField(
-                            value = startDateStr, 
-                            onValueChange = { startDateStr = it }, 
-                            label = "Start",
-                            icon = Icons.Default.CalendarToday
-                        )
-                    }
-                    Box(modifier = Modifier.weight(1f)) {
-                        CustomOutlinedTextField(
-                            value = endDateStr, 
-                            onValueChange = { endDateStr = it }, 
-                            label = "End",
-                            icon = Icons.Default.Event
-                        )
-                    }
+                if (!isDateValid && endDate != tomorrow.time) {
+                    Text(
+                        "End date must be after start date.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp).align(Alignment.Start)
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -660,20 +731,15 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
                     Button(
                         onClick = {
                             val creator: RetoCreator = if (type.lowercase() == "team") TeamRetoCreator() else IndividualRetoCreator()
-                            try {
-                                val start = dateFormat.parse(startDateStr) ?: Date()
-                                val end = dateFormat.parse(endDateStr) ?: Date()
-                                val newReto = creator.createReto(name, sport, difficulty, goalLabel, currentUserId, type, start, end)
-                                onCreate(newReto)
-                            } catch (e: Exception) {
-                                val newReto = creator.createReto(name, sport, difficulty, goalLabel, currentUserId, type, Date(), Date())
-                                onCreate(newReto)
-                            }
+                            val newReto = creator.createReto(name, finalSport, difficulty, goalLabel, currentUserId, type, startDate, endDate)
+                            onCreate(newReto)
                         },
+                        enabled = canCreate,
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            disabledContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)
                         )
                     ) { 
                         Text("Create Reto", fontWeight = FontWeight.ExtraBold) 
@@ -682,7 +748,106 @@ fun NewChallengeDialog(onDismiss: () -> Unit, onCreate: (Reto) -> Unit, currentU
             }
         }
     }
+
+    // Material 3 Native Date Pickers
+    if (showStartDatePicker) {
+        val todayStart = Calendar.getInstance().run {
+            val year = get(Calendar.YEAR)
+            val month = get(Calendar.MONTH)
+            val day = get(Calendar.DAY_OF_MONTH)
+            Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(year, month, day, 0, 0, 0)
+            }.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startDate.time,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis >= todayStart
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { startDate = Date(it) }
+                    showStartDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) { Text("CANCEL") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showEndDatePicker) {
+        val todayStart = Calendar.getInstance().run {
+            val year = get(Calendar.YEAR)
+            val month = get(Calendar.MONTH)
+            val day = get(Calendar.DAY_OF_MONTH)
+            Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(year, month, day, 0, 0, 0)
+            }.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = endDate.time,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis >= todayStart
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { endDate = Date(it) }
+                    showEndDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) { Text("CANCEL") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
+
+@Composable
+fun ReadOnlyTextField(
+    value: String,
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    isError: Boolean = false
+) {
+    Box(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { },
+            label = { Text(label, fontSize = 12.sp) },
+            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = true,
+            enabled = false,
+            isError = isError,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                disabledBorderColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledLeadingIconColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                disabledLabelColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
+    }
+}
+
 
 @Composable
 fun LeaveChallengeDialog(
@@ -799,22 +964,49 @@ fun CustomOutlinedTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    maxChar: Int? = null,
+    isError: Boolean = false,
+    errorText: String? = null
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label, fontSize = 13.sp) },
-        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
-        ),
-        singleLine = true
-    )
+    Column {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label, fontSize = 13.sp) },
+            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            isError = isError,
+            singleLine = true,
+            trailingIcon = {
+                if (maxChar != null) {
+                    Text(
+                        text = "${value.length}/$maxChar",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                errorLeadingIconColor = MaterialTheme.colorScheme.error,
+                errorBorderColor = MaterialTheme.colorScheme.error
+            )
+        )
+        if (isError && errorText != null) {
+            Text(
+                text = errorText,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+            )
+        }
+    }
 }
+
 

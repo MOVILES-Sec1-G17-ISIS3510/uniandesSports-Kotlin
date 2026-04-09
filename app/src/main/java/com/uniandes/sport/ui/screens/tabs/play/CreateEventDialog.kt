@@ -54,6 +54,9 @@ import com.uniandes.sport.patterns.event.PhoneCalendarEvent
 import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.*
+import com.uniandes.sport.ui.components.OptionSelectionRow
+import com.uniandes.sport.ui.components.SportIconPicker
+import com.uniandes.sport.ui.components.getSportAccentColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -172,7 +175,7 @@ fun CreateEventDialog(
         is24Hour = false
     )
     
-    var isSkillLevelExpanded by remember { mutableStateOf(false) }
+    
     val skillLevels = listOf("Open (any level)", "Beginner", "Amateur", "Advanced", "Professional")
     
     var showExitConfirmation by remember { mutableStateOf(false) }
@@ -475,61 +478,10 @@ fun CreateEventDialog(
                 // Sport Selector
                 FormLabel("SELECT SPORT")
                 Spacer(modifier = Modifier.height(8.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp)
-                ) {
-                    val sports = listOf(
-                        Triple("soccer", Icons.Default.SportsSoccer, Color(0xFF2ECC71)),
-                        Triple("basketball", Icons.Default.SportsBasketball, Color(0xFFE67E22)),
-                        Triple("tennis", Icons.Default.SportsTennis, Color(0xFFF1C40F)),
-                        Triple("calisthenics", Icons.Default.FitnessCenter, Color(0xFF9B59B6)),
-                        Triple("running", Icons.Default.DirectionsRun, Color(0xFFE74C3C)),
-                        Triple("other", Icons.Default.Add, Color(0xFF95A5A6))
-                    )
-                    
-                    items(sports.size) { index ->
-                        val (id, icon, color) = sports[index]
-                        val isSelected = selectedSport == id
-                        
-                        val scale by animateFloatAsState(if (isSelected) 1.15f else 1f)
-                        val containerColor by animateColorAsState(if (isSelected) color else color.copy(alpha = 0.15f))
-                        val iconColor by animateColorAsState(if (isSelected) Color.White else color)
-                        val borderColor by animateColorAsState(if (isSelected) color else Color.Transparent)
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clickable { selectedSport = id }
-                                .padding(vertical = 8.dp)
-                                .graphicsLayer(scaleX = scale, scaleY = scale)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(56.dp),
-                                shape = CircleShape,
-                                color = containerColor,
-                                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, borderColor) else null,
-                                shadowElevation = if (isSelected) 8.dp else 0.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        icon, 
-                                        contentDescription = id, 
-                                        tint = iconColor, 
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (id == "other") "Other" else id.replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (isSelected) color else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
+                SportIconPicker(
+                    selectedSport = selectedSport,
+                    onSportSelected = { selectedSport = it }
+                )
                 
                 if (selectedSport == "other") {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -700,91 +652,54 @@ fun CreateEventDialog(
                 }
                 
                 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
-                    Column(modifier = Modifier.weight(1.8f)) {
-                        FormLabel("Skill Level")
-                        ExposedDropdownMenuBox(
-                            expanded = isSkillLevelExpanded,
-                            onExpandedChange = { isSkillLevelExpanded = !isSkillLevelExpanded }
+                // Skill Level
+                FormLabel("Skill Level")
+                OptionSelectionRow(
+                    options = skillLevels,
+                    selectedOption = skillLevel,
+                    onOptionSelected = { skillLevel = it }
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Max Players
+                FormLabel("Max Players")
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    color = Color.Transparent,
+                    modifier = Modifier.width(160.dp).height(56.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(
+                            onClick = { 
+                                val current = maxParticipants.toIntOrNull() ?: 10
+                                if (current > 1) maxParticipants = (current - 1).toString()
+                            },
+                            modifier = Modifier.size(36.dp)
                         ) {
-                            OutlinedTextField(
-                                value = skillLevel,
-                                onValueChange = { },
-                                modifier = Modifier.fillMaxWidth().height(56.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                                readOnly = true,
-                                trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    focusedTextColor = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                            ExposedDropdownMenu(
-                                expanded = isSkillLevelExpanded,
-                                onDismissRequest = { isSkillLevelExpanded = false },
-                                modifier = Modifier.background(MaterialTheme.colorScheme.surface).width(IntrinsicSize.Max)
-                            ) {
-                                skillLevels.forEach { level ->
-                                    DropdownMenuItem(
-                                        text = { 
-                                            Text(
-                                                text = level,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            ) 
-                                        },
-                                        onClick = {
-                                            skillLevel = level
-                                            isSkillLevelExpanded = false
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                }
-                            }
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
-                    }
-                    Column(modifier = Modifier.weight(1.2f)) {
-                        FormLabel("Max Players")
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            color = Color.Transparent,
-                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        
+                        Text(
+                            text = maxParticipants,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        IconButton(
+                            onClick = { 
+                                val current = maxParticipants.toIntOrNull() ?: 10
+                                if (current < 99) maxParticipants = (current + 1).toString()
+                            },
+                            modifier = Modifier.size(36.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                IconButton(
-                                    onClick = { 
-                                        val current = maxParticipants.toIntOrNull() ?: 10
-                                        if (current > 1) maxParticipants = (current - 1).toString()
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                }
-                                
-                                Text(
-                                    text = maxParticipants,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                
-                                IconButton(
-                                    onClick = { 
-                                        val current = maxParticipants.toIntOrNull() ?: 10
-                                        if (current < 99) maxParticipants = (current + 1).toString()
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                }
-                            }
+                            Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -1055,6 +970,7 @@ fun CreateEventDialog(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(24.dp))
                 
                 Button(
                     onClick = {
@@ -1602,10 +1518,10 @@ private fun LocationPickerDialog(
 @Composable
 fun FormLabel(text: String) {
     Text(
-        text = text,
+        text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp)
     )
 }
