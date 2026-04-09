@@ -23,14 +23,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.Reto
+import com.uniandes.sport.models.RunSession
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel
 import com.uniandes.sport.viewmodels.play.FirestorePlayViewModel
 import com.uniandes.sport.viewmodels.booking.BookClassViewModel
+import com.uniandes.sport.viewmodels.running.FirestoreRunningViewModel
 import com.uniandes.sport.ui.components.getSportAccentColor
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
@@ -52,9 +57,20 @@ fun HomeScreen(
     retosViewModel: FirestoreRetosViewModel = viewModel(),
     playViewModel: FirestorePlayViewModel = viewModel(),
     bookingViewModel: BookClassViewModel = viewModel(),
-    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel()
+    stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
+    runningViewModel: FirestoreRunningViewModel = viewModel()
 ) {
-    val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
+    var currentUserId by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
+    
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { auth ->
+            currentUserId = auth.currentUser?.uid ?: ""
+        }
+        FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose {
+            FirebaseAuth.getInstance().removeAuthStateListener(listener)
+        }
+    }
     var userName by remember { mutableStateOf("User") }
     
     val allEvents by playViewModel.events.collectAsState()
@@ -63,6 +79,10 @@ fun HomeScreen(
     val activeRetos by retosViewModel.activeChallenges.collectAsState()
     val allRetos by retosViewModel.retos.collectAsState()
     val userBookings by bookingViewModel.userBookings.collectAsState()
+    val pastRuns by runningViewModel.pastRuns.collectAsState()
+    
+    val lastRun = pastRuns.firstOrNull()
+    val lastCoachFeedback = lastRun?.aiFeedback ?: "Start your first run to get personalized tips from your AI Coach!"
     
     // ViewModels Loading States
     val playLoading by playViewModel.isLoading.collectAsState()
@@ -97,6 +117,7 @@ fun HomeScreen(
             playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
             bookingViewModel.fetchUserBookings(currentUserId)
+            runningViewModel.fetchPastRuns()
         }
     )
 
@@ -119,20 +140,26 @@ fun HomeScreen(
     }
 
     // Sessions count
-    val sessionsCount = remember(upcomingMatches) {
+    val sessionsCount = remember(upcomingMatches, pastRuns) {
         val now = Calendar.getInstance()
         val startOfMonth = now.apply { 
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
         }.timeInMillis
         
-        upcomingMatches.count { match ->
+        val matchSessions = upcomingMatches.count { match ->
             (match.scheduledAt?.toDate()?.time ?: 0L) >= startOfMonth
         }
+        val runSessions = pastRuns.count { run ->
+            run.timestamp >= startOfMonth
+        }
+        matchSessions + runSessions
     }
 
     // Holistic Streak Calculation
-    val streakDays = remember(finishedEvents, upcomingMatches, joinedIds, userBookings, activeRetos) {
+    val streakDays = remember(finishedEvents, upcomingMatches, joinedIds, userBookings, activeRetos, pastRuns) {
         val activityDates = mutableSetOf<String>()
         fun addDate(date: Date?) {
             date?.let {
@@ -144,6 +171,7 @@ fun HomeScreen(
         (finishedEvents.filter { joinedIds.contains(it.id) } + upcomingMatches).forEach { addDate(it.scheduledAt?.toDate()) }
         userBookings.forEach { addDate(it.createdAt.toDate()) }
         activeRetos.forEach { addDate(it.startDate?.toDate()) }
+        pastRuns.forEach { addDate(Date(it.timestamp)) }
         if (activityDates.isEmpty()) return@remember 0
         var streak = 0
         val today = Calendar.getInstance()
@@ -169,7 +197,9 @@ fun HomeScreen(
         streak
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isBlank()) return@LaunchedEffect
+        
         authViewModel.getUser(
             onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
             onFailure = { /* Fail silent */ }
@@ -185,58 +215,78 @@ fun HomeScreen(
         } else {
             stepViewModel.startTracking()
         }
+        
+        runningViewModel.fetchPastRuns()
     }
+
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+    val isSmallScreen = screenWidth < 410
+    
+    val horizontalPadding = if (isSmallScreen) 16.dp else 20.dp
+    val headerFontSize = if (isSmallScreen) 20.sp else 22.sp
+    val sectionSpacing = if (isSmallScreen) 20.dp else 24.dp
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(bottom = 100.dp, start = 20.dp, end = 20.dp, top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            contentPadding = PaddingValues(bottom = 100.dp, start = horizontalPadding, end = horizontalPadding, top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing)
         ) {
             item {
                 Column {
                     Text(
-                        text = "WELCOME, ${userName.uppercase()}",
+                        text = "${getDynamicGreeting()}, ${userName.uppercase()}",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontFamily = ArchivoFamily,
+                            fontSize = headerFontSize,
                             letterSpacing = 0.5.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     )
-                    Text(
-                        text = "YOUR SPORTS DASHBOARD",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        letterSpacing = 1.sp
-                    )
                 }
             }
 
-            // Stats
+            // Coach Insight Widget
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
-                    StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
-                    
-                    val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
-                    StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
-                }
+                CoachInsightCard(feedback = lastCoachFeedback)
             }
 
-            // Actions - Centered
+            // Stats - Adaptive Grid
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather logic */ }
-                        HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") }
-                        HomeActionChip(Icons.Default.History, "History") { onNavigate("history") }
+                val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
+                val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
+
+                if (isSmallScreen) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.fillMaxWidth())
+                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
+                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
                     }
                 }
             }
+
+            // Actions - Centered & Responsive
+            item {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    contentPadding = PaddingValues(horizontal = if (isSmallScreen) 4.dp else 0.dp)
+                ) {
+                    item { HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather */ } }
+                    item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
+                    item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
+                }
+            }
+
+            // Daily Step Challenge
 
             // Daily Step Challenge
             item {
@@ -293,6 +343,21 @@ fun HomeScreen(
                             HomeChallengeCard(title = reto.title, daysRemaining = calculateDaysRemaining(reto.endDate), progress = userProgress, participants = reto.participantsCount.toInt())
                         }
                     }
+                }
+            }
+
+            item {
+                SectionHeader(title = "Recent Activity", onViewAll = { onNavigate("history") })
+                lastRun?.let { run ->
+                    RecentRunWidget(run = run, onClick = { onNavigate("history") })
+                } ?: run {
+                    EmptyStateWideCard(
+                        title = "No recent runs",
+                        description = "Start your running journey today!",
+                        icon = Icons.Default.DirectionsRun,
+                        actionLabel = "Start Run",
+                        onClick = { onNavigate("live_run") }
+                    )
                 }
             }
 
@@ -398,7 +463,14 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(sportColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                 Icon(imageVector = when(event.sport.lowercase()) {
@@ -432,7 +504,14 @@ fun RecommendedItemCard(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.width(200.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.width(200.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Surface(color = sportColor.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
                 Text(event.sport.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = sportColor)
@@ -458,7 +537,14 @@ fun UpcomingMatchItem(event: Event) {
         val date = event.scheduledAt?.toDate() ?: Date()
         SimpleDateFormat("EEE, hh:mm a", Locale.getDefault()).format(date)
     }
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha=0.5f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.primary)

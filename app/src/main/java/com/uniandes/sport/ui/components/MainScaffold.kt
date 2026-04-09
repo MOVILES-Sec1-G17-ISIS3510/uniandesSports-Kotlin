@@ -215,7 +215,7 @@ fun TopAppBarDynamic(
     }
     
     val subtitle = when (currentRoute) {
-        Screen.Home.route -> "WELCOME BACK, ATHLETE"
+        Screen.Home.route -> "EXCEED YOUR LIMITS"
         Screen.Challenges.route -> "COMPETE AND IMPROVE"
         Screen.Play.route -> "FIND YOUR NEXT MATCH"
         Screen.Comunidades.route -> "YOUR SPORTS NETWORK"

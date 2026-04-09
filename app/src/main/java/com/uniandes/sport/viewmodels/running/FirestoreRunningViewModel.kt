@@ -2,8 +2,10 @@ package com.uniandes.sport.viewmodels.running
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import com.google.firebase.firestore.Query
 import com.uniandes.sport.models.RunSession
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,21 +42,24 @@ class FirestoreRunningViewModel : ViewModel() {
         }
     }
 
-    suspend fun fetchPastRuns() {
+    fun fetchPastRuns() {
         val userId = auth.currentUser?.uid ?: return
-        val collection = db.collection("users").document(userId).collection("runs")
         
-        try {
-            val snapshot = collection
-                .orderBy("timestamp", Query.Direction.DESCENDING)
-                .get()
-                .await()
+        viewModelScope.launch {
+            val collection = db.collection("users").document(userId).collection("runs")
             
-            val runs = snapshot.documents.mapNotNull { it.toObject(RunSession::class.java) }
-            _pastRuns.value = runs
-            Log.d("FirestoreRunning", "Fetched ${runs.size} past runs.")
-        } catch (e: Exception) {
-            Log.e("FirestoreRunning", "Error fetching past runs", e)
+            try {
+                val snapshot = collection
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .get()
+                    .await()
+                
+                val runs = snapshot.documents.mapNotNull { it.toObject(RunSession::class.java) }
+                _pastRuns.value = runs
+                Log.d("FirestoreRunning", "Fetched ${runs.size} past runs.")
+            } catch (e: Exception) {
+                Log.e("FirestoreRunning", "Error fetching past runs", e)
+            }
         }
     }
 }
