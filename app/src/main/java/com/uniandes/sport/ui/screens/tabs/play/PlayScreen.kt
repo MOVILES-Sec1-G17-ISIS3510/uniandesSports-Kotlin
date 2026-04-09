@@ -3,6 +3,7 @@ package com.uniandes.sport.ui.screens.tabs.play
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,8 +36,13 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import com.uniandes.sport.patterns.event.EventUIAdapter
 import com.uniandes.sport.patterns.event.EventUIModel
+import com.uniandes.sport.patterns.event.OpenMatchRanker
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
+import com.uniandes.sport.ui.components.SmartMatchCard
+import com.uniandes.sport.ui.components.rememberCurrentLocationState
+import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
+import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
 import androidx.compose.animation.core.animateFloatAsState
@@ -62,6 +68,7 @@ fun PlayScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val selectedSports by viewModel.selectedSports.collectAsState()
     val joinedEventIds by viewModel.joinedEventIds.collectAsState()
+    val authViewModel: FirebaseAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     
     val firestoreVM: com.uniandes.sport.viewmodels.retos.FirestoreRetosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val aiViewModel: com.uniandes.sport.viewmodels.retos.AiReviewViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -100,11 +107,37 @@ fun PlayScreen(
     val joinedEvents = remember(events, joinedEventIds) {
         events.filter { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
+    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
+        finishedEvents.filter { joinedEventIds.contains(it.id) }
+    }
+    val historyEvents = remember(joinedEvents, joinedFinishedEvents) {
+        (joinedEvents + joinedFinishedEvents).distinctBy { it.id }
+    }
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
-    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
-        finishedEvents.filter { joinedEventIds.contains(it.id) }
+    val currentLocation by rememberCurrentLocationState()
+    val phoneCalendarEvents by rememberPhoneCalendarEventsState()
+    val preferredSports = remember(authViewModel.mainSport) {
+        OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
+    }
+
+    LaunchedEffect(Unit) {
+        authViewModel.getUser(
+            onSuccess = { user -> authViewModel.mainSport = user.mainSport },
+            onFailure = { }
+        )
+    }
+
+    val rankedOpenEvents = remember(otherEvents, joinedEvents, historyEvents, preferredSports, currentLocation, phoneCalendarEvents) {
+        OpenMatchRanker.rank(
+            openEvents = otherEvents,
+            joinedEvents = joinedEvents,
+            historyEvents = historyEvents,
+            preferredSports = preferredSports,
+            phoneCalendarEvents = phoneCalendarEvents,
+            currentLocation = currentLocation
+        )
     }
 
     val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
@@ -124,6 +157,10 @@ fun PlayScreen(
         refreshing = isPullRefreshing,
         onRefresh = {
             isPullRefreshing = true
+            authViewModel.getUser(
+                onSuccess = { user -> authViewModel.mainSport = user.mainSport },
+                onFailure = { }
+            )
             viewModel.refreshEvents()
         }
     )
@@ -258,6 +295,8 @@ fun PlayScreen(
         )
     }
 
+    val featuredRecommendation = rankedOpenEvents.firstOrNull()
+
     val editingEventLocal = editingEvent
     if (editingEventLocal != null) {
         CreateEventDialog(
@@ -365,7 +404,7 @@ fun PlayScreen(
                         ActionCard(
                             modifier = Modifier.weight(1f),
                             title = "Find Match",
-                            subtitle = "${otherEvents.size} open matches",
+                            subtitle = "${rankedOpenEvents.size} ranked open matches",
                             icon = Icons.Default.Search,
                             color = MaterialTheme.colorScheme.secondary,
                             onClick = { activeModal = PlayModalType.SEARCH }
@@ -381,6 +420,14 @@ fun PlayScreen(
                             onClick = { activeModal = PlayModalType.HISTORY }
                         )
                     }
+                }
+
+                if (featuredRecommendation != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SmartMatchCard(
+                        recommendation = featuredRecommendation,
+                        onClick = { onEventSelected(featuredRecommendation.event) }
+                    )
                 }
             }
         }
@@ -434,12 +481,14 @@ fun PlayScreen(
                         EmptyState(Icons.Default.SearchOff, "No matches found", "Try changing the sport filter above.")
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            otherEvents.forEach { event ->
+                            rankedOpenEvents.forEachIndexed { index, rankedEvent ->
                                 CompactEventCard(
-                                    uiModel = EventUIAdapter.toUIModel(event),
+                                    uiModel = EventUIAdapter.toUIModel(rankedEvent.event),
+                                    badgeText = "#${index + 1}",
+                                    rankedEvent = rankedEvent,
                                     onClick = { 
                                         activeModal = null
-                                        onEventSelected(event) 
+                                        onEventSelected(rankedEvent.event) 
                                     }
                                 )
                             }
@@ -1337,9 +1386,11 @@ private fun CompactEventCard(
     modifier: Modifier = Modifier,
     uiModel: com.uniandes.sport.patterns.event.EventUIModel,
     badgeText: String? = null,
+    rankedEvent: com.uniandes.sport.patterns.event.RankedOpenMatch? = null,
     onClick: () -> Unit
 ) {
     val event = uiModel.rawEvent
+    var showScoreBreakdown by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
@@ -1351,7 +1402,28 @@ private fun CompactEventCard(
             com.uniandes.sport.ui.components.SportIconBox(sport = event.sport, size = 42.dp)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(event.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(event.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                    if (rankedEvent != null) {
+                        Surface(
+                            modifier = Modifier.combinedClickable(
+                                onClick = onClick,
+                                onLongClick = { showScoreBreakdown = true }
+                            ),
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text(String.format(Locale.getDefault(), "%.1f", rankedEvent.score), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
                 Text(
                     text = "${uiModel.formattedDate} • ${uiModel.participantsFraction}", 
                     style = MaterialTheme.typography.labelSmall, 
@@ -1369,6 +1441,36 @@ private fun CompactEventCard(
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant)
         }
+    }
+
+    if (showScoreBreakdown && rankedEvent != null) {
+        AlertDialog(
+            onDismissRequest = { showScoreBreakdown = false },
+            title = { Text("Score breakdown") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rankedEvent.contributions.forEach { contribution ->
+                        val prefix = if (contribution.points >= 0) "+" else ""
+                        Text(
+                            text = "$prefix${String.format(Locale.getDefault(), "%.1f", contribution.points)}  ${contribution.label}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (contribution.points >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Total: ${String.format(Locale.getDefault(), "%.1f", rankedEvent.score)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showScoreBreakdown = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 

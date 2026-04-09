@@ -33,22 +33,7 @@ object EventUIAdapter {
         
         memoryCache[cacheKey]?.let { return it }
 
-        val dateFormateada = event.scheduledAt?.toDate()?.let { date ->
-            // Si es hoy, muestra "Hoy hh:mm a". Si no, muestra la fecha normal
-            val calToday = Calendar.getInstance()
-            val calEvent = Calendar.getInstance().apply { time = date }
-            
-            val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-            val fullFormat = SimpleDateFormat("dd MMM h:mm a", Locale.getDefault())
-            
-            if (calToday.get(Calendar.YEAR) == calEvent.get(Calendar.YEAR) &&
-                calToday.get(Calendar.DAY_OF_YEAR) == calEvent.get(Calendar.DAY_OF_YEAR)
-            ) {
-                "Hoy ${timeFormat.format(date)}"
-            } else {
-                fullFormat.format(date)
-            }
-        } ?: "Sin fecha"
+        val dateFormateada = formatSchedule(event)
 
         val count = event.membersCount.toInt()
         val max = event.maxParticipants
@@ -62,5 +47,29 @@ object EventUIAdapter {
         
         memoryCache[cacheKey] = newModel
         return newModel
+    }
+
+    fun formatSchedule(event: Event): String {
+        val startDate = event.scheduledAt?.toDate() ?: return "Sin fecha"
+        val endDate = event.finishedAt?.toDate()
+        val calToday = Calendar.getInstance()
+        val calStart = Calendar.getInstance().apply { time = startDate }
+        val startFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
+        val baseLabel = if (
+            calToday.get(Calendar.YEAR) == calStart.get(Calendar.YEAR) &&
+            calToday.get(Calendar.DAY_OF_YEAR) == calStart.get(Calendar.DAY_OF_YEAR)
+        ) {
+            "Hoy ${startFormat.format(startDate)}"
+        } else {
+            SimpleDateFormat("dd MMM h:mm a", Locale.getDefault()).format(startDate)
+        }
+
+        if (endDate == null || !endDate.after(startDate)) {
+            return baseLabel
+        }
+
+        val endFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+        return "$baseLabel - ${endFormat.format(endDate)}"
     }
 }

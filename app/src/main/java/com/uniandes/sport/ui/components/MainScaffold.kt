@@ -200,74 +200,24 @@ fun TopAppBarDynamic(
 ) {
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    val title = when (currentRoute) {
-        Screen.Home.route -> "USPORTS"
-        Screen.Challenges.route -> "Challenges"
-        Screen.Play.route -> "Play"
-        Screen.Comunidades.route -> "Communities"
-        Screen.Profesores.route -> "Coaches"
-        Screen.Torneos.route -> "Tournaments"
-        Screen.Clima.route -> "Weather"
-        Screen.Strava.route -> "Strava"
-        Screen.Historial.route -> "History"
-        Screen.Perfil.route -> "Profile"
-        else -> ""
-    }
-    
-    val subtitle = when (currentRoute) {
-        Screen.Home.route -> "EXCEED YOUR LIMITS"
-        Screen.Challenges.route -> "COMPETE AND IMPROVE"
-        Screen.Play.route -> "FIND YOUR NEXT MATCH"
-        Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
-        Screen.Profesores.route -> "LEARN FROM EXPERTS"
-        Screen.Torneos.route -> "COMPETITIVE EVENTS"
-        Screen.Clima.route -> "TRAIN SMARTER"
-        Screen.Strava.route -> "PERFORMANCE INSIGHTS"
-        Screen.Historial.route -> "RECENT ACTIVITY"
-        Screen.Perfil.route -> "ACCOUNT SETTINGS"
-        else -> ""
+    val themeIcon = when (themeMode) {
+        ThemeMode.LIGHT -> Icons.Default.LightMode
+        ThemeMode.DARK -> Icons.Default.DarkMode
+        ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+        ThemeMode.AUTO -> Icons.Default.BrightnessAuto
     }
 
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        title = {
-            Column {
-                if (subtitle.isNotEmpty()) {
-                    Text(
-                        text = subtitle, 
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp, 
-                            letterSpacing = 2.sp, 
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = ArchivoFamily // Explicitly use Archivo
-                        ), 
-                        color = MaterialTheme.colorScheme.secondary // Teal
-                    )
-                }
-                Text(
-                    text = title, 
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Black,
-                        fontFamily = ArchivoFamily // Explicitly use Archivo
-                    )
-                )
-            }
-        },
-        actions = {
-            if (currentRoute == Screen.Home.route) {
+    if (currentRoute == Screen.Home.route) {
+        CenterAlignedTopAppBar(
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            navigationIcon = {
                 Box {
                     IconButton(onClick = { showThemeMenu = true }) {
-                        val themeIcon = when (themeMode) {
-                            ThemeMode.LIGHT -> Icons.Default.LightMode
-                            ThemeMode.DARK -> Icons.Default.DarkMode
-                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
-                            ThemeMode.AUTO -> Icons.Default.BrightnessAuto
-                        }
                         Icon(themeIcon, contentDescription = "Theme options")
                     }
                     DropdownMenu(
@@ -296,22 +246,91 @@ fun TopAppBarDynamic(
                         )
                     }
                 }
-                IconButton(onClick = { /* TODO: Open app settings screen */ }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+            },
+            title = {
+                Text(
+                    text = "USports",
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Black,
+                        fontFamily = ArchivoFamily
+                    )
+                )
+            },
+            actions = {
+                IconButton(onClick = onProfileClick) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
                 }
             }
-            
-            // Removed in-appbar search for Challenges to use the new dedicated Search Modal
-            if (currentRoute == Screen.Challenges.route) {
-                IconButton(onClick = onHistoryClick) {
-                    Icon(Icons.Default.EventNote, contentDescription = "History")
-                }
-            }
-            IconButton(onClick = onProfileClick) {
-                Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
-            }
+        )
+    } else {
+        val title = when (currentRoute) {
+            Screen.Challenges.route -> "Challenges"
+            Screen.Play.route -> "Play"
+            Screen.Comunidades.route -> "Communities"
+            Screen.Profesores.route -> "Coaches"
+            Screen.Torneos.route -> "Tournaments"
+            Screen.Clima.route -> "Weather"
+            Screen.Strava.route -> "Strava"
+            Screen.Historial.route -> "History"
+            Screen.Perfil.route -> "Profile"
+            else -> ""
         }
-    )
+
+        val subtitle = when (currentRoute) {
+            Screen.Challenges.route -> "COMPETE AND IMPROVE"
+            Screen.Play.route -> "FIND YOUR NEXT MATCH"
+            Screen.Comunidades.route -> "YOUR SPORTS NETWORK"
+            Screen.Profesores.route -> "LEARN FROM EXPERTS"
+            Screen.Torneos.route -> "COMPETITIVE EVENTS"
+            Screen.Clima.route -> "TRAIN SMARTER"
+            Screen.Strava.route -> "PERFORMANCE INSIGHTS"
+            Screen.Historial.route -> "RECENT ACTIVITY"
+            Screen.Perfil.route -> "ACCOUNT SETTINGS"
+            else -> ""
+        }
+
+        TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(
+
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            title = {
+                Column {
+                    if (subtitle.isNotEmpty()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = ArchivoFamily
+                            ),
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            fontFamily = ArchivoFamily
+                        )
+                    )
+                }
+            },
+            actions = {
+                if (currentRoute == Screen.Challenges.route) {
+                    IconButton(onClick = onHistoryClick) {
+                        Icon(Icons.Default.EventNote, contentDescription = "History")
+                    }
+                }
+                IconButton(onClick = onProfileClick) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
+                }
+            }
+        )
+    }
 }
 
 @Composable
