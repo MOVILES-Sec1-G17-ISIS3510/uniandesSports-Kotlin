@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.ListenerRegistration
 
 class FirestoreRunningViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
@@ -19,47 +20,63 @@ class FirestoreRunningViewModel : ViewModel() {
     
     private val _pastRuns = MutableStateFlow<List<RunSession>>(emptyList())
     val pastRuns: StateFlow<List<RunSession>> = _pastRuns.asStateFlow()
+    
+    private var activityListener: ListenerRegistration? = null
 
-    suspend fun saveRunSession(session: RunSession): Boolean {
+    suspend fun saveRunSession(session: RunSession): String? {
         val userId = auth.currentUser?.uid
         if (userId == null) {
             Log.e("FirestoreRunning", "Cannot save session: No user logged in!")
-            return false
+            return null
         }
         
         Log.d("FirestoreRunning", "Attempting to save session for user: $userId")
         val collection = db.collection("users").document(userId).collection("runs")
         
         return try {
-            val docRef = collection.document()
-            val sessionWithId = session.copy(id = docRef.id, userId = userId)
-            docRef.set(sessionWithId).await()
-            Log.d("FirestoreRunning", "Session saved successfully with ID: ${docRef.id}")
-            true
+            val docId = session.id.takeIf { it.isNotBlank() } ?: collection.document().id
+            val sessionWithId = session.copy(id = docId, userId = userId)
+            collection.document(docId).set(sessionWithId).await()
+            Log.d("FirestoreRunning", "Session saved successfully with ID: $docId")
+            docId
         } catch (e: Exception) {
             Log.e("FirestoreRunning", "Error saving session to Firestore", e)
-            false
+            null
         }
     }
 
     fun fetchPastRuns() {
         val userId = auth.currentUser?.uid ?: return
         
-        viewModelScope.launch {
-            val collection = db.collection("users").document(userId).collection("runs")
+        // Remove existing listener if any
+        activityListener?.remove()
+        
+        val collection = db.collection("users").document(userId).collection("runs")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
             
-            try {
-                val snapshot = collection
-                    .orderBy("timestamp", Query.Direction.DESCENDING)
-                    .get()
-                    .await()
-                
-                val runs = snapshot.documents.mapNotNull { it.toObject(RunSession::class.java) }
+        activityListener = collection.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("FirestoreRunning", "Listen failed.", error)
+                return@addSnapshotListener
+            }
+            
+            if (snapshot != null) {
+                val runs = snapshot.documents.mapNotNull { doc ->
+                    try {
+                        doc.toObject(RunSession::class.java)
+                    } catch (e: Exception) {
+                        Log.e("FirestoreRunning", "Error deserializing run ${doc.id}: ${e.message}")
+                        null
+                    }
+                }
                 _pastRuns.value = runs
-                Log.d("FirestoreRunning", "Fetched ${runs.size} past runs.")
-            } catch (e: Exception) {
-                Log.e("FirestoreRunning", "Error fetching past runs", e)
+                Log.d("FirestoreRunning", "Real-time sync: ${runs.size} runs updated.")
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        activityListener?.remove()
     }
 }
