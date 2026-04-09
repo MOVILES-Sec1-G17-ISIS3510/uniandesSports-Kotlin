@@ -145,15 +145,22 @@ fun HomeScreen(
         allEvents.filter { !joinedIds.contains(it.id) }
             .sortedBy { it.scheduledAt?.seconds ?: Long.MAX_VALUE }
     }
+    val joinedFinishedEvents = remember(finishedEvents, joinedIds) {
+        finishedEvents.filter { joinedIds.contains(it.id) }
+    }
+    val historyEvents = remember(upcomingMatches, joinedFinishedEvents) {
+        (upcomingMatches + joinedFinishedEvents).distinctBy { it.id }
+    }
     val currentLocation by rememberCurrentLocationState()
     val phoneCalendarEvents by rememberPhoneCalendarEventsState()
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
     }
-    val rankedAvailableEvents = remember(availableEvents, upcomingMatches, preferredSports, currentLocation, phoneCalendarEvents) {
+    val rankedAvailableEvents = remember(availableEvents, upcomingMatches, historyEvents, preferredSports, currentLocation, phoneCalendarEvents) {
         OpenMatchRanker.rank(
             openEvents = availableEvents,
             joinedEvents = upcomingMatches,
+            historyEvents = historyEvents,
             preferredSports = preferredSports,
             phoneCalendarEvents = phoneCalendarEvents,
             currentLocation = currentLocation

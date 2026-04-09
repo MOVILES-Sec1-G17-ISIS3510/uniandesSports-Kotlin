@@ -106,6 +106,12 @@ fun PlayScreen(
     val joinedEvents = remember(events, joinedEventIds) {
         events.filter { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
+    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
+        finishedEvents.filter { joinedEventIds.contains(it.id) }
+    }
+    val historyEvents = remember(joinedEvents, joinedFinishedEvents) {
+        (joinedEvents + joinedFinishedEvents).distinctBy { it.id }
+    }
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
@@ -114,17 +120,15 @@ fun PlayScreen(
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
     }
-    val rankedOpenEvents = remember(otherEvents, joinedEvents, preferredSports, currentLocation, phoneCalendarEvents) {
+    val rankedOpenEvents = remember(otherEvents, joinedEvents, historyEvents, preferredSports, currentLocation, phoneCalendarEvents) {
         OpenMatchRanker.rank(
             openEvents = otherEvents,
             joinedEvents = joinedEvents,
+            historyEvents = historyEvents,
             preferredSports = preferredSports,
             phoneCalendarEvents = phoneCalendarEvents,
             currentLocation = currentLocation
         )
-    }
-    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
-        finishedEvents.filter { joinedEventIds.contains(it.id) }
     }
 
     val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->

@@ -34,6 +34,7 @@ object OpenMatchRanker {
     fun rank(
         openEvents: List<Event>,
         joinedEvents: List<Event>,
+        historyEvents: List<Event> = joinedEvents,
         preferredSports: Set<String>,
         phoneCalendarEvents: List<PhoneCalendarEvent> = emptyList(),
         currentLocation: Location? = null,
@@ -41,11 +42,34 @@ object OpenMatchRanker {
     ): List<RankedOpenMatch> {
         val now = Date(nowMillis)
         val currentWeekJoinedEvents = joinedEvents.filter { it.isInCurrentWeek(nowMillis) }
-        val primarySport = preferredSports.firstOrNull()?.lowercase() ?: currentWeekJoinedEvents
+        val history = historyEvents.filter { it.scheduledAt != null }
+        val primarySport = preferredSports.firstOrNull()?.lowercase() ?: history
             .groupingBy { it.sport.lowercase() }
             .eachCount()
             .maxByOrNull { it.value }
             ?.key
+        val dayPreferenceCounts = history
+            .mapNotNull { it.scheduledAt?.toDate()?.let { date ->
+                Calendar.getInstance().apply { time = date }.get(Calendar.DAY_OF_WEEK)
+            } }
+            .groupingBy { it }
+            .eachCount()
+        val hourBucketPreferenceCounts = history
+            .mapNotNull { it.scheduledAt?.toDate()?.let { date ->
+                val hour = Calendar.getInstance().apply { time = date }.get(Calendar.HOUR_OF_DAY)
+                toHourBucket(hour)
+            } }
+            .groupingBy { it }
+            .eachCount()
+        val preferredHistoryLocation = history
+            .mapNotNull { extractLocation(it.location) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { locations ->
+                Location("history_centroid").apply {
+                    latitude = locations.map { it.latitude }.average()
+                    longitude = locations.map { it.longitude }.average()
+                }
+            }
 
         val nextBusyStartMillis = currentWeekJoinedEvents
             .mapNotNull { it.scheduledAt?.toDate()?.time }
@@ -63,6 +87,9 @@ object OpenMatchRanker {
                     event = event,
                     primarySport = primarySport,
                     currentLocation = currentLocation,
+                    preferredHistoryLocation = preferredHistoryLocation,
+                    dayPreferenceCounts = dayPreferenceCounts,
+                    hourBucketPreferenceCounts = hourBucketPreferenceCounts,
                     nextBusyStartMillis = nextBusyStartMillis,
                     phoneCalendarEvents = phoneCalendarEvents,
                     nowMillis = nowMillis
@@ -84,6 +111,9 @@ object OpenMatchRanker {
         event: Event,
         primarySport: String?,
         currentLocation: Location?,
+        preferredHistoryLocation: Location?,
+        dayPreferenceCounts: Map<Int, Int>,
+        hourBucketPreferenceCounts: Map<Int, Int>,
         nextBusyStartMillis: Long?,
         phoneCalendarEvents: List<PhoneCalendarEvent>,
         nowMillis: Long
@@ -112,6 +142,24 @@ object OpenMatchRanker {
         if (primarySport != null && eventSport == primarySport) {
             score += 4.0
             contributions += ScoreContribution("Your favorite sport", 4.0)
+        }
+
+        val eventCalendar = Calendar.getInstance().apply { timeInMillis = eventStartMillis }
+        val preferredDayCount = dayPreferenceCounts[eventCalendar.get(Calendar.DAY_OF_WEEK)] ?: 0
+        val topDayCount = dayPreferenceCounts.values.maxOrNull() ?: 0
+        if (preferredDayCount > 0 && topDayCount > 0) {
+            val dayScore = 2.0 * (preferredDayCount.toDouble() / topDayCount.toDouble())
+            score += dayScore
+            contributions += ScoreContribution("Matches your usual day", dayScore)
+        }
+
+        val eventHourBucket = toHourBucket(eventCalendar.get(Calendar.HOUR_OF_DAY))
+        val preferredHourCount = hourBucketPreferenceCounts[eventHourBucket] ?: 0
+        val topHourCount = hourBucketPreferenceCounts.values.maxOrNull() ?: 0
+        if (preferredHourCount > 0 && topHourCount > 0) {
+            val hourScore = 2.5 * (preferredHourCount.toDouble() / topHourCount.toDouble())
+            score += hourScore
+            contributions += ScoreContribution("Matches your usual time", hourScore)
         }
 
         val minutesUntilStart = (eventStartMillis - nowMillis) / 60000.0
@@ -169,6 +217,24 @@ object OpenMatchRanker {
             }
         }
 
+        if (preferredHistoryLocation != null && eventLocation != null) {
+            val distanceToHistoryKm = distanceKm(preferredHistoryLocation, eventLocation)
+            when {
+                distanceToHistoryKm <= 1.0 -> {
+                    score += 2.5
+                    contributions += ScoreContribution("Near your usual zone", 2.5)
+                }
+                distanceToHistoryKm <= 3.0 -> {
+                    score += 1.5
+                    contributions += ScoreContribution("Close to your usual zone", 1.5)
+                }
+                distanceToHistoryKm > 8.0 -> {
+                    score -= 1.0
+                    contributions += ScoreContribution("Outside your usual zone", -1.0)
+                }
+            }
+        }
+
         if (nextBusyStartMillis != null) {
             if (eventEndMillis <= nextBusyStartMillis) {
                 score += 4.0
@@ -190,12 +256,9 @@ object OpenMatchRanker {
             contributions += ScoreContribution("Compatible with phone calendar day", 1.0)
         }
 
-        if (event.scheduledAt?.toDate()?.time != null) {
-            val eventCalendar = Calendar.getInstance().apply { time = event.scheduledAt!!.toDate() }
-            if (eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY || eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
-                score += 0.5
-                contributions += ScoreContribution("Weekend flexibility", 0.5)
-            }
+        if (eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY || eventCalendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+            score += 0.5
+            contributions += ScoreContribution("Weekend flexibility", 0.5)
         }
 
         val cappedScore = min(20.0, score)
@@ -277,5 +340,9 @@ object OpenMatchRanker {
 
         val eventTime = scheduledAt?.toDate()?.time ?: return false
         return eventTime in startOfWeek until endOfWeek
+    }
+
+    private fun toHourBucket(hourOfDay: Int): Int {
+        return (hourOfDay / 3).coerceIn(0, 7)
     }
 }
