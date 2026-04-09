@@ -620,6 +620,7 @@ fun BookingHistoryCard(
     booking: com.uniandes.sport.models.BookingRequest,
     allCoaches: List<com.uniandes.sport.models.Profesor> = emptyList()
 ) {
+    val context = LocalContext.current
     val statusColor = when(booking.status.lowercase()) {
         "pending" -> Color(0xFFF59E0B) // Amber
         "accepted" -> Color(0xFF10B981) // Emerald
@@ -726,6 +727,27 @@ fun BookingHistoryCard(
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            if (booking.status.lowercase() == "accepted") {
+                val assignedCoach = allCoaches.find { it.id == booking.targetProfesorId }
+                if (assignedCoach != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val url = "https://wa.me/${assignedCoach.whatsapp.replace(Regex("\\D"), "")}?text=Hi coach ${assignedCoach.nombre}, you accepted my ${booking.sport} request on UniandesSports!"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Icon(Icons.Default.Call, null, Modifier.size(16.dp), tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("WHATSAPP COACH", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White)
+                    }
+                }
             }
         }
     }

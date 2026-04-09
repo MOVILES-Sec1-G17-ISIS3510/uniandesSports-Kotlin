@@ -253,9 +253,59 @@ fun CoachDashboardScreen(
                             }
                             Spacer(Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("${request.studentName} is looking for a coach", fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                val displayName = if (!request.studentName.isNullOrBlank()) request.studentName else "Someone"
+                                Text("$displayName is looking for a coach", fontWeight = FontWeight.Black, fontSize = 15.sp)
                                 Text("Sport: ${request.sport} • Level: ${request.skillLevel}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("Schedule: ${request.schedule}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                
+                                if (request.status.lowercase() == "pending") {
+                                    Spacer(Modifier.height(12.dp))
+                                    var isAccepting by remember { mutableStateOf(false) }
+                                    Button(
+                                        onClick = {
+                                            isAccepting = true
+                                            profesoresViewModel.acceptBookingRequest(
+                                                requestId = request.id,
+                                                professorId = profesor.id,
+                                                professorName = profesor.nombre,
+                                                onSuccess = {
+                                                    isAccepting = false
+                                                    android.widget.Toast.makeText(context, "Request accepted! Reach out to ${request.studentName}.", android.widget.Toast.LENGTH_LONG).show()
+                                                },
+                                                onFailure = {
+                                                    isAccepting = false
+                                                    android.widget.Toast.makeText(context, "Error: ${it.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        enabled = !isAccepting
+                                    ) {
+                                        if (isAccepting) {
+                                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.CheckCircle, null, Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("ACCEPT REQUEST", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                } else {
+                                    Spacer(Modifier.height(8.dp))
+                                    Surface(
+                                        color = Color(0xFF10B981).copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            "YOU ACCEPTED THIS", 
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            color = Color(0xFF10B981),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

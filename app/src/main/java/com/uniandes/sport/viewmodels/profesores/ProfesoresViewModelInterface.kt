@@ -40,4 +40,12 @@ interface ProfesoresViewModelInterface {
         onSuccess: () -> Unit = {},
         onFailure: (Exception) -> Unit = {}
     )
+
+    fun acceptBookingRequest(
+        requestId: String,
+        professorId: String,
+        professorName: String,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    )
 }
