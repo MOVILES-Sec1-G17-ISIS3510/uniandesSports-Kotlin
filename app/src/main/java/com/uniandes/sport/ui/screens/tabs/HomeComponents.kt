@@ -40,6 +40,15 @@ fun StatCard(
     iconColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+    val isNarrow = screenWidth < 360
+    val internalPadding = if (isNarrow) 8.dp else 20.dp
+    val iconBoxSize = if (isNarrow) 24.dp else 32.dp
+    val spacing = if (isNarrow) 2.dp else 12.dp
+
+    val fontSize = if (isNarrow) 15.sp else 24.sp
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
@@ -47,18 +56,18 @@ fun StatCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(internalPadding),
+            verticalArrangement = Arrangement.spacedBy(spacing)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(iconBoxSize)
                         .clip(CircleShape)
                         .background(iconColor.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, null, tint = iconColor, modifier = Modifier.size(16.dp))
+                    Icon(icon, null, tint = iconColor, modifier = Modifier.size(iconBoxSize / 2))
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -66,17 +75,21 @@ fun StatCard(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontSize = if (screenWidth < 360) 8.sp else 10.sp
                     )
                 )
             }
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Black,
+                    fontWeight = if (isNarrow) FontWeight.Bold else FontWeight.Black,
                     fontFamily = ArchivoFamily,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = fontSize
+                ),
+                maxLines = 1,
+                softWrap = false
             )
         }
     }

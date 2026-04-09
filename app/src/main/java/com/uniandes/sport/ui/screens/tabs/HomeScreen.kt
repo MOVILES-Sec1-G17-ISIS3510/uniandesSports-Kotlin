@@ -60,7 +60,17 @@ fun HomeScreen(
     stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
     runningViewModel: FirestoreRunningViewModel = viewModel()
 ) {
-    val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
+    var currentUserId by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
+    
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { auth ->
+            currentUserId = auth.currentUser?.uid ?: ""
+        }
+        FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose {
+            FirebaseAuth.getInstance().removeAuthStateListener(listener)
+        }
+    }
     var userName by remember { mutableStateOf("User") }
     
     val allEvents by playViewModel.events.collectAsState()
@@ -130,20 +140,26 @@ fun HomeScreen(
     }
 
     // Sessions count
-    val sessionsCount = remember(upcomingMatches) {
+    val sessionsCount = remember(upcomingMatches, pastRuns) {
         val now = Calendar.getInstance()
         val startOfMonth = now.apply { 
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
         }.timeInMillis
         
-        upcomingMatches.count { match ->
+        val matchSessions = upcomingMatches.count { match ->
             (match.scheduledAt?.toDate()?.time ?: 0L) >= startOfMonth
         }
+        val runSessions = pastRuns.count { run ->
+            run.timestamp >= startOfMonth
+        }
+        matchSessions + runSessions
     }
 
     // Holistic Streak Calculation
-    val streakDays = remember(finishedEvents, upcomingMatches, joinedIds, userBookings, activeRetos) {
+    val streakDays = remember(finishedEvents, upcomingMatches, joinedIds, userBookings, activeRetos, pastRuns) {
         val activityDates = mutableSetOf<String>()
         fun addDate(date: Date?) {
             date?.let {
@@ -155,6 +171,7 @@ fun HomeScreen(
         (finishedEvents.filter { joinedIds.contains(it.id) } + upcomingMatches).forEach { addDate(it.scheduledAt?.toDate()) }
         userBookings.forEach { addDate(it.createdAt.toDate()) }
         activeRetos.forEach { addDate(it.startDate?.toDate()) }
+        pastRuns.forEach { addDate(Date(it.timestamp)) }
         if (activityDates.isEmpty()) return@remember 0
         var streak = 0
         val today = Calendar.getInstance()
@@ -180,7 +197,9 @@ fun HomeScreen(
         streak
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isBlank()) return@LaunchedEffect
+        
         authViewModel.getUser(
             onSuccess = { user -> userName = user.fullName.split(" ").firstOrNull() ?: "User" },
             onFailure = { /* Fail silent */ }
@@ -200,13 +219,21 @@ fun HomeScreen(
         runningViewModel.fetchPastRuns()
     }
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+    val isSmallScreen = screenWidth < 410
+    
+    val horizontalPadding = if (isSmallScreen) 16.dp else 20.dp
+    val headerFontSize = if (isSmallScreen) 20.sp else 22.sp
+    val sectionSpacing = if (isSmallScreen) 20.dp else 24.dp
+
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(bottom = 100.dp, start = 20.dp, end = 20.dp, top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            contentPadding = PaddingValues(bottom = 100.dp, start = horizontalPadding, end = horizontalPadding, top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing)
         ) {
             item {
                 Column {
@@ -215,6 +242,7 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black,
                             fontFamily = ArchivoFamily,
+                            fontSize = headerFontSize,
                             letterSpacing = 0.5.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -234,25 +262,34 @@ fun HomeScreen(
                 CoachInsightCard(feedback = lastCoachFeedback)
             }
 
-            // Stats
+            // Stats - Adaptive Grid
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
-                    StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
-                    
-                    val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
-                    StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
+                val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
+                val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
+
+                if (isSmallScreen) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.fillMaxWidth())
+                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
+                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
+                    }
                 }
             }
 
-            // Actions - Centered
+            // Actions - Centered & Responsive
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather logic */ }
-                        HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") }
-                        HomeActionChip(Icons.Default.History, "History") { onNavigate("history") }
-                    }
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    contentPadding = PaddingValues(horizontal = if (isSmallScreen) 4.dp else 0.dp)
+                ) {
+                    item { HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather */ } }
+                    item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
+                    item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
                 }
             }
 
