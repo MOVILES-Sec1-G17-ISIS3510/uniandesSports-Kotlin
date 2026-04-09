@@ -114,45 +114,7 @@ fun PlaceholderContent(
 fun ComunidadesScreen(onNavigate: (String) -> Unit) = SimplePlaceholderScreen("Communities", onNavigate, isStandalone = false)
 
 @Composable
-fun PerfilUsuarioScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val authViewModel: com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    var isLoggingOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
-    SimplePlaceholderScreen("Profile", onNavigate, onNavigateBack, isStandalone = true) {
-        Button(
-            onClick = {
-                isLoggingOut = true
-                authViewModel.logout(
-                    onSuccess = {
-                        val intent = android.content.Intent(context, com.uniandes.sport.MainActivity::class.java).apply {
-                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        }
-                        context.startActivity(intent)
-                    },
-                    onFailure = { e ->
-                        isLoggingOut = false
-                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                )
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.padding(top = 24.dp).fillMaxWidth(0.6f).height(50.dp)
-        ) {
-            if (isLoggingOut) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-            } else {
-                Text("LOGOUT", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
 fun TorneosScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Tournaments", onNavigate, onNavigateBack, isStandalone = true)
-
-@Composable
-fun ClimaScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Weather", onNavigate, onNavigateBack, isStandalone = true)
 
 @Composable
 fun StravaScreen(onNavigate: (String) -> Unit, onNavigateBack: () -> Unit) = SimplePlaceholderScreen("Strava", onNavigate, onNavigateBack, isStandalone = true)

@@ -7,6 +7,7 @@ data class BookingRequest(
     val userId: String = "", // Matches Existing Firebase structure
     val studentName: String = "", 
     val targetProfesorId: String = "", 
+    val targetProfesorName: String = "", // Added for better history tracking
     val sport: String = "",
     val skillLevel: String = "",
     val schedule: String = "", // Matches Existing Firebase structure

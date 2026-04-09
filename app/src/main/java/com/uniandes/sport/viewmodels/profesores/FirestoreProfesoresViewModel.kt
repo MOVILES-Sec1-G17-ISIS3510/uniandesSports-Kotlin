@@ -291,4 +291,28 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
             onFailure(e)
         }
     }
+
+    override fun acceptBookingRequest(
+        requestId: String,
+        professorId: String,
+        professorName: String,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        db.collection("coach_requests").document(requestId)
+            .update(
+                mapOf(
+                    "status" to "accepted",
+                    "targetProfesorId" to professorId,
+                    "targetProfesorName" to professorName
+                )
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { e ->
+                Log.e("FirestoreProfesores", "Error accepting booking request", e)
+                onFailure(e)
+            }
+    }
 }

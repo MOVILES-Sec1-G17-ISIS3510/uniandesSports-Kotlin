@@ -54,25 +54,28 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
                 val openAiResponse = response.body()
                 
                 // Extraer el String JSON de la respuesta de OpeanAI
-                val jsonText = openAiResponse?.choices?.firstOrNull()?.message?.content?.toString() ?: "{}"
-                Log.d("OpenAiStrategy", "Raw JSON string from AI: $jsonText")
+                val rawContent = openAiResponse?.choices?.firstOrNull()?.message?.content?.toString() ?: "{}"
+                val jsonText = extractJsonContent(rawContent) // Sanitizar Markdown si existe
+                
+                Log.d("OpenAiStrategy", "Sanitized JSON: $jsonText")
 
                 // Parsear el JSON
-                val type = object : TypeToken<Map<String, Double>>() {}.type
-                val progressMap: Map<String, Double> = Gson().fromJson(jsonText, type)
-
-                return AiReviewAnalysisResult(
-                    success = true,
-                    progressByChallengeId = progressMap
-                )
+                return try {
+                    val type = object : TypeToken<Map<String, Double>>() {}.type
+                    val progressMap: Map<String, Double> = Gson().fromJson(jsonText, type)
+                    AiReviewAnalysisResult(success = true, progressByChallengeId = progressMap)
+                } catch (e: Exception) {
+                    Log.e("OpenAiStrategy", "JSON Parsing Error: ${e.message} | Raw: $jsonText")
+                    AiReviewAnalysisResult(success = false, errorMessage = "Error en el formato de IA. Intenta de nuevo.")
+                }
             } else {
                 val errorBody = response.errorBody()?.string()
                 Log.e("OpenAiStrategy", "API Error: $errorBody")
-                return AiReviewAnalysisResult(success = false, errorMessage = "Error ${response.code()}: No autorizado o cuota excedida. Revisa tu API Key de OpenAI.")
+                return AiReviewAnalysisResult(success = false, errorMessage = "IA no disponible: Revisa tu cuota o conexión.")
             }
         } catch (e: Exception) {
             Log.e("OpenAiStrategy", "Exception in API", e)
-            return AiReviewAnalysisResult(success = false, errorMessage = e.message)
+            return AiReviewAnalysisResult(success = false, errorMessage = "Error de red al conectar con la IA.")
         }
     }
 
@@ -160,6 +163,14 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
             Log.e("OpenAiStrategy", "Exception in analyzeRunSession", e)
             return "Great workout! Keep at it and you'll see massive gains soon!"
         }
+    }
+
+    private fun extractJsonContent(content: String): String {
+        return content.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
     }
 
     private fun buildPrompt(trackText: String, challenges: List<Reto>): String {

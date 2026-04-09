@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 
 class RunningSessionViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -60,7 +62,7 @@ class RunningSessionViewModel(application: Application) : AndroidViewModel(appli
             stepMgr.stopListening() 
             _isRunning.value = false
 
-            // Start AI Analysis and Save
+            // Start AI Analysis and Save (BULLETPROOF - GlobalScope ensures it finishes even if VM is cleared)
             _isAnalyzing.value = true
             val tempSession = RunSession(
                 distanceKm = finalDistance,
@@ -70,15 +72,35 @@ class RunningSessionViewModel(application: Application) : AndroidViewModel(appli
             )
             _lastSessionSummary.value = tempSession
 
-            viewModelScope.launch {
-                val feedback = aiStrategy.analyzeRunSession(
-                    finalDistance, finalPace, finalElevation, finalCadence
-                ) ?: "Amazing run! You're getting stronger every day."
+            @OptIn(DelicateCoroutinesApi::class)
+            GlobalScope.launch {
+                // PRIMER PASO: Guardar los KM y datos básicos AL INSTANTE
+                val docId = try {
+                    val initialSession = tempSession.copy(aiFeedback = "Analyzing performance...")
+                    firestoreViewModel.saveRunSession(initialSession)
+                } catch (e: Exception) {
+                    android.util.Log.e("RunningVM", "Error in first-stage save", e)
+                    null
+                }
+
+                // SECUNDO PASO: Obtener el feedback de la IA (esto puede tardar)
+                val feedback = try {
+                     aiStrategy.analyzeRunSession(
+                        finalDistance, finalPace, finalElevation, finalCadence
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("RunningVM", "AI feedback failed", e)
+                    null
+                } ?: "Amazing run! Your progress is unstoppable."
                 
-                val finalSession = tempSession.copy(aiFeedback = feedback)
+                // TERCER PASO: Actualizar el documento con el feedback final
+                val finalSession = tempSession.copy(id = docId ?: "", aiFeedback = feedback)
                 _lastSessionSummary.value = finalSession
+
+                if (docId != null) {
+                    firestoreViewModel.saveRunSession(finalSession)
+                }
                 
-                firestoreViewModel.saveRunSession(finalSession)
                 _isAnalyzing.value = false
             }
         }

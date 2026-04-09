@@ -58,8 +58,9 @@ fun HomeScreen(
     playViewModel: FirestorePlayViewModel = viewModel(),
     bookingViewModel: BookClassViewModel = viewModel(),
     stepViewModel: com.uniandes.sport.viewmodels.sensors.StepCounterViewModel = viewModel(),
-    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
-    runningViewModel: FirestoreRunningViewModel = viewModel()
+    runningViewModel: FirestoreRunningViewModel = viewModel(),
+    weatherViewModel: com.uniandes.sport.viewmodels.weather.WeatherViewModel = viewModel(),
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>()
 ) {
     var currentUserId by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
     
@@ -281,7 +282,14 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                     contentPadding = PaddingValues(horizontal = if (isSmallScreen) 4.dp else 0.dp)
                 ) {
-                    item { HomeActionChip(Icons.Default.Cloud, "24°") { /* Weather */ } }
+                    item { 
+                        val weatherState by weatherViewModel.weatherState.collectAsState()
+                        val temp = when (val s = weatherState) {
+                            is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> "${s.data.currentWeather.temperature.toInt()}°"
+                            else -> "--°"
+                        }
+                        HomeActionChip(Icons.Default.Cloud, temp) { onNavigate("weather") } 
+                    }
                     item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
                     item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
                 }

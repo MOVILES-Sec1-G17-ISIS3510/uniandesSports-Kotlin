@@ -70,4 +70,14 @@ class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     ) {
         onSuccess()
     }
+
+    override fun acceptBookingRequest(
+        requestId: String,
+        professorId: String,
+        professorName: String,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        onSuccess()
+    }
 }
