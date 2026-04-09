@@ -157,6 +157,10 @@ fun PlayScreen(
         refreshing = isPullRefreshing,
         onRefresh = {
             isPullRefreshing = true
+            authViewModel.getUser(
+                onSuccess = { user -> authViewModel.mainSport = user.mainSport },
+                onFailure = { }
+            )
             viewModel.refreshEvents()
         }
     )

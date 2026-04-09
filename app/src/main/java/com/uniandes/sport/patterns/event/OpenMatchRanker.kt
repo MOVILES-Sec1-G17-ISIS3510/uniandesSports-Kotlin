@@ -43,6 +43,10 @@ object OpenMatchRanker {
         val now = Date(nowMillis)
         val currentWeekJoinedEvents = joinedEvents.filter { it.isInCurrentWeek(nowMillis) }
         val history = historyEvents.filter { it.scheduledAt != null }
+        val normalizedPreferredSports = preferredSports
+            .map { normalizeSport(it) }
+            .filter { it.isNotBlank() }
+            .toSet()
         val primarySport = preferredSports.firstOrNull()?.lowercase() ?: history
             .groupingBy { it.sport.lowercase() }
             .eachCount()
@@ -86,6 +90,7 @@ object OpenMatchRanker {
                 scoreEvent(
                     event = event,
                     primarySport = primarySport,
+                    preferredSports = normalizedPreferredSports,
                     currentLocation = currentLocation,
                     preferredHistoryLocation = preferredHistoryLocation,
                     dayPreferenceCounts = dayPreferenceCounts,
@@ -110,6 +115,7 @@ object OpenMatchRanker {
     private fun scoreEvent(
         event: Event,
         primarySport: String?,
+        preferredSports: Set<String>,
         currentLocation: Location?,
         preferredHistoryLocation: Location?,
         dayPreferenceCounts: Map<Int, Int>,
@@ -139,9 +145,14 @@ object OpenMatchRanker {
         }
 
         val eventSport = normalizeSport(event.sport)
-        if (primarySport != null && eventSport == primarySport) {
+        if (preferredSports.isNotEmpty() && preferredSports.contains(eventSport)) {
             score += 4.0
-            contributions += ScoreContribution("Your favorite sport", 4.0)
+            contributions += ScoreContribution("One of your favorite sports", 4.0)
+        }
+
+        if (primarySport != null && eventSport == normalizeSport(primarySport)) {
+            score += 1.0
+            contributions += ScoreContribution("Your top sport", 1.0)
         }
 
         val eventCalendar = Calendar.getInstance().apply { timeInMillis = eventStartMillis }
