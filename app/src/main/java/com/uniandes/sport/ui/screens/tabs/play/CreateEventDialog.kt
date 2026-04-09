@@ -3,7 +3,9 @@ package com.uniandes.sport.ui.screens.tabs.play
 import android.Manifest
 import android.location.Geocoder
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import android.content.Intent
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
@@ -45,6 +49,9 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.uniandes.sport.models.Event
+import com.uniandes.sport.patterns.event.PhoneCalendarEvent
+import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -55,6 +62,7 @@ fun CreateEventDialog(
     modality: String,
     onDismiss: () -> Unit,
     initialEvent: com.uniandes.sport.models.Event? = null,
+    myEvents: List<Event> = emptyList(),
     onFinish: (sport: String, title: String, location: String, description: String, date: java.util.Date, endDate: java.util.Date?, skillLevel: String, maxParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf(initialEvent?.title ?: "") }
@@ -79,6 +87,8 @@ fun CreateEventDialog(
     var shouldJoin by remember { mutableStateOf(initialEvent == null) } // Only auto-join for new events
     var isCreatedSuccessfully by remember { mutableStateOf(false) }
     var createdMatchDate by remember { mutableStateOf<Date?>(null) }
+    var isCheckingSchedule by remember { mutableStateOf(false) }
+    var scheduleCheckResult by remember { mutableStateOf<ScheduleCheckResult?>(null) }
     
     // Multi-day / Tournament support
     var isMultiDay by remember { 
@@ -95,6 +105,7 @@ fun CreateEventDialog(
     var showEndDatePicker by remember { mutableStateOf(false) }
     
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     val context = LocalContext.current
 
@@ -110,6 +121,10 @@ fun CreateEventDialog(
             putExtra(CalendarContract.Events.AVAILABILITY, CalendarContract.Events.AVAILABILITY_BUSY)
         }
         context.startActivity(intent)
+    }
+
+    LaunchedEffect(dateString, timeString, finishTimeString, endDateString, isMultiDay) {
+        scheduleCheckResult = null
     }
 
     
@@ -912,15 +927,135 @@ fun CreateEventDialog(
                 } else {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-                
-                val isFormValid = title.isNotBlank() && 
-                                 selectedSport != null && 
-                                 (selectedSport != "other" || customSportName.isNotBlank()) &&
-                                 (!isLocationSpecific || location.isNotBlank()) &&
-                                 dateString.isNotBlank() && 
-                                 timeString.isNotBlank() &&
-                                 (!isMultiDay || endDateString.isNotBlank())
 
+                val isFormValid = title.isNotBlank() &&
+                    selectedSport != null &&
+                    (selectedSport != "other" || customSportName.isNotBlank()) &&
+                    (!isLocationSpecific || location.isNotBlank()) &&
+                    dateString.isNotBlank() &&
+                    timeString.isNotBlank() &&
+                    (!isMultiDay || endDateString.isNotBlank())
+
+                val candidateRange = buildCandidateRange(
+                    dateString = dateString,
+                    timeString = timeString,
+                    finishTimeString = finishTimeString,
+                    endDateString = endDateString,
+                    isMultiDay = isMultiDay
+                )
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.EventAvailable, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Schedule check", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    "Compare your app events and phone calendar before creating.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        val result = scheduleCheckResult
+                        when {
+                            isCheckingSchedule -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Checking your schedule...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+
+                            result == null -> {
+                                Text(
+                                    "Tap the button below to verify overlaps with your events and calendar.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            result.hasConflicts -> {
+                                ConflictSummary(
+                                    appConflicts = result.appConflicts,
+                                    calendarConflicts = result.calendarConflicts
+                                )
+                            }
+
+                            else -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("No overlaps found. You're clear to create.", color = MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                val range = candidateRange
+                                if (range == null) {
+                                    errorMessage = "Please complete the date and time fields first."
+                                    return@Button
+                                }
+
+                                coroutineScope.launch {
+                                    isCheckingSchedule = true
+                                    errorMessage = null
+                                    try {
+                                        val verified = verifyScheduleConflicts(
+                                            context = context,
+                                            myEvents = myEvents,
+                                            candidateStartMillis = range.first,
+                                            candidateEndMillis = range.second,
+                                            excludeEventId = initialEvent?.id
+                                        )
+                                        scheduleCheckResult = verified
+                                        if (verified.hasConflicts) {
+                                            errorMessage = "Schedule overlap detected. Review the conflicts below before creating."
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = e.message ?: "Could not verify the schedule"
+                                    } finally {
+                                        isCheckingSchedule = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                            enabled = !isLoading && isFormValid && !isCheckingSchedule
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (scheduleCheckResult == null) "Verify my schedule" else "Re-check schedule", fontWeight = FontWeight.Bold)
+                        }
+
+                        if (result?.hasConflicts == true) {
+                            Text(
+                                "Fix these overlaps first. The create button stays locked until the schedule is clear.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+                
                 Button(
                     onClick = {
                         val finalLocation = if (isLocationSpecific) location else "Open Location"
@@ -974,12 +1109,16 @@ fun CreateEventDialog(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    enabled = !isLoading && isFormValid
+                    enabled = !isLoading && isFormValid && scheduleCheckResult?.hasConflicts == false && !isCheckingSchedule
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                     } else {
-                        Text(if (initialEvent != null) "Save Changes" else "Create Event", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (initialEvent != null) "Save Changes" else "Create Event",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             } else {
@@ -1061,6 +1200,237 @@ fun CreateEventDialog(
         }
     }
 }
+}
+
+private data class ScheduleConflictItem(
+    val source: String,
+    val title: String,
+    val startMillis: Long,
+    val endMillis: Long
+)
+
+private data class ScheduleCheckResult(
+    val appConflicts: List<ScheduleConflictItem>,
+    val calendarConflicts: List<ScheduleConflictItem>
+) {
+    val hasConflicts: Boolean
+        get() = appConflicts.isNotEmpty() || calendarConflicts.isNotEmpty()
+}
+
+private fun buildCandidateRange(
+    dateString: String,
+    timeString: String,
+    finishTimeString: String,
+    endDateString: String,
+    isMultiDay: Boolean
+): Pair<Long, Long>? {
+    val startMillis = parseDateTime(dateString, timeString) ?: return null
+    val explicitEndMillis = if (finishTimeString.isBlank()) {
+        null
+    } else {
+        val targetDate = if (isMultiDay && endDateString.isNotBlank()) endDateString else dateString
+        parseDateTime(targetDate, finishTimeString)
+    }
+
+    val endMillis = explicitEndMillis ?: (startMillis + 60 * 60 * 1000L)
+    return if (endMillis > startMillis) startMillis to endMillis else null
+}
+
+private fun parseDateTime(dateString: String, timeString: String): Long? {
+    return try {
+        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        sdf.parse("$dateString $timeString")?.time
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private suspend fun verifyScheduleConflicts(
+    context: android.content.Context,
+    myEvents: List<Event>,
+    candidateStartMillis: Long,
+    candidateEndMillis: Long,
+    excludeEventId: String? = null
+): ScheduleCheckResult {
+    val appConflicts = myEvents
+        .filter { it.id != excludeEventId }
+        .mapNotNull { event ->
+            val eventStartMillis = event.scheduledAt?.toDate()?.time ?: return@mapNotNull null
+            val eventEndMillis = event.finishedAt?.toDate()?.time ?: (eventStartMillis + 60 * 60 * 1000L)
+            if (overlaps(candidateStartMillis, candidateEndMillis, eventStartMillis, eventEndMillis)) {
+                ScheduleConflictItem(
+                    source = "My events",
+                    title = event.title.ifBlank { event.sport.ifBlank { "Event" } },
+                    startMillis = eventStartMillis,
+                    endMillis = eventEndMillis
+                )
+            } else {
+                null
+            }
+        }
+
+    val phoneCalendarEvents = loadPhoneCalendarEventsInRange(context, candidateStartMillis, candidateEndMillis)
+    val calendarConflicts = phoneCalendarEvents
+        .mapNotNull { event ->
+            val eventStart = if (event.isAllDay) startOfDay(event.startMillis) else event.startMillis
+            val eventEnd = if (event.isAllDay) endOfDay(event.startMillis) else event.endMillis
+            if (overlaps(candidateStartMillis, candidateEndMillis, eventStart, eventEnd)) {
+                ScheduleConflictItem(
+                    source = "Phone calendar",
+                    title = event.title.ifBlank { "Busy" },
+                    startMillis = eventStart,
+                    endMillis = eventEnd
+                )
+            } else {
+                null
+            }
+        }
+
+    return ScheduleCheckResult(
+        appConflicts = appConflicts.sortedBy { it.startMillis },
+        calendarConflicts = calendarConflicts.sortedBy { it.startMillis }
+    )
+}
+
+private suspend fun loadPhoneCalendarEventsInRange(
+    context: android.content.Context,
+    startMillis: Long,
+    endMillis: Long
+): List<PhoneCalendarEvent> = withContext(Dispatchers.IO) {
+    val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+    ContentUris.appendId(builder, startMillis)
+    ContentUris.appendId(builder, endMillis)
+
+    val projection = arrayOf(
+        CalendarContract.Instances.TITLE,
+        CalendarContract.Instances.BEGIN,
+        CalendarContract.Instances.END,
+        CalendarContract.Instances.ALL_DAY
+    )
+
+    val events = mutableListOf<PhoneCalendarEvent>()
+    context.contentResolver.query(
+        builder.build(),
+        projection,
+        null,
+        null,
+        "${CalendarContract.Instances.BEGIN} ASC"
+    )?.use { cursor ->
+        val titleIdx = cursor.getColumnIndex(CalendarContract.Instances.TITLE)
+        val beginIdx = cursor.getColumnIndex(CalendarContract.Instances.BEGIN)
+        val endIdx = cursor.getColumnIndex(CalendarContract.Instances.END)
+        val allDayIdx = cursor.getColumnIndex(CalendarContract.Instances.ALL_DAY)
+
+        while (cursor.moveToNext()) {
+            val title = if (titleIdx >= 0) cursor.getString(titleIdx) else "Busy"
+            val begin = if (beginIdx >= 0) cursor.getLong(beginIdx) else 0L
+            val end = if (endIdx >= 0) cursor.getLong(endIdx) else begin
+            val isAllDay = allDayIdx >= 0 && cursor.getInt(allDayIdx) == 1
+
+            if (begin > 0L) {
+                events += PhoneCalendarEvent(
+                    title = title.takeIf { !it.isNullOrBlank() } ?: "Busy",
+                    startMillis = begin,
+                    endMillis = end,
+                    isAllDay = isAllDay
+                )
+            }
+        }
+    }
+    events
+}
+
+private fun overlaps(startA: Long, endA: Long, startB: Long, endB: Long): Boolean {
+    return startA < endB && startB < endA
+}
+
+private fun startOfDay(millis: Long): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun endOfDay(millis: Long): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 23)
+        set(Calendar.MINUTE, 59)
+        set(Calendar.SECOND, 59)
+        set(Calendar.MILLISECOND, 999)
+    }.timeInMillis
+}
+
+@Composable
+private fun ConflictSummary(
+    appConflicts: List<ScheduleConflictItem>,
+    calendarConflicts: List<ScheduleConflictItem>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ConflictSection(
+            title = "Your app events",
+            items = appConflicts
+        )
+        ConflictSection(
+            title = "Phone calendar",
+            items = calendarConflicts
+        )
+    }
+}
+
+@Composable
+private fun ConflictSection(
+    title: String,
+    items: List<ScheduleConflictItem>
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            if (items.isEmpty()) {
+                Text("No conflicts found here.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            } else {
+                items.forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                text = "${formatConflictTime(item.startMillis)} - ${formatConflictTime(item.endMillis)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = item.source,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatConflictTime(millis: Long): String {
+    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
 }
 
 @Composable

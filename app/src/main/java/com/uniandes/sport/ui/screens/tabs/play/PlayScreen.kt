@@ -113,6 +113,10 @@ fun PlayScreen(
     val historyEvents = remember(joinedEvents, joinedFinishedEvents) {
         (joinedEvents + joinedFinishedEvents).distinctBy { it.id }
     }
+    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val myAppEvents = remember(events, joinedEventIds, currentUserId) {
+        events.filter { it.createdBy == currentUserId || joinedEventIds.contains(it.id) }
+    }
     val otherEvents = remember(events, joinedEventIds) {
         events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
     }
@@ -271,6 +275,7 @@ fun PlayScreen(
             sport = creationSport,
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
+            myEvents = myAppEvents,
             onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
@@ -304,6 +309,7 @@ fun PlayScreen(
             modality = editingEventLocal.modality,
             initialEvent = editingEventLocal,
             onDismiss = { editingEvent = null },
+            myEvents = myAppEvents,
             onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, _, dialogOnSuccess, dialogOnError ->
                 viewModel.updateEvent(
                     eventId = editingEventLocal.id,
