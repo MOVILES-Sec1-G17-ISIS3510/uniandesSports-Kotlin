@@ -19,6 +19,8 @@ import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -482,6 +484,14 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
     var whatsapp by remember { mutableStateOf("") }
     var especialidad by remember { mutableStateOf("") }
 
+    // Validation States
+    val isPriceValid = precio.isNotEmpty() && precio.all { it.isDigit() }
+    val isExperienceValid = experiencia.isNotEmpty() && experiencia.all { it.isDigit() }
+    val isWhatsAppValid = whatsapp.length == 10 && whatsapp.all { it.isDigit() }
+    val isSpecialtyValid = especialidad.length >= 10
+    
+    val isFormValid = isPriceValid && isExperienceValid && isWhatsAppValid && isSpecialtyValid
+
     val deportes = listOf("Soccer", "Tennis", "Basketball", "Swimming", "Running")
     var expanded by remember { mutableStateOf(false) }
 
@@ -489,21 +499,29 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
         Card(
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp)
         ) {
-            LazyColumn(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item {
-                    Text("BECOME A COACH", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text("BECOME A COACH", fontWeight = FontWeight.Black, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("Fill in your professional details to start coaching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 
                 // Sport Dropdown
                 item {
-                    Text("Sport", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                    Text("Sport Category", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     Box(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { expanded = true }.padding(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .clickable { expanded = true }
+                            .padding(16.dp)
                     ) {
-                        Text(deporte)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(deporte, fontWeight = FontWeight.Medium)
+                            Icon(Icons.Default.KeyboardArrowDown, null)
+                        }
                         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                             deportes.forEach { option ->
                                 DropdownMenuItem(text = { Text(option) }, onClick = { deporte = option; expanded = false })
@@ -514,45 +532,91 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
 
                 // Price
                 item {
-                    Text("Price (e.g. $30/hour)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                    OutlinedTextField(value = precio, onValueChange = { precio = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    Text("Hourly Price (COP)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = precio, 
+                        onValueChange = { if (it.all { char -> char.isDigit() }) precio = it }, 
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. 50000") },
+                        prefix = { Text("$ ") },
+                        isError = precio.isNotEmpty() && !isPriceValid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
 
                 // Experience
                 item {
-                     Text("Experience (e.g. 5 years)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                     OutlinedTextField(value = experiencia, onValueChange = { experiencia = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                     Text("Years of Experience", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                     OutlinedTextField(
+                        value = experiencia, 
+                        onValueChange = { if (it.all { char -> char.isDigit() }) experiencia = it }, 
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. 5") },
+                        suffix = { Text("years") },
+                        isError = experiencia.isNotEmpty() && !isExperienceValid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp)
+                     )
                 }
                 
                 // Specialty
                 item {
-                     Text("Specialty (e.g. Tactics)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                     OutlinedTextField(value = especialidad, onValueChange = { especialidad = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                     Text("Professional Specialty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                     OutlinedTextField(
+                        value = especialidad, 
+                        onValueChange = { especialidad = it }, 
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Describe your main focus...") },
+                        supportingText = { 
+                            if (!isSpecialtyValid && especialidad.isNotEmpty()) {
+                                Text("Min 10 characters needed", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        isError = especialidad.isNotEmpty() && !isSpecialtyValid,
+                        shape = RoundedCornerShape(12.dp)
+                     )
                 }
 
                 // WhatsApp
                 item {
-                    Text("WhatsApp (include country code)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                    OutlinedTextField(value = whatsapp, onValueChange = { whatsapp = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    Text("Used by students to contact you.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top=4.dp))
+                    Text("WhatsApp Contact", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = whatsapp, 
+                        onValueChange = { if (it.length <= 10 && it.all { char -> char.isDigit() }) whatsapp = it }, 
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("3001234567") },
+                        leadingIcon = { Icon(Icons.Default.Call, null, Modifier.size(20.dp)) },
+                        supportingText = {
+                            if (whatsapp.isNotEmpty() && !isWhatsAppValid) {
+                                Text("Exactly 10 digits required", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        isError = whatsapp.isNotEmpty() && !isWhatsAppValid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
 
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
                             onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(54.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("Cancel")
                         }
                         Button(
                             onClick = { onSubmit(deporte, precio, experiencia, whatsapp, especialidad) },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
+                            enabled = isFormValid,
+                            modifier = Modifier.weight(1f).height(54.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
                             Text("Register")
                         }
