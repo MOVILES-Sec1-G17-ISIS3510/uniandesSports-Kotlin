@@ -180,6 +180,10 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onFailure: (exception: Exception) -> Unit
     ) {
         val provider = OAuthProvider.newBuilder("microsoft.com")
+        
+        // This forces the Microsoft login page to ask for the account every time
+        provider.addCustomParameter("prompt", "select_account")
+        
         // Restricting specifically to organizations (optional but common for Uniandes)
         // provider.addCustomParameter("tenant", "organizations")
 
