@@ -85,9 +85,17 @@ fun CoachProfileScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    val url = "https://wa.me/${prof.whatsapp.replace(Regex("\\D"), "")}"
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    context.startActivity(intent)
+                                    val cleanNumber = prof.whatsapp.replace(Regex("\\D"), "")
+                                    // Bug fix #7: guard blank number + missing WhatsApp app
+                                    if (cleanNumber.isBlank()) {
+                                        android.widget.Toast.makeText(context, "No contact number available", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        try {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$cleanNumber")))
+                                        } catch (e: android.content.ActivityNotFoundException) {
+                                            android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 },
                                 modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(16.dp),
