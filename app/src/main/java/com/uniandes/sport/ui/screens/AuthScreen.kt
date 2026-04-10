@@ -410,11 +410,20 @@ fun AuthScreen(
                                     color = colorScheme.primary
                                 )
                             } else {
-                                Text(
-                                    text = "Continue with Google",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp
-                                )
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_google_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = Color.Unspecified
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Continue with Google",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 15.sp
+                                    )
+                                }
                             }
                         }
 
@@ -465,10 +474,10 @@ fun AuthScreen(
                             } else {
                                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.Email,
+                                        painter = painterResource(id = R.drawable.ic_outlook_logo),
                                         contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = Color(0xFF00A4EF) // Microsoft Blue
+                                        modifier = Modifier.size(20.dp),
+                                        tint = Color.Unspecified
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
