@@ -276,11 +276,14 @@ fun HomeScreen(
 
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp
-    val isSmallScreen = screenWidth < 410
     
-    val horizontalPadding = if (isSmallScreen) 16.dp else 20.dp
-    val headerFontSize = if (isSmallScreen) 20.sp else 22.sp
-    val sectionSpacing = if (isSmallScreen) 20.dp else 24.dp
+    // Grarunlar responsiveness tiers
+    val isExtraSmall = screenWidth < 360
+    val isSmall = screenWidth < 420
+    
+    val horizontalPadding = if (isExtraSmall) 12.dp else if (isSmall) 16.dp else 20.dp
+    val headerFontSize = if (isExtraSmall) 18.sp else if (isSmall) 20.sp else 22.sp
+    val sectionSpacing = if (isExtraSmall) 14.dp else if (isSmall) 20.dp else 24.dp
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         LazyColumn(
@@ -318,7 +321,7 @@ fun HomeScreen(
                 val streakLabel = if (masterLoading) "--" else "$streakDays Days"
                 val activityLabel = if (masterLoading) "--" else "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}"
 
-                if (isSmallScreen) {
+                if (isSmall) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         StatCard(label = "Streak", value = streakLabel, icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.fillMaxWidth())
                         StatCard(label = "Activity", value = activityLabel, icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.fillMaxWidth())
@@ -336,7 +339,7 @@ fun HomeScreen(
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                    contentPadding = PaddingValues(horizontal = if (isSmallScreen) 4.dp else 0.dp)
+                    contentPadding = PaddingValues(horizontal = if (isSmall) 4.dp else 0.dp)
                 ) {
                     item { 
                         HomeActionChip(Icons.Default.Cloud, currentTempStr) { onNavigate("weather") } 
@@ -371,16 +374,23 @@ fun HomeScreen(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = if (isExtraSmall) 8.dp else 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text("START RUN", fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(if (isExtraSmall) 24.dp else 28.dp))
+                            Spacer(modifier = Modifier.width(if (isExtraSmall) 8.dp else 16.dp))
+                            Text(
+                                "START RUN", 
+                                fontWeight = FontWeight.Black, 
+                                fontSize = if (isExtraSmall) 16.sp else 20.sp, 
+                                letterSpacing = 1.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(if (isExtraSmall) 20.dp else 24.dp))
                     }
                 }
             }
@@ -389,46 +399,50 @@ fun HomeScreen(
             if (featuredMatch != null) {
                 item {
                     Column {
-                        // Section header with AI badge
+                        // Section header with AI badge (Adaptive)
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "INTELLIGENT MATCH PAIRING",
                                     style = MaterialTheme.typography.titleLarge.copy(
                                         fontWeight = FontWeight.Black,
                                         fontFamily = ArchivoFamily,
-                                        letterSpacing = 0.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                        letterSpacing = if (isExtraSmall) 0.sp else 0.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = if (isExtraSmall) 16.sp else 18.sp
+                                    ),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
                                     "Ranked by sport, schedule & location",
-                                    fontSize = 13.sp,
+                                    fontSize = if (isExtraSmall) 11.sp else 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            Spacer(Modifier.width(8.dp))
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = if (isExtraSmall) 6.dp else 8.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         Icons.Default.AutoAwesome,
                                         contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
+                                        modifier = Modifier.size(if (isExtraSmall) 10.dp else 12.dp),
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         "AI",
-                                        fontSize = 11.sp,
+                                        fontSize = if (isExtraSmall) 9.sp else 11.sp,
                                         fontWeight = FontWeight.Black,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )

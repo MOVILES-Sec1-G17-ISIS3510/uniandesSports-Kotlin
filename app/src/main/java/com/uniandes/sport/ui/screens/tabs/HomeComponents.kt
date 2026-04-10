@@ -42,12 +42,14 @@ fun StatCard(
 ) {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp
+    val isVeryNarrow = screenWidth < 330
     val isNarrow = screenWidth < 360
-    val internalPadding = if (isNarrow) 8.dp else 20.dp
-    val iconBoxSize = if (isNarrow) 24.dp else 32.dp
-    val spacing = if (isNarrow) 2.dp else 12.dp
+    
+    val internalPadding = if (isVeryNarrow) 6.dp else if (isNarrow) 8.dp else 20.dp
+    val iconBoxSize = if (isVeryNarrow) 20.dp else if (isNarrow) 24.dp else 32.dp
+    val spacing = if (isVeryNarrow) 1.dp else if (isNarrow) 2.dp else 12.dp
 
-    val fontSize = if (isNarrow) 15.sp else 24.sp
+    val fontSize = if (isVeryNarrow) 14.sp else if (isNarrow) 15.sp else 24.sp
 
     Surface(
         modifier = modifier,
@@ -78,7 +80,7 @@ fun StatCard(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
                         color = MaterialTheme.colorScheme.tertiary,
-                        fontSize = if (screenWidth < 360) 8.sp else 10.sp
+                        fontSize = if (screenWidth < 330) 7.sp else if (screenWidth < 360) 8.sp else 10.sp
                     )
                 )
             }
@@ -103,6 +105,11 @@ fun HomeActionChip(
     label: String,
     onClick: () -> Unit
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isSmall = configuration.screenWidthDp < 360
+    val hPadding = if (isSmall) 12.dp else 16.dp
+    val vPadding = if (isSmall) 8.dp else 12.dp
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
@@ -110,7 +117,7 @@ fun HomeActionChip(
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = hPadding, vertical = vPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -132,6 +139,12 @@ fun SectionHeader(
     subtitle: String? = null,
     onViewAll: (() -> Unit)? = null
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+    val isExtraSmall = screenWidth < 360
+    
+    val titleFontSize = if (isExtraSmall) 16.sp else 18.sp
+    
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -140,19 +153,27 @@ fun SectionHeader(
         ) {
             Text(
                 text = title.uppercase(),
+                modifier = Modifier.weight(1f, fill = false),
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Black,
                     fontFamily = ArchivoFamily,
-                    letterSpacing = 0.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                    letterSpacing = if (isExtraSmall) 0.sp else 0.5.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = titleFontSize
+                ),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             if (onViewAll != null) {
-                TextButton(onClick = onViewAll) {
+                TextButton(
+                    onClick = onViewAll,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
                     Text(
                         "View all",
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (isExtraSmall) 12.sp else 14.sp
                     )
                     Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(16.dp))
                 }
@@ -161,7 +182,7 @@ fun SectionHeader(
         if (subtitle != null) {
             Text(
                 text = subtitle,
-                fontSize = 14.sp,
+                fontSize = if (isExtraSmall) 12.sp else 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
