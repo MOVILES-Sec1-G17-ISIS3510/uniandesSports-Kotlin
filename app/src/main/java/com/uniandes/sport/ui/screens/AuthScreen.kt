@@ -113,6 +113,12 @@ fun AuthScreen(
                 return@rememberLauncherForActivityResult
             }
 
+            // Pre-populate ViewModel with Google SDK data (guaranteed non-null for Google accounts).
+            // This is the primary fix for empty Name/Email in the Review screen: Firebase
+            // displayName can be null for some account types, but account.displayName is always set.
+            if (account.displayName?.isNotBlank() == true) authViewModel.fullName = account.displayName!!
+            if (account.email?.isNotBlank() == true) authViewModel.email = account.email!!
+
             authViewModel.loginWithGoogleIdToken(
                 idToken = idToken,
                 onSuccess = { _, isNewUser ->
@@ -401,13 +407,29 @@ fun AuthScreen(
                             )
                         }
 
-                        if (isLoginMode) {
-                            Spacer(modifier = Modifier.height(16.dp))
+                        // OAuth buttons — visible in both Login and Sign Up modes.
+                        // If the account is new it'll route to onboarding; if existing, to main tabs.
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colorScheme.outlineVariant)
+                            Text(
+                                text = "  or  ",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colorScheme.outlineVariant)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                                 // Google Button
                                 OutlinedButton(
                                     onClick = {
@@ -421,21 +443,11 @@ fun AuthScreen(
                                         }
 
                                         isGoogleLoading = true
-                                        googleSignInClient.signOut()
-                                            .addOnCompleteListener { task ->
-                                                if (!task.isSuccessful) {
-                                                    isGoogleLoading = false
-                                                    val exception = task.exception
-                                                        ?: Exception("Could not reset Google session.")
-                                                    dialogMessage = exception.message
-                                                        ?: "Could not reset Google session."
-                                                    showDialog = true
-                                                    logViewModel.crash(screenName, exception)
-                                                    return@addOnCompleteListener
-                                                }
-
-                                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
-                                            }
+                                        // signOut is best-effort: reset cached session but always
+                                        // launch the account picker regardless of the result.
+                                        googleSignInClient.signOut().addOnCompleteListener {
+                                            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                        }
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -537,7 +549,6 @@ fun AuthScreen(
                                         }
                                     }
                                 }
-                            }
                         }
                     }
                 }

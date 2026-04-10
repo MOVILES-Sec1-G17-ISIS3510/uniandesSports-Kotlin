@@ -104,16 +104,18 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                                     email = userProfile.email
                                     fullName = userProfile.fullName
                                     val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
+                                    password = "" // Bug fix: clear password from memory after login
                                     onSuccess(userProfile, isNew)
                                     return@addOnSuccessListener
                                 }
                             }
                             // Fallback if no extended profile exists -> They need onboarding
+                            password = ""
                             onSuccess(User(uid = uid, email = email), true)
                         }
-                        .addOnFailureListener {
-                            // If we can't check, play it safe and assume they might need onboarding
-                            onSuccess(User(uid = uid, email = email), true)
+                        .addOnFailureListener { e ->
+                            // Bug fix: report error instead of silently sending user to onboarding
+                            onFailure(e)
                         }
                 } else {
                     onFailure(task.exception ?: Exception("Unknown exception."))
@@ -141,10 +143,26 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                 }
 
                 val uid = firebaseUser.uid
+
+                // Resolve name/email from multiple sources (priority order):
+                // 1. Firebase Auth profile  2. Raw OAuth payload  3. Pre-set ViewModel state (from UI layer)
+                val profile = task.result?.additionalUserInfo?.profile
+                val resolvedEmail = firebaseUser.email?.takeIf { it.isNotBlank() }
+                    ?: (profile?.get("email") as? String)?.takeIf { it.isNotBlank() }
+                    ?: email
+                val resolvedName = firebaseUser.displayName?.takeIf { it.isNotBlank() }
+                    ?: (profile?.get("name") as? String)?.takeIf { it.isNotBlank() }
+                    ?: fullName
+
+                // Set ViewModel state IMMEDIATELY — before the async Firestore check
+                // so the Review screen always shows name & email regardless of timing.
+                email = resolvedEmail
+                fullName = resolvedName
+
                 val fallbackUser = User(
                     uid = uid,
-                    email = firebaseUser.email ?: "",
-                    fullName = firebaseUser.displayName ?: "",
+                    email = resolvedEmail,
+                    fullName = resolvedName,
                     photoUrl = firebaseUser.photoUrl?.toString()
                 )
 
@@ -153,23 +171,20 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                         if (document != null && document.exists()) {
                             val userProfile = document.toObject(User::class.java)
                             if (userProfile != null) {
-                                email = userProfile.email
-                                fullName = userProfile.fullName
+                                // Prefer Firestore values but keep OAuth values if Firestore has blanks
+                                email = userProfile.email.takeIf { it.isNotBlank() } ?: resolvedEmail
+                                fullName = userProfile.fullName.takeIf { it.isNotBlank() } ?: resolvedName
                                 val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
                                 onSuccess(userProfile, isNew)
                                 return@addOnSuccessListener
                             }
                         }
-
-                        // For new Google users, we set the skeleton data in the ViewModel state
-                        // but DO NOT create the Firestore document yet.
-                        email = fallbackUser.email
-                        fullName = fallbackUser.fullName
-                        
+                        // New user — state already set above
                         onSuccess(fallbackUser, true)
                     }
-                    .addOnFailureListener {
-                        onSuccess(fallbackUser, true)
+                    .addOnFailureListener { e ->
+                        // Bug fix: report the error rather than silently sending user to onboarding
+                        onFailure(e)
                     }
             }
     }
@@ -180,11 +195,9 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
         onFailure: (exception: Exception) -> Unit
     ) {
         val provider = OAuthProvider.newBuilder("microsoft.com")
-        
-        // This forces the Microsoft login page to ask for the account every time
+        // Forces the Microsoft account picker every time
         provider.addCustomParameter("prompt", "select_account")
-        
-        // Restricting specifically to organizations (optional but common for Uniandes)
+        // Uncomment to restrict to organizational accounts only:
         // provider.addCustomParameter("tenant", "organizations")
 
         auth.startActivityForSignInWithProvider(activity, provider.build())
@@ -196,10 +209,31 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                 }
 
                 val uid = firebaseUser.uid
+
+                // Microsoft OAuth profile often has richer data than Firebase Auth fields.
+                // Try multiple sources to guarantee name/email are always populated.
+                val profile = authResult.additionalUserInfo?.profile
+                val resolvedEmail = firebaseUser.email?.takeIf { it.isNotBlank() }
+                    ?: (profile?.get("mail") as? String)?.takeIf { it.isNotBlank() }
+                    ?: (profile?.get("userPrincipalName") as? String)?.takeIf { it.isNotBlank() }
+                    ?: ""
+                val resolvedName = firebaseUser.displayName?.takeIf { it.isNotBlank() }
+                    ?: (profile?.get("displayName") as? String)?.takeIf { it.isNotBlank() }
+                    ?: buildString {
+                        val given = profile?.get("givenName") as? String ?: ""
+                        val surname = profile?.get("surname") as? String ?: ""
+                        append("$given $surname".trim())
+                    }.takeIf { it.isNotBlank() }
+                    ?: ""
+
+                // Set ViewModel state IMMEDIATELY — before the async Firestore check
+                email = resolvedEmail
+                fullName = resolvedName
+
                 val fallbackUser = User(
                     uid = uid,
-                    email = firebaseUser.email ?: "",
-                    fullName = firebaseUser.displayName ?: "",
+                    email = resolvedEmail,
+                    fullName = resolvedName,
                     photoUrl = firebaseUser.photoUrl?.toString()
                 )
 
@@ -208,19 +242,19 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
                         if (document != null && document.exists()) {
                             val userProfile = document.toObject(User::class.java)
                             if (userProfile != null) {
-                                email = userProfile.email
-                                fullName = userProfile.fullName
+                                email = userProfile.email.takeIf { it.isNotBlank() } ?: resolvedEmail
+                                fullName = userProfile.fullName.takeIf { it.isNotBlank() } ?: resolvedName
                                 val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
                                 onSuccess(userProfile, isNew)
                                 return@addOnSuccessListener
                             }
                         }
-                        email = fallbackUser.email
-                        fullName = fallbackUser.fullName
+                        // New user — state already set above
                         onSuccess(fallbackUser, true)
                     }
-                    .addOnFailureListener {
-                        onSuccess(fallbackUser, true)
+                    .addOnFailureListener { e ->
+                        // Bug fix: report the error rather than silently sending user to onboarding
+                        onFailure(e)
                     }
             }
             .addOnFailureListener { e ->

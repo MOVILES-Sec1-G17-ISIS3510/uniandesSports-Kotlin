@@ -768,6 +768,7 @@ private fun ProgramSearchField(
                         TextButton(
                             onClick = {
                                 onValueChange(program)
+                                selectedFromSuggestions = true  // Bug fix: lock field and show clear button
                                 expanded = false
                             },
                             modifier = Modifier
