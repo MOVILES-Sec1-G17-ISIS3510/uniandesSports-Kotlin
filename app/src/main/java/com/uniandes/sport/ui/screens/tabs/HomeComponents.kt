@@ -252,10 +252,11 @@ fun HomeFabItem(label: String, icon: ImageVector, onClick: () -> Unit) {
     val isDark = MaterialTheme.colorScheme.surface != Color.White
     val backgroundColor = if (isDark) Color.Black else MaterialTheme.colorScheme.surface
 
+    // Bug fix #8: removed .clickable from Row — FAB already handles onClick.
+    // Having both fired the action twice on every tap.
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End,
-        modifier = Modifier.clickable { onClick() }
+        horizontalArrangement = Arrangement.End
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -636,9 +637,5 @@ fun getDynamicGreeting(weatherCode: Int? = null): String {
     return "$timeGreeting$suffix"
 }
 
-private fun androidx.compose.ui.graphics.Color.toArgb(): Int {
-    return (alpha * 255.0f + 0.5f).toInt() shl 24 or
-           (red * 255.0f + 0.5f).toInt() shl 16 or
-           (green * 255.0f + 0.5f).toInt() shl 8 or
-           (blue * 255.0f + 0.5f).toInt()
-}
+// Bug fix #9: removed dead private toArgb() — it was never called in this file.
+// HomeScreen.kt owns the one actually in use.
