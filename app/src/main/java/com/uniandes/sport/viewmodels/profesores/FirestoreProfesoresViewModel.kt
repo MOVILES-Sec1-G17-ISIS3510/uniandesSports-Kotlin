@@ -204,49 +204,62 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        val reviewRef = db.collection("profesores").document(profesorId)
-            .collection("reviews").document()
-            
-        val reviewToSave = review.copy(id = reviewRef.id)
+        val reviewsCollection = db.collection("profesores").document(profesorId).collection("reviews")
 
-        db.runTransaction { transaction ->
-            // 1. Read current prof to update ratings (Reads must come BEFORE writes)
-            val profRef = db.collection("profesores").document(profesorId)
-            val profSnapshot = transaction.get(profRef)
-            
-            val currentTotal = profSnapshot.getLong("totalReviews") ?: 0
-            val currentRating = profSnapshot.getDouble("rating") ?: 0.0
-            
-            // Calculate new rating average
-            val newTotal = currentTotal + 1
-            val newRating = ((currentRating * currentTotal) + reviewToSave.rating) / newTotal
-            
-            // 2. Add review to subcollection (Write)
-            transaction.set(reviewRef, reviewToSave)
-            
-            // 3. Update prof document (Write)
-            transaction.update(profRef, "totalReviews", newTotal)
-            transaction.update(profRef, "rating", newRating)
-        }.addOnSuccessListener {
-            val currentList = _profesores.value.toMutableList()
-            val idx = currentList.indexOfFirst { it.id == profesorId }
-            if (idx != -1) {
-                // Calculate again to avoid another DB read just for UI, using the new values
-                val p = currentList[idx]
-                val currentTotal = p.totalReviews
-                val currentRating = p.rating
-                val updatedTotal = currentTotal + 1
-                val updatedRating = ((currentRating * currentTotal) + reviewToSave.rating) / updatedTotal
-                
-                currentList[idx] = p.copy(totalReviews = updatedTotal, rating = updatedRating)
-                _profesores.value = currentList
-                cachedProfesores = currentList
+        // Bug fix #3: prevent the same student from reviewing the same coach twice
+        reviewsCollection.whereEqualTo("estudiante", review.estudiante).limit(1).get()
+            .addOnSuccessListener { existing ->
+                if (!existing.isEmpty) {
+                    onFailure(Exception("You have already submitted a review for this coach."))
+                    return@addOnSuccessListener
+                }
+
+                val reviewRef = reviewsCollection.document()
+                // Bug fix #2: clamp to valid range so corrupted values can't skew averages
+                val reviewToSave = review.copy(id = reviewRef.id, rating = review.rating.coerceIn(1, 5))
+
+                db.runTransaction { transaction ->
+                    // 1. Read current prof to update ratings (Reads must come BEFORE writes)
+                    val profRef = db.collection("profesores").document(profesorId)
+                    val profSnapshot = transaction.get(profRef)
+
+                    val currentTotal = profSnapshot.getLong("totalReviews") ?: 0
+                    val currentRating = profSnapshot.getDouble("rating") ?: 0.0
+
+                    // Calculate new rating average
+                    val newTotal = currentTotal + 1
+                    val newRating = ((currentRating * currentTotal) + reviewToSave.rating) / newTotal
+
+                    // 2. Add review to subcollection (Write)
+                    transaction.set(reviewRef, reviewToSave)
+
+                    // 3. Update prof document (Write)
+                    transaction.update(profRef, "totalReviews", newTotal)
+                    transaction.update(profRef, "rating", newRating)
+                }.addOnSuccessListener {
+                    val currentList = _profesores.value.toMutableList()
+                    val idx = currentList.indexOfFirst { it.id == profesorId }
+                    if (idx != -1) {
+                        val p = currentList[idx]
+                        val currentTotal = p.totalReviews
+                        val currentRating = p.rating
+                        val updatedTotal = currentTotal + 1
+                        val updatedRating = ((currentRating * currentTotal) + reviewToSave.rating) / updatedTotal
+
+                        currentList[idx] = p.copy(totalReviews = updatedTotal, rating = updatedRating)
+                        _profesores.value = currentList
+                        cachedProfesores = currentList
+                    }
+                    onSuccess()
+                }.addOnFailureListener { e ->
+                    Log.e("FirestoreProfesores", "Error adding review", e)
+                    onFailure(e)
+                }
             }
-            onSuccess()
-        }.addOnFailureListener { e ->
-            Log.e("FirestoreProfesores", "Error adding review", e)
-            onFailure(e)
-        }
+            .addOnFailureListener { e ->
+                Log.e("FirestoreProfesores", "Error checking for duplicate review", e)
+                onFailure(e)
+            }
     }
 
     override fun syncReviewsCount(

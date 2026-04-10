@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -57,7 +58,7 @@ private fun googleErrorMessage(statusCode: Int): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AuthScreen(
     authViewModel: AuthViewModelInterface,
@@ -112,6 +113,12 @@ fun AuthScreen(
                 return@rememberLauncherForActivityResult
             }
 
+            // Pre-populate ViewModel with Google SDK data (guaranteed non-null for Google accounts).
+            // This is the primary fix for empty Name/Email in the Review screen: Firebase
+            // displayName can be null for some account types, but account.displayName is always set.
+            if (account.displayName?.isNotBlank() == true) authViewModel.fullName = account.displayName!!
+            if (account.email?.isNotBlank() == true) authViewModel.email = account.email!!
+
             authViewModel.loginWithGoogleIdToken(
                 idToken = idToken,
                 onSuccess = { _, isNewUser ->
@@ -161,128 +168,195 @@ fun AuthScreen(
         )
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
             .statusBarsPadding()
+            .imePadding()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        val screenHeight = maxHeight
+        // Aggressive compression to eliminate the "mini-scroll" bug
+        val isCramped = screenHeight < 640.dp
+        val logoSize = if (isCramped) 60.dp else 90.dp
+        val topSpacer = if (isCramped) 12.dp else 24.dp
+        val headerSpacer = if (isCramped) 4.dp else 12.dp
+        val formPadding = if (isCramped) 8.dp else 24.dp
+
+        // Native hack: Disable Android system scrollbars for this view
+        val view = LocalView.current
+        DisposableEffect(view) {
+            view.isVerticalScrollBarEnabled = false
+            onDispose { }
+        }
+
+        val scrollState = rememberScrollState()
+        val isScrollEnabled = scrollState.maxValue > 5 // Ignore tiny rounding errors
+
+        CompositionLocalProvider(
+            androidx.compose.foundation.LocalOverscrollConfiguration provides null
         ) {
-            
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // App Header/Logo Area
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(108.dp)
-                    .shadow(elevation = 16.dp, shape = RoundedCornerShape(28.dp), clip = false)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(colorScheme.primary)
-                    .border(1.dp, colorScheme.onPrimary.copy(alpha = 0.2f), RoundedCornerShape(28.dp)),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(scrollState, enabled = isScrollEnabled),
+                verticalArrangement = if (isCramped) Arrangement.Top else Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Image(
-                    painter = painterResource(id = R.mipmap.usports_logo),
-                    contentDescription = "App Logo",
-                    contentScale = ContentScale.Crop,
+
+                Spacer(modifier = Modifier.height(topSpacer))
+
+                // App Header/Logo Area
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = 1.18f
-                            scaleY = 1.18f
-                        }
-                )
-            }
-            
-            Text(
-                text = "USports",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Light,
-                color = colorScheme.onBackground,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-            
-            Text(
-                text = if (isLoginMode) "Welcome back!" else "Join UniandesSports",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                color = colorScheme.onBackground
-            )
-            
-            Text(
-                text = if (isLoginMode) "Sign in to continue" else "Create your account now",
-                fontSize = 14.sp,
-                color = colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
-            )
-
-            // Main Card Container for the Form
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .size(logoSize)
+                        .shadow(elevation = 16.dp, shape = RoundedCornerShape(28.dp), clip = false)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(colorScheme.primary)
+                        .border(
+                            1.dp,
+                            colorScheme.onPrimary.copy(alpha = 0.2f),
+                            RoundedCornerShape(28.dp)
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (!isLoginMode) {
+                    Image(
+                        painter = painterResource(id = R.mipmap.usports_logo),
+                        contentDescription = "App Logo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = 1.18f
+                                scaleY = 1.18f
+                            }
+                    )
+                }
+
+                Text(
+                    text = "USports",
+                    fontSize = if (isCramped) 24.sp else 28.sp,
+                    fontWeight = FontWeight.Light,
+                    color = colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(headerSpacer))
+
+                Text(
+                    text = if (isLoginMode) "Welcome back!" else "Join UniandesSports",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = colorScheme.onBackground
+                )
+
+                Text(
+                    text = if (isLoginMode) "Sign in to continue" else "Create your account now",
+                    fontSize = 14.sp,
+                    color = colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = formPadding)
+                )
+
+                // Main Card Container for the Form
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (!isLoginMode) {
+                            CustomOutlinedTextField(
+                                value = authViewModel.fullName,
+                                onValueChange = { authViewModel.fullName = it },
+                                label = "Full Name",
+                                icon = Icons.Default.Person
+                            )
+                        }
+
                         CustomOutlinedTextField(
-                            value = authViewModel.fullName,
-                            onValueChange = { authViewModel.fullName = it },
-                            label = "Full Name",
-                            icon = Icons.Default.Person
+                            value = authViewModel.email,
+                            onValueChange = { authViewModel.email = it },
+                            label = "Email Address",
+                            icon = Icons.Default.Email,
+                            keyboardType = KeyboardType.Email
                         )
-                    }
 
-                    CustomOutlinedTextField(
-                        value = authViewModel.email,
-                        onValueChange = { authViewModel.email = it },
-                        label = "Email Address",
-                        icon = Icons.Default.Email,
-                        keyboardType = KeyboardType.Email
-                    )
+                        CustomOutlinedTextField(
+                            value = authViewModel.password,
+                            onValueChange = { authViewModel.password = it },
+                            label = "Password",
+                            icon = Icons.Default.Lock,
+                            keyboardType = KeyboardType.Password,
+                            isPassword = true,
+                            passwordVisible = passwordVisible,
+                            onPasswordVisibilityChange = { passwordVisible = !passwordVisible }
+                        )
 
-                    CustomOutlinedTextField(
-                        value = authViewModel.password,
-                        onValueChange = { authViewModel.password = it },
-                        label = "Password",
-                        icon = Icons.Default.Lock,
-                        keyboardType = KeyboardType.Password,
-                        isPassword = true,
-                        passwordVisible = passwordVisible,
-                        onPasswordVisibilityChange = { passwordVisible = !passwordVisible }
-                    )
-
-                    if (isLoginMode) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp),
-                            contentAlignment = Alignment.CenterEnd
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    if (authViewModel.email.isBlank()) {
-                                        dialogMessage = "Please enter your email to recover your password"
-                                        showDialog = true
-                                        return@TextButton
-                                    }
-                                    authViewModel.recoverPassword(
-                                        onSuccess = {
-                                            logViewModel.log(screenName, "PASSWORD_RECOVERED")
-                                            dialogMessage = "Password recovery link sent to your email"
+                        if (isLoginMode) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        if (authViewModel.email.isBlank()) {
+                                            dialogMessage =
+                                                "Please enter your email to recover your password"
                                             showDialog = true
+                                            return@TextButton
+                                        }
+                                        authViewModel.recoverPassword(
+                                            onSuccess = {
+                                                logViewModel.log(screenName, "PASSWORD_RECOVERED")
+                                                dialogMessage =
+                                                    "Password recovery link sent to your email"
+                                                showDialog = true
+                                            },
+                                            onFailure = { exception ->
+                                                dialogMessage = exception.message.toString()
+                                                showDialog = true
+                                                logViewModel.crash(screenName, exception)
+                                            }
+                                        )
+                                    },
+                                    contentPadding = PaddingValues(
+                                        horizontal = 12.dp,
+                                        vertical = 4.dp
+                                    )
+                                ) {
+                                    Text(
+                                        "Forgot password?",
+                                        color = colorScheme.primary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Main Action Button
+                        Button(
+                            onClick = {
+                                if (isLoginMode) {
+                                    if (authViewModel.email.isBlank() || authViewModel.password.isBlank()) {
+                                        dialogMessage = "Please enter your email and password"
+                                        showDialog = true
+                                        return@Button
+                                    }
+
+                                    authViewModel.login(
+                                        onSuccess = { _, isNewUser ->
+                                            logViewModel.log(screenName, "USER_LOGGED_IN")
+                                            onLoginSuccess(isNewUser)
                                         },
                                         onFailure = { exception ->
                                             dialogMessage = exception.message.toString()
@@ -290,244 +364,225 @@ fun AuthScreen(
                                             logViewModel.crash(screenName, exception)
                                         }
                                     )
-                                },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    "Forgot password?",
-                                    color = colorScheme.primary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Main Action Button
-                    Button(
-                        onClick = {
-                            if (isLoginMode) {
-                                if (authViewModel.email.isBlank() || authViewModel.password.isBlank()) {
-                                    dialogMessage = "Please enter your email and password"
-                                    showDialog = true
-                                    return@Button
-                                }
-
-                                authViewModel.login(
-                                    onSuccess = { _, isNewUser ->
-                                        logViewModel.log(screenName, "USER_LOGGED_IN")
-                                        onLoginSuccess(isNewUser)
-                                    },
-                                    onFailure = { exception ->
-                                        dialogMessage = exception.message.toString()
-                                        showDialog = true
-                                        logViewModel.crash(screenName, exception)
+                                } else {
+                                    val missingFields = buildList {
+                                        if (authViewModel.fullName.isBlank()) add("full name")
+                                        if (authViewModel.email.isBlank()) add("email")
+                                        if (authViewModel.password.isBlank()) add("password")
                                     }
-                                )
-                            } else {
-                                val missingFields = buildList {
-                                    if (authViewModel.fullName.isBlank()) add("full name")
-                                    if (authViewModel.email.isBlank()) add("email")
-                                    if (authViewModel.password.isBlank()) add("password")
-                                }
 
-                                if (missingFields.isNotEmpty()) {
-                                    dialogMessage = "Please complete: ${missingFields.joinToString(", ")}"
-                                    showDialog = true
-                                    return@Button
-                                }
-
-                                authViewModel.register(
-                                    onSuccess = { _ ->
-                                        logViewModel.log(screenName, "USER_REGISTERED")
-                                        onLoginSuccess(true)
-                                    },
-                                    onFailure = { exception ->
-                                        dialogMessage = exception.message.toString()
+                                    if (missingFields.isNotEmpty()) {
+                                        dialogMessage =
+                                            "Please complete: ${missingFields.joinToString(", ")}"
                                         showDialog = true
-                                        logViewModel.crash(screenName, exception)
+                                        return@Button
                                     }
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary, contentColor = colorScheme.onPrimary)
-                    ) {
+
+                                    authViewModel.register(
+                                        onSuccess = { _ ->
+                                            logViewModel.log(screenName, "USER_REGISTERED")
+                                            onLoginSuccess(true)
+                                        },
+                                        onFailure = { exception ->
+                                            dialogMessage = exception.message.toString()
+                                            showDialog = true
+                                            logViewModel.crash(screenName, exception)
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colorScheme.primary,
+                                contentColor = colorScheme.onPrimary
+                            )
+                        ) {
                             Text(
                                 text = if (isLoginMode) "Sign In" else "Create Account",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
-                    if (isLoginMode) {
+                        // OAuth buttons — visible in both Login and Sign Up modes.
+                        // If the account is new it'll route to onboarding; if existing, to main tabs.
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colorScheme.outlineVariant)
+                            Text(
+                                text = "  or  ",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = colorScheme.outlineVariant)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Google Button
-                            OutlinedButton(
-                                onClick = {
-                                    if (isGoogleLoading) return@OutlinedButton
+                                // Google Button
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isGoogleLoading) return@OutlinedButton
 
-                                    if (googleSignInClient == null) {
-                                        dialogMessage = "google_web_client_id is missing in strings.xml."
-                                        showDialog = true
-                                        return@OutlinedButton
-                                    }
+                                        if (googleSignInClient == null) {
+                                            dialogMessage =
+                                                "google_web_client_id is missing in strings.xml."
+                                            showDialog = true
+                                            return@OutlinedButton
+                                        }
 
-                                    isGoogleLoading = true
-                                    googleSignInClient.signOut()
-                                        .addOnCompleteListener { task ->
-                                            if (!task.isSuccessful) {
-                                                isGoogleLoading = false
-                                                val exception = task.exception ?: Exception("Could not reset Google session.")
-                                                dialogMessage = exception.message ?: "Could not reset Google session."
-                                                showDialog = true
-                                                logViewModel.crash(screenName, exception)
-                                                return@addOnCompleteListener
-                                            }
-
+                                        isGoogleLoading = true
+                                        // signOut is best-effort: reset cached session but always
+                                        // launch the account picker regardless of the result.
+                                        googleSignInClient.signOut().addOnCompleteListener {
                                             googleSignInLauncher.launch(googleSignInClient.signInIntent)
                                         }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                enabled = !isGoogleLoading,
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = colorScheme.surface,
-                                    contentColor = colorScheme.onSurface
-                                ),
-                                contentPadding = PaddingValues(horizontal = 8.dp)
-                            ) {
-                                if (isGoogleLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = colorScheme.primary
-                                    )
-                                } else {
-                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.ic_google_logo),
-                                            contentDescription = null,
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    enabled = !isGoogleLoading,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = colorScheme.surface,
+                                        contentColor = colorScheme.onSurface
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    if (isGoogleLoading) {
+                                        CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
-                                            tint = Color.Unspecified
+                                            strokeWidth = 2.dp,
+                                            color = colorScheme.primary
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Google",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Microsoft/Outlook Button
-                            OutlinedButton(
-                                onClick = {
-                                    if (isMicrosoftLoading) return@OutlinedButton
-                                    val activity = context as? Activity
-                                    if (activity == null) {
-                                        dialogMessage = "Could not find valid context for authentication."
-                                        showDialog = true
-                                        return@OutlinedButton
-                                    }
-
-                                    isMicrosoftLoading = true
-                                    authViewModel.loginWithMicrosoft(
-                                        activity = activity,
-                                        onSuccess = { _, isNewUser ->
-                                            isMicrosoftLoading = false
-                                            logViewModel.log(screenName, "USER_MICROSOFT_LOGGED_IN")
-                                            onLoginSuccess(isNewUser)
-                                        },
-                                        onFailure = { exception ->
-                                            isMicrosoftLoading = false
-                                            dialogMessage = exception.message.toString()
-                                            showDialog = true
-                                            logViewModel.crash(screenName, exception)
+                                    } else {
+                                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.ic_google_logo),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                                tint = Color.Unspecified
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Google",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp
+                                            )
                                         }
-                                    )
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                enabled = !isMicrosoftLoading,
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = colorScheme.surface,
-                                    contentColor = colorScheme.onSurface
-                                ),
-                                contentPadding = PaddingValues(horizontal = 8.dp)
-                            ) {
-                                if (isMicrosoftLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = colorScheme.primary
-                                    )
-                                } else {
-                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.ic_outlook_logo),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp),
-                                            tint = Color.Unspecified
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Outlook",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp
-                                        )
                                     }
                                 }
-                            }
+
+                                // Microsoft/Outlook Button
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isMicrosoftLoading) return@OutlinedButton
+                                        val activity = context as? Activity
+                                        if (activity == null) {
+                                            dialogMessage =
+                                                "Could not find valid context for authentication."
+                                            showDialog = true
+                                            return@OutlinedButton
+                                        }
+
+                                        isMicrosoftLoading = true
+                                        authViewModel.loginWithMicrosoft(
+                                            activity = activity,
+                                            onSuccess = { _, isNewUser ->
+                                                isMicrosoftLoading = false
+                                                logViewModel.log(
+                                                    screenName,
+                                                    "USER_MICROSOFT_LOGGED_IN"
+                                                )
+                                                onLoginSuccess(isNewUser)
+                                            },
+                                            onFailure = { exception ->
+                                                isMicrosoftLoading = false
+                                                dialogMessage = exception.message.toString()
+                                                showDialog = true
+                                                logViewModel.crash(screenName, exception)
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    enabled = !isMicrosoftLoading,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = colorScheme.surface,
+                                        contentColor = colorScheme.onSurface
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    if (isMicrosoftLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = colorScheme.primary
+                                        )
+                                    } else {
+                                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.ic_outlook_logo),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = Color.Unspecified
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Outlook",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Switch Mode Text
+                Row(
+                    modifier = Modifier.clickable { isLoginMode = !isLoginMode },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isLoginMode) "Don't have an account? " else "Already have an account? ",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = if (isLoginMode) "Sign Up" else "Sign In",
+                        color = colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Switch Mode Text
-            Row(
-                modifier = Modifier.clickable { isLoginMode = !isLoginMode },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (isLoginMode) "Don't have an account? " else "Already have an account? ",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = if (isLoginMode) "Sign Up" else "Sign In",
-                    color = colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(32.dp))
+            ThemeModeToggle(
+                themeMode = themeMode,
+                onThemeChange = onThemeChange,
+                modifier = Modifier
+                    .align(TopEnd)
+                    .padding(top = 16.dp, end = 16.dp)
+            )
         }
-
-        ThemeModeToggle(
-            themeMode = themeMode,
-            onThemeChange = onThemeChange,
-            modifier = Modifier
-                .align(TopEnd)
-                .padding(top = 16.dp, end = 16.dp)
-        )
     }
 }
 
@@ -546,15 +601,31 @@ fun CustomOutlinedTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
+        label = {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp
+            )
+        },
         leadingIcon = {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
         },
         trailingIcon = {
             if (isPassword) {
-                val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                val image =
+                    if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
                 IconButton(onClick = onPasswordVisibilityChange) {
-                    Icon(imageVector = image, contentDescription = "Toggle password visibility", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        imageVector = image,
+                        contentDescription = "Toggle password visibility",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },

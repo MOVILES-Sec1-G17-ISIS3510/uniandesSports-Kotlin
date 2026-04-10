@@ -45,6 +45,8 @@ import com.uniandes.sport.ui.components.getSportAccentColor
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 data class SurpriseContent(
     val title: String,
@@ -87,7 +89,18 @@ fun HomeScreen(
     val allRetos by retosViewModel.retos.collectAsState()
     val userBookings by bookingViewModel.userBookings.collectAsState()
     val pastRuns by runningViewModel.pastRuns.collectAsState()
-    
+    // Bug fix #6: collect weatherState once at HomeScreen scope — not inside LazyColumn items.
+    // Collecting inside items creates/destroys subscriptions on every scroll event.
+    val weatherState by weatherViewModel.weatherState.collectAsState()
+    val weatherCode = when (val s = weatherState) {
+        is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> s.data.currentWeather.weatherCode
+        else -> null
+    }
+    val currentTempStr = when (val s = weatherState) {
+        is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> "${s.data.currentWeather.temperature.toInt()}°"
+        else -> "--°"
+    }
+
     val lastRun = pastRuns.firstOrNull()
     val lastCoachFeedback = lastRun?.aiFeedback ?: "Start your first run to get personalized tips from your AI Coach!"
     
@@ -116,24 +129,24 @@ fun HomeScreen(
 
     // Pull Refresh State
     var isRefreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
             isRefreshing = true
-            // Accurate refresh actions matching system standards
             playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
             bookingViewModel.fetchUserBookings(currentUserId)
-            runningViewModel.fetchPastRuns()
+            // Bug fix #5: fetchPastRuns() removed — it registers an addSnapshotListener which is
+            // already real-time. Re-calling it destroys and recreates the listener unnecessarily.
+            // Bug fix #4: guarantee the spinner always stops via a coroutine timeout.
+            // The old masterLoading only tracked 2 of the 4 refreshed ViewModels.
+            refreshScope.launch {
+                kotlinx.coroutines.delay(3000)
+                isRefreshing = false
+            }
         }
     )
-
-    // Sync isRefreshing with real ViewModel states (Full Accuracy)
-    LaunchedEffect(masterLoading) {
-        if (!masterLoading && isRefreshing) {
-            isRefreshing = false
-        }
-    }
 
     // Logic: Separate joined vs available events
     val upcomingMatches = remember(allEvents, joinedIds) {
@@ -170,12 +183,15 @@ fun HomeScreen(
 
     // Sessions count
     val sessionsCount = remember(upcomingMatches, pastRuns) {
-        val now = Calendar.getInstance()
-        val startOfMonth = now.apply { 
+        // Bug fix #2: use a separate Calendar instance to avoid mutating 'now' in-place.
+        // The original now.apply { ... } modified 'now' to be "1st of month at 00:00",
+        // making subsequent reads of 'now' silently wrong. Also adds missing MILLISECOND reset.
+        val startOfMonth = Calendar.getInstance().apply {
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }.timeInMillis
         
         val matchSessions = upcomingMatches.count { match ->
@@ -198,14 +214,21 @@ fun HomeScreen(
             }
         }
         (finishedEvents.filter { joinedIds.contains(it.id) } + upcomingMatches).forEach { addDate(it.scheduledAt?.toDate()) }
-        userBookings.forEach { addDate(it.createdAt.toDate()) }
+        // Bug fix #1: guard against null createdAt in legacy booking documents
+        userBookings.forEach { booking -> try { addDate(booking.createdAt.toDate()) } catch (_: Exception) {} }
         activeRetos.forEach { addDate(it.startDate?.toDate()) }
         pastRuns.forEach { addDate(Date(it.timestamp)) }
         if (activityDates.isEmpty()) return@remember 0
         var streak = 0
         val today = Calendar.getInstance()
-        var checkDate = today
-        while (true) {
+        // Bug fix #3a: clone Calendar — 'var checkDate = today' shares the same reference,
+        // so mutations to checkDate silently corrupt 'today' as well.
+        var checkDate = today.clone() as Calendar
+        // Bug fix #3b: cap at 366 iterations to prevent an infinite loop on corrupt activityDates data
+        val maxDays = 366
+        var daysChecked = 0
+        while (daysChecked < maxDays) {
+            daysChecked++
             val key = "${checkDate.get(Calendar.YEAR)}-${checkDate.get(Calendar.DAY_OF_YEAR)}"
             if (activityDates.contains(key)) {
                 streak++
@@ -253,11 +276,14 @@ fun HomeScreen(
 
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp
-    val isSmallScreen = screenWidth < 410
     
-    val horizontalPadding = if (isSmallScreen) 16.dp else 20.dp
-    val headerFontSize = if (isSmallScreen) 20.sp else 22.sp
-    val sectionSpacing = if (isSmallScreen) 20.dp else 24.dp
+    // Grarunlar responsiveness tiers
+    val isExtraSmall = screenWidth < 360
+    val isSmall = screenWidth < 420
+    
+    val horizontalPadding = if (isExtraSmall) 12.dp else if (isSmall) 16.dp else 20.dp
+    val headerFontSize = if (isExtraSmall) 18.sp else if (isSmall) 20.sp else 22.sp
+    val sectionSpacing = if (isExtraSmall) 14.dp else if (isSmall) 20.dp else 24.dp
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         LazyColumn(
@@ -269,11 +295,6 @@ fun HomeScreen(
         ) {
             item {
                 Column {
-                    val weatherState by weatherViewModel.weatherState.collectAsState()
-                    val weatherCode = when (val s = weatherState) {
-                        is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> s.data.currentWeather.weatherCode
-                        else -> null
-                    }
                     Text(
                         text = "${getDynamicGreeting(weatherCode)}, ${userName.uppercase()}",
                         style = MaterialTheme.typography.titleLarge.copy(
@@ -296,16 +317,19 @@ fun HomeScreen(
             item {
                 val streakColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFFFB923C) else Color(0xFFE67E22)
                 val activityColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF2ECC71)
+                // Show '--' while data is loading to prevent a flickering '0 Days' → real value
+                val streakLabel = if (masterLoading) "--" else "$streakDays Days"
+                val activityLabel = if (masterLoading) "--" else "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}"
 
-                if (isSmallScreen) {
+                if (isSmall) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.fillMaxWidth())
-                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.fillMaxWidth())
+                        StatCard(label = "Streak", value = streakLabel, icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.fillMaxWidth())
+                        StatCard(label = "Activity", value = activityLabel, icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.fillMaxWidth())
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        StatCard(label = "Streak", value = "$streakDays Days", icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
-                        StatCard(label = "Activity", value = "$sessionsCount ${if (sessionsCount == 1) "Session" else "Sessions"}", icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
+                        StatCard(label = "Streak", value = streakLabel, icon = Icons.Default.Whatshot, iconColor = streakColor, modifier = Modifier.weight(1f))
+                        StatCard(label = "Activity", value = activityLabel, icon = Icons.Default.TrendingUp, iconColor = activityColor, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -315,22 +339,15 @@ fun HomeScreen(
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                    contentPadding = PaddingValues(horizontal = if (isSmallScreen) 4.dp else 0.dp)
+                    contentPadding = PaddingValues(horizontal = if (isSmall) 4.dp else 0.dp)
                 ) {
                     item { 
-                        val weatherState by weatherViewModel.weatherState.collectAsState()
-                        val temp = when (val s = weatherState) {
-                            is com.uniandes.sport.viewmodels.weather.WeatherState.Success -> "${s.data.currentWeather.temperature.toInt()}°"
-                            else -> "--°"
-                        }
-                        HomeActionChip(Icons.Default.Cloud, temp) { onNavigate("weather") } 
+                        HomeActionChip(Icons.Default.Cloud, currentTempStr) { onNavigate("weather") } 
                     }
                     item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
                     item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
                 }
             }
-
-            // Daily Step Challenge
 
             // Daily Step Challenge
             item {
@@ -357,16 +374,85 @@ fun HomeScreen(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = if (isExtraSmall) 8.dp else 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text("START RUN", fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(if (isExtraSmall) 24.dp else 28.dp))
+                            Spacer(modifier = Modifier.width(if (isExtraSmall) 8.dp else 16.dp))
+                            Text(
+                                "START RUN", 
+                                fontWeight = FontWeight.Black, 
+                                fontSize = if (isExtraSmall) 16.sp else 20.sp, 
+                                letterSpacing = 1.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(if (isExtraSmall) 20.dp else 24.dp))
+                    }
+                }
+            }
+
+            // ── Intelligent Match Pairing section (only shown when AI ranker found a top pick) ──
+            if (featuredMatch != null) {
+                item {
+                    Column {
+                        // Section header with AI badge (Adaptive)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "INTELLIGENT MATCH PAIRING",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = ArchivoFamily,
+                                        letterSpacing = if (isExtraSmall) 0.sp else 0.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = if (isExtraSmall) 16.sp else 18.sp
+                                    ),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "Ranked by sport, schedule & location",
+                                    fontSize = if (isExtraSmall) 11.sp else 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = if (isExtraSmall) 6.dp else 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(if (isExtraSmall) 10.dp else 12.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "AI",
+                                        fontSize = if (isExtraSmall) 9.sp else 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                        SmartMatchCard(
+                            recommendation = featuredMatch,
+                            onClick = { onNavigate("play") }
+                        )
                     }
                 }
             }
@@ -374,13 +460,6 @@ fun HomeScreen(
             // Sections
             item {
                 SectionHeader(title = "Quick Activity", subtitle = "Suggested sessions you might like")
-                if (featuredMatch != null) {
-                    SmartMatchCard(
-                        recommendation = featuredMatch!!,
-                        onClick = { onNavigate("play") }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
                 if (rankedAvailableEvents.isEmpty()) {
                     EmptyStateWideCard(title = "No events nearby", description = "Try searching in the Play tab.", icon = Icons.Default.Search, actionLabel = "Explore Play", onClick = { onNavigate("play") })
                 } else {
@@ -554,6 +633,10 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
     val timeStr = remember(event.scheduledAt, event.finishedAt) {
         EventUIAdapter.formatSchedule(event)
     }
+    // Strip raw GPS coordinates that some locations append (e.g. "Name - Lat: X, Lng: Y")
+    val cleanLocation = remember(event.location) {
+        event.location.substringBefore(" - Lat:").trim()
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
@@ -573,15 +656,37 @@ fun ActivityCard(event: Event, onClick: () -> Unit) {
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
+                // Title on its own line — avoids long time strings pushing it off-screen
+                Text(
+                    event.title,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(2.dp))
+                // Time on its own line
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
-                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(" $timeStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        " $timeStr",
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(" ${event.location}", fontSize = 13.sp, color = MaterialTheme.colorScheme.tertiary)
+                    Text(
+                        " $cleanLocation",
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
                 }
             }
         }
@@ -594,6 +699,12 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
     val dateStr = remember(event.scheduledAt, event.finishedAt) {
         EventUIAdapter.formatSchedule(event)
     }
+    // Strip raw GPS coordinates that some locations append (e.g. "Name - Lat: X, Lng: Y")
+    val cleanLocation = remember(event.location) {
+        event.location.substringBefore(" - Lat:").trim()
+    }
+    val spotsLeft = event.maxParticipants - event.membersCount
+    val spotsColor = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF10B981)
     Surface(
         modifier = Modifier.width(200.dp).clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
@@ -607,15 +718,33 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
                 Text(event.sport.uppercase(), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = sportColor)
             }
             Spacer(Modifier.height(12.dp))
-            Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
-            Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1)
+            Text(event.title, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+            Text(cleanLocation, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(" $dateStr", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("${event.maxParticipants - event.membersCount} spots", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (MaterialTheme.colorScheme.background.toArgb() == Color(0xFF020617).toArgb()) Color(0xFF4ADE80) else Color(0xFF10B981))
+            // Date and spots on SEPARATE rows — at 200dp width they can't share a row cleanly
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    " $dateStr",
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = spotsColor.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    "$spotsLeft spots left",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = spotsColor,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
             }
         }
     }
@@ -625,6 +754,10 @@ fun RecommendedItemCard(event: Event, onClick: () -> Unit = {}) {
 fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
     val dateStr = remember(event.scheduledAt, event.finishedAt) {
         EventUIAdapter.formatSchedule(event)
+    }
+    // Strip raw GPS coordinates that some locations append
+    val cleanLocation = remember(event.location) {
+        event.location.substringBefore(" - Lat:").trim()
     }
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
@@ -640,9 +773,9 @@ fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(event.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Text(dateStr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(event.location, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary)
+                Text(event.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                Text(dateStr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(cleanLocation, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outlineVariant)
         }

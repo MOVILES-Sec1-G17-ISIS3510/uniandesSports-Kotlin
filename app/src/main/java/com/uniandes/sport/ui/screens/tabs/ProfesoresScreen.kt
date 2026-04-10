@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -116,7 +115,8 @@ fun ProfesoresScreen(
         }
     }
 
-    val isCurrentUserCoach = profesores.any { it.id == userUid }
+    // Bug fix #4: guard against timing race where userUid is still null when profesores loads from cache
+    val isCurrentUserCoach = userUid != null && profesores.any { it.id == userUid }
 
     val filteredProfesores = if (selectedFilter == "All") {
         profesores
@@ -360,14 +360,16 @@ fun ProfesoresScreen(
     if (showBecomeCoachDialog) {
         var userEmail by remember { mutableStateOf("") }
         var userName by remember { mutableStateOf("") }
-        var userUid by remember { mutableStateOf("") }
+        // Bug fix #5: renamed from 'userUid' to avoid shadowing the outer-scope variable.
+        // The outer userUid may be null; this local one is always a String and is set async.
+        var dialogUserUid by remember { mutableStateOf("") }
 
         LaunchedEffect(Unit) {
             authViewModel.getUser(
                 onSuccess = { user -> 
                     userEmail = user.email
                     userName = user.fullName
-                    userUid = user.uid
+                    dialogUserUid = user.uid
                  },
                  onFailure = {}
             )
@@ -376,7 +378,7 @@ fun ProfesoresScreen(
         BecomeCoachDialog(
             onDismiss = { showBecomeCoachDialog = false },
             onSubmit = { deporte, precio, experiencia, whatsapp, especialidad ->
-                val newCoach = ProfesorBuilder(id = userUid)
+                val newCoach = ProfesorBuilder(id = dialogUserUid)
                     .setBasicInfo(
                         nombre = userName.takeIf { it.isNotBlank() } ?: userEmail,
                         deporte = deporte
@@ -392,6 +394,7 @@ fun ProfesoresScreen(
                 profesoresViewModel.createProfesor(newCoach,
                     onSuccess = {
                         showBecomeCoachDialog = false
+                        profesoresViewModel.refreshProfesores {} // Bug fix #8: refresh so new coach appears immediately
                     },
                     onFailure = { /* Handle failure */ }
                 )
@@ -404,9 +407,18 @@ fun ProfesoresScreen(
 fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
     val context = LocalContext.current
     val openWhatsApp = {
-        val url = "https://wa.me/${profesor.whatsapp.replace(Regex("\\D"), "")}?text=Hi ${profesor.nombre}, I'm interested in your classes!"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        context.startActivity(intent)
+        val cleanNumber = profesor.whatsapp.replace(Regex("\\D"), "")
+        // Bug fix #7: guard against blank number and missing WhatsApp app
+        if (cleanNumber.isBlank()) {
+            android.widget.Toast.makeText(context, "No contact number available", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            val url = "https://wa.me/$cleanNumber?text=Hi ${profesor.nombre}, I'm interested in your classes!"
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (e: android.content.ActivityNotFoundException) {
+                android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     Card(
@@ -878,7 +890,10 @@ fun BookingHistoryCard(
                 }
                 
                 Text(
-                    text = SimpleDateFormat("MMM d", Locale.getDefault()).format(booking.createdAt.toDate()),
+                    // Bug fix #6: guard against null/missing createdAt field in older documents
+                    text = try {
+                        SimpleDateFormat("MMM d", Locale.getDefault()).format(booking.createdAt.toDate())
+                    } catch (e: Exception) { "—" },
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -890,9 +905,18 @@ fun BookingHistoryCard(
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = {
-                            val url = "https://wa.me/${assignedCoach.whatsapp.replace(Regex("\\D"), "")}?text=Hi coach ${assignedCoach.nombre}, you accepted my ${booking.sport} request on UniandesSports!"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
+                            val cleanNumber = assignedCoach.whatsapp.replace(Regex("\\D"), "")
+                            // Bug fix #7: guard blank number + missing WhatsApp app
+                            if (cleanNumber.isBlank()) {
+                                android.widget.Toast.makeText(context, "No contact number available", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                try {
+                                    val url = "https://wa.me/$cleanNumber?text=Hi coach ${assignedCoach.nombre}, you accepted my ${booking.sport} request on UniandesSports!"
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                } catch (e: android.content.ActivityNotFoundException) {
+                                    android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         shape = RoundedCornerShape(12.dp),
