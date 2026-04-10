@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import com.uniandes.sport.models.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
+import android.app.Activity
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -172,6 +174,59 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
             }
     }
 
+    override fun loginWithMicrosoft(
+        activity: Activity,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        val provider = OAuthProvider.newBuilder("microsoft.com")
+        
+        // This forces the Microsoft login page to ask for the account every time
+        provider.addCustomParameter("prompt", "select_account")
+        
+        // Restricting specifically to organizations (optional but common for Uniandes)
+        // provider.addCustomParameter("tenant", "organizations")
+
+        auth.startActivityForSignInWithProvider(activity, provider.build())
+            .addOnSuccessListener { authResult ->
+                val firebaseUser = auth.currentUser
+                if (firebaseUser == null) {
+                    onFailure(Exception("Authentication failed: No user found."))
+                    return@addOnSuccessListener
+                }
+
+                val uid = firebaseUser.uid
+                val fallbackUser = User(
+                    uid = uid,
+                    email = firebaseUser.email ?: "",
+                    fullName = firebaseUser.displayName ?: "",
+                    photoUrl = firebaseUser.photoUrl?.toString()
+                )
+
+                db.collection("users").document(uid).get()
+                    .addOnSuccessListener { document ->
+                        if (document != null && document.exists()) {
+                            val userProfile = document.toObject(User::class.java)
+                            if (userProfile != null) {
+                                email = userProfile.email
+                                fullName = userProfile.fullName
+                                val isNew = userProfile.program.isBlank() || userProfile.mainSport.isBlank()
+                                onSuccess(userProfile, isNew)
+                                return@addOnSuccessListener
+                            }
+                        }
+                        email = fallbackUser.email
+                        fullName = fallbackUser.fullName
+                        onSuccess(fallbackUser, true)
+                    }
+                    .addOnFailureListener {
+                        onSuccess(fallbackUser, true)
+                    }
+            }
+            .addOnFailureListener { e ->
+                onFailure(e)
+            }
+    }
     override fun saveOnboardingData(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
         viewModelScope.launch {
             try {
