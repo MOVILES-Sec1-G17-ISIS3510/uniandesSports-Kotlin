@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.screens
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -81,6 +82,7 @@ fun AuthScreen(
     var isLoginMode by remember { mutableStateOf(true) }
     var passwordVisible by remember { mutableStateOf(false) }
     var isGoogleLoading by remember { mutableStateOf(false) }
+    var isMicrosoftLoading by remember { mutableStateOf(false) }
 
     val googleSignInClient = remember(googleWebClientId) {
         if (googleWebClientId.isBlank()) {
@@ -413,6 +415,68 @@ fun AuthScreen(
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp
                                 )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isMicrosoftLoading) return@OutlinedButton
+                                val activity = context as? Activity
+                                if (activity == null) {
+                                    dialogMessage = "Could not find valid context for authentication."
+                                    showDialog = true
+                                    return@OutlinedButton
+                                }
+
+                                isMicrosoftLoading = true
+                                authViewModel.loginWithMicrosoft(
+                                    activity = activity,
+                                    onSuccess = { _, isNewUser ->
+                                        isMicrosoftLoading = false
+                                        logViewModel.log(screenName, "USER_MICROSOFT_LOGGED_IN")
+                                        onLoginSuccess(isNewUser)
+                                    },
+                                    onFailure = { exception ->
+                                        isMicrosoftLoading = false
+                                        dialogMessage = exception.message.toString()
+                                        showDialog = true
+                                        logViewModel.crash(screenName, exception)
+                                    }
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isMicrosoftLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = colorScheme.surface,
+                                contentColor = colorScheme.onSurface
+                            )
+                        ) {
+                            if (isMicrosoftLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = colorScheme.primary
+                                )
+                            } else {
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = Color(0xFF00A4EF) // Microsoft Blue
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Continue with Outlook",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 15.sp
+                                    )
+                                }
                             }
                         }
                     }

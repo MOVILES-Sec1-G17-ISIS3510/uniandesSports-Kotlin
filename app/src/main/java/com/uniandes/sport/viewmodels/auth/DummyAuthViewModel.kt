@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.app.Activity
 import com.uniandes.sport.models.User
 import kotlinx.coroutines.*
 
@@ -93,6 +94,23 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
                     fullName = if (fullName.isNotBlank()) fullName else "Google User"
                 ),
                 true // dummy logic simulates a new user
+            )
+        }
+    }
+
+    override fun loginWithMicrosoft(
+        activity: Activity,
+        onSuccess: (result: User, isNewUser: Boolean) -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        viewModelScope.launch {
+            onSuccess(
+                User(
+                    uid = "ms-123",
+                    email = if (email.isNotBlank()) email else "outlook.user@example.com",
+                    fullName = if (fullName.isNotBlank()) fullName else "Outlook User"
+                ),
+                true
             )
         }
     }
