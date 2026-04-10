@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.SettingsBrightness
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -31,7 +32,8 @@ fun ThemeModeToggle(
                 imageVector = when (themeMode) {
                     ThemeMode.LIGHT -> Icons.Default.LightMode
                     ThemeMode.DARK -> Icons.Default.DarkMode
-                    ThemeMode.SYSTEM, ThemeMode.AUTO -> Icons.Default.SettingsBrightness
+                    ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                    ThemeMode.AUTO -> Icons.Default.BrightnessAuto
                 },
                 contentDescription = "Theme options"
                 ,
@@ -47,6 +49,11 @@ fun ThemeModeToggle(
                 text = { Text("System Theme") },
                 onClick = { onThemeChange(ThemeMode.SYSTEM); setShowThemeMenu(false) },
                 leadingIcon = { Icon(Icons.Default.SettingsBrightness, null, tint = MaterialTheme.colorScheme.onSurface) }
+            )
+            DropdownMenuItem(
+                text = { Text("Auto (Sensor)") },
+                onClick = { onThemeChange(ThemeMode.AUTO); setShowThemeMenu(false) },
+                leadingIcon = { Icon(Icons.Default.BrightnessAuto, null, tint = MaterialTheme.colorScheme.onSurface) }
             )
             DropdownMenuItem(
                 text = { Text("Light Theme") },

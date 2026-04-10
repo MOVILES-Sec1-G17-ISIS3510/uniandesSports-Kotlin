@@ -216,36 +216,10 @@ fun TopAppBarDynamic(
                 navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ),
             navigationIcon = {
-                Box {
-                    IconButton(onClick = { showThemeMenu = true }) {
-                        Icon(themeIcon, contentDescription = "Theme options")
-                    }
-                    DropdownMenu(
-                        expanded = showThemeMenu,
-                        onDismissRequest = { showThemeMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("System Theme") },
-                            onClick = { onThemeChange(ThemeMode.SYSTEM); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.SettingsBrightness, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Light Theme") },
-                            onClick = { onThemeChange(ThemeMode.LIGHT); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.LightMode, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dark Theme") },
-                            onClick = { onThemeChange(ThemeMode.DARK); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.DarkMode, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Auto (Sensor)") },
-                            onClick = { onThemeChange(ThemeMode.AUTO); showThemeMenu = false },
-                            leadingIcon = { Icon(Icons.Default.BrightnessAuto, null) }
-                        )
-                    }
-                }
+                ThemeModeToggle(
+                    themeMode = themeMode,
+                    onThemeChange = onThemeChange
+                )
             },
             title = {
                 Text(
@@ -291,7 +265,6 @@ fun TopAppBarDynamic(
 
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-
                 containerColor = MaterialTheme.colorScheme.surface,
                 titleContentColor = MaterialTheme.colorScheme.onSurface,
                 actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -325,6 +298,13 @@ fun TopAppBarDynamic(
                         Icon(Icons.Default.EventNote, contentDescription = "History")
                     }
                 }
+                
+                // Unified Theme Toggle
+                ThemeModeToggle(
+                    themeMode = themeMode,
+                    onThemeChange = onThemeChange
+                )
+
                 IconButton(onClick = onProfileClick) {
                     Icon(Icons.Default.AccountCircle, contentDescription = "Profile")
                 }
