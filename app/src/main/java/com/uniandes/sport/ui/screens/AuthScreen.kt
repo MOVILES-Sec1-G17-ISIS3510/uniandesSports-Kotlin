@@ -366,125 +366,132 @@ fun AuthScreen(
                     }
 
                     if (isLoginMode) {
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                if (isGoogleLoading) return@OutlinedButton
-
-                                if (googleSignInClient == null) {
-                                    dialogMessage = "google_web_client_id is missing in strings.xml."
-                                    showDialog = true
-                                    return@OutlinedButton
-                                }
-
-                                isGoogleLoading = true
-                                googleSignInClient.signOut()
-                                    .addOnCompleteListener { task ->
-                                        if (!task.isSuccessful) {
-                                            isGoogleLoading = false
-                                            val exception = task.exception ?: Exception("Could not reset Google session.")
-                                            dialogMessage = exception.message ?: "Could not reset Google session."
-                                            showDialog = true
-                                            logViewModel.crash(screenName, exception)
-                                            return@addOnCompleteListener
-                                        }
-
-                                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
-                                    }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            enabled = !isGoogleLoading,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = colorScheme.surface,
-                                contentColor = colorScheme.onSurface
-                            )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (isGoogleLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colorScheme.primary
-                                )
-                            } else {
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_google_logo),
-                                        contentDescription = null,
+                            // Google Button
+                            OutlinedButton(
+                                onClick = {
+                                    if (isGoogleLoading) return@OutlinedButton
+
+                                    if (googleSignInClient == null) {
+                                        dialogMessage = "google_web_client_id is missing in strings.xml."
+                                        showDialog = true
+                                        return@OutlinedButton
+                                    }
+
+                                    isGoogleLoading = true
+                                    googleSignInClient.signOut()
+                                        .addOnCompleteListener { task ->
+                                            if (!task.isSuccessful) {
+                                                isGoogleLoading = false
+                                                val exception = task.exception ?: Exception("Could not reset Google session.")
+                                                dialogMessage = exception.message ?: "Could not reset Google session."
+                                                showDialog = true
+                                                logViewModel.crash(screenName, exception)
+                                                return@addOnCompleteListener
+                                            }
+
+                                            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                        }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                enabled = !isGoogleLoading,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = colorScheme.surface,
+                                    contentColor = colorScheme.onSurface
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                if (isGoogleLoading) {
+                                    CircularProgressIndicator(
                                         modifier = Modifier.size(18.dp),
-                                        tint = Color.Unspecified
+                                        strokeWidth = 2.dp,
+                                        color = colorScheme.primary
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Continue with Google",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 15.sp
-                                    )
+                                } else {
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_google_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Color.Unspecified
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Google",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                if (isMicrosoftLoading) return@OutlinedButton
-                                val activity = context as? Activity
-                                if (activity == null) {
-                                    dialogMessage = "Could not find valid context for authentication."
-                                    showDialog = true
-                                    return@OutlinedButton
-                                }
-
-                                isMicrosoftLoading = true
-                                authViewModel.loginWithMicrosoft(
-                                    activity = activity,
-                                    onSuccess = { _, isNewUser ->
-                                        isMicrosoftLoading = false
-                                        logViewModel.log(screenName, "USER_MICROSOFT_LOGGED_IN")
-                                        onLoginSuccess(isNewUser)
-                                    },
-                                    onFailure = { exception ->
-                                        isMicrosoftLoading = false
-                                        dialogMessage = exception.message.toString()
+                            // Microsoft/Outlook Button
+                            OutlinedButton(
+                                onClick = {
+                                    if (isMicrosoftLoading) return@OutlinedButton
+                                    val activity = context as? Activity
+                                    if (activity == null) {
+                                        dialogMessage = "Could not find valid context for authentication."
                                         showDialog = true
-                                        logViewModel.crash(screenName, exception)
+                                        return@OutlinedButton
                                     }
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            enabled = !isMicrosoftLoading,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = colorScheme.surface,
-                                contentColor = colorScheme.onSurface
-                            )
-                        ) {
-                            if (isMicrosoftLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colorScheme.primary
-                                )
-                            } else {
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_outlook_logo),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp),
-                                        tint = Color.Unspecified
+
+                                    isMicrosoftLoading = true
+                                    authViewModel.loginWithMicrosoft(
+                                        activity = activity,
+                                        onSuccess = { _, isNewUser ->
+                                            isMicrosoftLoading = false
+                                            logViewModel.log(screenName, "USER_MICROSOFT_LOGGED_IN")
+                                            onLoginSuccess(isNewUser)
+                                        },
+                                        onFailure = { exception ->
+                                            isMicrosoftLoading = false
+                                            dialogMessage = exception.message.toString()
+                                            showDialog = true
+                                            logViewModel.crash(screenName, exception)
+                                        }
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Continue with Outlook",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 15.sp
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                enabled = !isMicrosoftLoading,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = colorScheme.surface,
+                                    contentColor = colorScheme.onSurface
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                if (isMicrosoftLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = colorScheme.primary
                                     )
+                                } else {
+                                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_outlook_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = Color.Unspecified
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Outlook",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
                                 }
                             }
                         }
