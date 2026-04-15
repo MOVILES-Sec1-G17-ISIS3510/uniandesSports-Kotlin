@@ -98,8 +98,10 @@ fun MainTabsScreen(
             }
             Screen.Profesores -> {
                 val profesoresViewModel: FirestoreProfesoresViewModel = viewModel()
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = viewModel()
                 ProfesoresScreen(
                     profesoresViewModel = profesoresViewModel,
+                    logViewModel = logViewModel,
                     onNavigate = onNavigate
                 )
             }
