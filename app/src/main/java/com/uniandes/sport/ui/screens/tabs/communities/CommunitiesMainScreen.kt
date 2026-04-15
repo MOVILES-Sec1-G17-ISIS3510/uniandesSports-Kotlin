@@ -36,10 +36,13 @@ import com.uniandes.sport.ui.theme.ArchivoFamily
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.delay
+import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 @Composable
 fun CommunitiesMainScreen(
     viewModel: CommunitiesViewModelInterface,
+    logViewModel: LogViewModelInterface,
     authViewModel: FirebaseAuthViewModel = viewModel(),
     onNavigate: (String) -> Unit
 ) {
@@ -49,11 +52,44 @@ fun CommunitiesMainScreen(
 
     var selectedFilter by remember { mutableStateOf("Mine") }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCommunityId by remember { mutableStateOf<String?>(null) }
-    var showCreateCommunityDialog by remember { mutableStateOf(false) }
 
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var currentUserDisplayName by remember { mutableStateOf("Usuario") }
+
+    // Demand Telemetry: Track search queries for communities
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.trim().length >= 3) {
+            delay(1000) // Debounce 1s
+            
+            // Re-check after delay to ensure it's still the same query
+            val query = searchQuery.trim()
+            val filteredCount = communities.count { community ->
+                val filterMatches = when (selectedFilter) {
+                    "Mine" -> (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
+                    "Others" -> (community.ownerId != currentUserId && !myCommunityIds.contains(community.id))
+                    else -> true
+                }
+                val q = query.lowercase()
+                val queryMatches = q.isBlank() ||
+                    community.name.lowercase().contains(q) ||
+                    community.sport.lowercase().contains(q) ||
+                    community.description.lowercase().contains(q)
+                filterMatches && queryMatches
+            }
+
+            logViewModel.log(
+                screen = "CommunitiesMainScreen",
+                action = "SEARCH_PERFORMED",
+                params = mapOf(
+                    "query" to query,
+                    "results_found" to filteredCount.toString(),
+                    "selected_filter" to selectedFilter
+                )
+            )
+        }
+    }
+    var selectedCommunityId by remember { mutableStateOf<String?>(null) }
+    var showCreateCommunityDialog by remember { mutableStateOf(false) }
 
     // Init load
     LaunchedEffect(Unit) {

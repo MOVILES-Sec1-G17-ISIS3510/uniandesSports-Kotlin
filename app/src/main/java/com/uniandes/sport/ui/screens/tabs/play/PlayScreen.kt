@@ -104,8 +104,43 @@ fun PlayScreen(
         }
     }
 
-    val joinedEvents = remember(events, joinedEventIds) {
-        events.filter { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
+    var searchText by remember { mutableStateOf("") }
+
+    // Demand Telemetry: Track search queries for matches
+    LaunchedEffect(searchText) {
+        if (searchText.trim().length >= 3) {
+            delay(1000) // Debounce 1s
+            
+            // Re-check after delay to ensure it's still the same query
+            val query = searchText.trim()
+            val filteredCount = events.count { event ->
+                searchText.isBlank() || 
+                event.title.lowercase().contains(searchText.lowercase()) ||
+                event.sport.lowercase().contains(searchText.lowercase()) ||
+                event.location.lowercase().contains(searchText.lowercase())
+            }
+
+            logViewModel.log(
+                screen = "PlayScreen",
+                action = "SEARCH_PERFORMED",
+                params = mapOf(
+                    "query" to query,
+                    "results_found" to filteredCount.toString(),
+                    "active_sports" to selectedSports.joinToString(",")
+                )
+            )
+        }
+    }
+
+    val joinedEvents = remember(events, joinedEventIds, searchText) {
+        events.filter { joinedEventIds.contains(it.id) }
+            .filter { event ->
+                searchText.isBlank() || 
+                event.title.lowercase().contains(searchText.lowercase()) ||
+                event.sport.lowercase().contains(searchText.lowercase()) ||
+                event.location.lowercase().contains(searchText.lowercase())
+            }
+            .sortedBy { it.scheduledAt }
     }
     val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
         finishedEvents.filter { joinedEventIds.contains(it.id) }
@@ -117,8 +152,15 @@ fun PlayScreen(
     val myAppEvents = remember(events, joinedEventIds, currentUserId) {
         events.filter { it.createdBy == currentUserId || joinedEventIds.contains(it.id) }
     }
-    val otherEvents = remember(events, joinedEventIds) {
-        events.filterNot { joinedEventIds.contains(it.id) }.sortedBy { it.scheduledAt }
+    val otherEvents = remember(events, joinedEventIds, searchText) {
+        events.filterNot { joinedEventIds.contains(it.id) }
+            .filter { event ->
+                searchText.isBlank() || 
+                event.title.lowercase().contains(searchText.lowercase()) ||
+                event.sport.lowercase().contains(searchText.lowercase()) ||
+                event.location.lowercase().contains(searchText.lowercase())
+            }
+            .sortedBy { it.scheduledAt }
     }
     val currentLocation by rememberCurrentLocationState()
     val phoneCalendarEvents by rememberPhoneCalendarEventsState()
@@ -346,6 +388,45 @@ fun PlayScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // --- SECTION: SEARCH DEMAND TRACKING ---
+            item {
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    placeholder = { 
+                        Text(
+                            "Search for sport or location...",
+                            style = MaterialTheme.typography.bodyMedium
+                        ) 
+                    },
+                    leadingIcon = { 
+                        Icon(
+                            Icons.Default.Search, 
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        ) 
+                    },
+                    trailingIcon = {
+                        if (searchText.isNotEmpty()) {
+                            IconButton(onClick = { searchText = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(28.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+            }
+
             item {
                 Text(
                     text = "EXPLORE BY SPORT",
