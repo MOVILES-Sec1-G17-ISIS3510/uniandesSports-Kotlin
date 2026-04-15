@@ -2,10 +2,14 @@ package com.uniandes.sport.ui.screens.wallscreen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,9 +33,16 @@ fun WallScreen(
     val screenName = "WallScreen"
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-    
-    // Simplificación para el estado de los tweets (MVVM)
-    val tweets = fetchTweetsAsState(tweetsViewModel, { errorMessage = it }, { showErrorDialog = it }, logViewModel)
+    var refreshKey by remember { mutableStateOf(0) }
+
+    val feedState = fetchTweetsAsState(
+        refreshKey = refreshKey,
+        tweetsViewModel = tweetsViewModel,
+        setErrorMessage = { errorMessage = it },
+        setShowErrorDialog = { showErrorDialog = it },
+        logViewModel = logViewModel
+    )
+    val listState = rememberLazyListState()
 
     Scaffold(
         topBar = {
@@ -40,14 +51,25 @@ fun WallScreen(
                     Column {
                         Text("COMMUNITY FEED", fontWeight = FontWeight.Black, fontSize = 18.sp)
                         Text(
-                            text = "POSTS AND UPDATES",
+                            text = "${feedState.tweets.size} posts and updates",
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { refreshKey++ },
+                        enabled = !feedState.isLoading
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = "Refresh feed"
+                        )
+                    }
                     TextButton(onClick = {
                         authViewModel.logout(onSuccess = {
                             navController.navigate(Routes.AUTH_SCREEN) {
@@ -74,7 +96,12 @@ fun WallScreen(
                 .padding(paddingValues)
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                TweetList(tweets, modifier = Modifier.fillMaxSize())
+                TweetList(
+                    tweets = feedState.tweets,
+                    isLoading = feedState.isLoading,
+                    modifier = Modifier.fillMaxSize(),
+                    listState = listState
+                )
             }
             
             Divider(color = Color(0xFFE5E7EB))
@@ -114,24 +141,36 @@ fun WallScreen(
 
 @Composable
 fun fetchTweetsAsState(
+    refreshKey: Int,
     tweetsViewModel: TweetsViewModelInterface,
     setErrorMessage: (String) -> Unit,
     setShowErrorDialog: (Boolean) -> Unit,
     logViewModel: LogViewModelInterface
-): List<Tweet> {
+): TweetFeedState {
     val screenName = "WallScreen"
     var tweets by remember { mutableStateOf(emptyList<Tweet>()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshKey) {
+        isLoading = true
         tweetsViewModel.fetchTweets(
-            onSuccess = { fetchedTweets -> tweets = fetchedTweets },
+            onSuccess = { fetchedTweets ->
+                tweets = fetchedTweets
+                isLoading = false
+            },
             onFailure = { exception -> 
                 setErrorMessage(exception.message ?: "Unknown error")
                 setShowErrorDialog(true)
                 logViewModel.crash(screenName, exception)
+                isLoading = false
             }
         )
     }
 
-    return tweets
+    return TweetFeedState(tweets = tweets, isLoading = isLoading)
 }
+
+data class TweetFeedState(
+    val tweets: List<Tweet>,
+    val isLoading: Boolean
+)

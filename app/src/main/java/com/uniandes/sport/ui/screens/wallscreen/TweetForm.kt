@@ -2,25 +2,25 @@ package com.uniandes.sport.ui.screens.wallscreen
 
 import android.Manifest
 import android.graphics.Bitmap
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.Icon
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -31,8 +31,6 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.viewmodels.storage.StorageViewModelInterface
 import com.uniandes.sport.viewmodels.tweets.TweetsViewModelInterface
 import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.*
 
 
@@ -48,6 +46,7 @@ fun TweetForm(
 ) {
     val screenName = "TweetForm"
     val (tweetText, setTweetText) = remember { mutableStateOf("") }
+    val maxLength = 240
 
     val takePictureLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.TakePicturePreview()) { bitmap ->
         if (bitmap != null) {
@@ -81,52 +80,62 @@ fun TweetForm(
         }
     }
 
-    Column(modifier = modifier
-        .padding(horizontal = 2.dp, vertical = 2.dp)
-        .imePadding()
+    Column(
+        modifier = modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .imePadding()
     ) {
-        Row(modifier = Modifier.weight(1f)) {
-            OutlinedTextField(
-                value = tweetText,
-                onValueChange = { setTweetText(it) },
-                modifier = Modifier
-                    .padding(16.dp)
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 120.dp),
-                label = { Text(text = "Write your tweet") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = {}),
-                maxLines = Int.MAX_VALUE,
-                singleLine = false
-            )
-        }
+        OutlinedTextField(
+            value = tweetText,
+            onValueChange = { if (it.length <= maxLength) setTweetText(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 110.dp, max = 140.dp),
+            label = { Text(text = "Share something with the community") },
+            placeholder = { Text("How was your workout today?") },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = {}),
+            maxLines = 5,
+            shape = RoundedCornerShape(14.dp),
+            singleLine = false
+        )
+
+        Text(
+            text = "${tweetText.length}/$maxLength",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(top = 6.dp)
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TextButton(
+            Button(
                 onClick = {
                     requestPermissionLauncher.launch(Manifest.permission.CAMERA)
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors()
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Filled.AccountBox,
+                        imageVector = Icons.Filled.CameraAlt,
                         contentDescription = "Image button",
                         modifier = Modifier.size(24.dp)
                     )
-                    Text("Send Image")
+                    Text("Photo", modifier = Modifier.padding(start = 6.dp))
                 }
             }
 
-            TextButton(
+            Button(
                 onClick = {
                     sendTweet(
                         tweetText = tweetText,
@@ -140,7 +149,9 @@ fun TweetForm(
                         setTweetText = setTweetText
                     )
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = tweetText.isNotBlank(),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -148,7 +159,7 @@ fun TweetForm(
                         contentDescription = "Send tweet button",
                         modifier = Modifier.size(24.dp)
                     )
-                    Text("Send")
+                    Text("Post", modifier = Modifier.padding(start = 6.dp), fontWeight = FontWeight.Bold)
                 }
             }
         }
