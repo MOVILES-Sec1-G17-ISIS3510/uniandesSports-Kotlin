@@ -41,31 +41,42 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/**
- * RETOS FEATURE IMPLEMENTATION SUMMARY:
- * 1. DESIGN PATTERNS: 
- *    - Factory Method: Used for creating different challenge types (Individual/Team) via RetoFactory.
- *    - Strategy Pattern: Used for calculating challenge progress through ProgressStrategy.
- * 2. FIRESTORE INTEGRATION:
- *    - Connected to 'challenges' collection using Map-based serialization to ensure data integrity.
- *    - Integrated real-time authentication (Firebase Auth) for 'createdBy' and 'participants' fields.
- *    - Handled PERMISSION_DENIED issues by aligning UI UID with Firestore security rules.
- */
-
-// imPORTAANTE los retos para el usuario
+import kotlinx.coroutines.delay
+import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChallengesScreen(
     viewModel: RetosViewModelInterface,
-    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface,
+    logViewModel: LogViewModelInterface,
     onNavigate: (String) -> Unit
 ) {
     val activeChallenges by viewModel.activeChallenges.collectAsState()
     val exploreChallenges by viewModel.exploreChallenges.collectAsState()
     val selectedType by viewModel.selectedType.collectAsState()
     val selectedSport by viewModel.selectedSport.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // Demand Telemetry: Track search queries for challenges
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.trim().length >= 3) {
+            delay(1000) // Debounce 1s
+            
+            // Re-check after delay to ensure it's still the same query
+            val query = searchQuery.trim()
+            logViewModel.log(
+                screen = "ChallengesScreen",
+                action = "SEARCH_PERFORMED",
+                params = mapOf(
+                    "query" to query,
+                    "results_found" to exploreChallenges.size.toString(),
+                    "selected_sport" to selectedSport,
+                    "selected_type" to selectedType
+                )
+            )
+        }
+    }
     
     var showDialog by remember { mutableStateOf(false) }
     var showLeaveDialog by remember { mutableStateOf(false) }

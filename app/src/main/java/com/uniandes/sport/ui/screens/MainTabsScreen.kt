@@ -91,15 +91,19 @@ fun MainTabsScreen(
             }
             Screen.Comunidades -> {
                 val communitiesViewModel: FirestoreCommunitiesViewModel = viewModel()
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = viewModel()
                 CommunitiesMainScreen(
                     viewModel = communitiesViewModel,
+                    logViewModel = logViewModel,
                     onNavigate = onNavigate
                 )
             }
             Screen.Profesores -> {
                 val profesoresViewModel: FirestoreProfesoresViewModel = viewModel()
+                val logViewModel: com.uniandes.sport.viewmodels.log.FirebaseLogViewModel = viewModel()
                 ProfesoresScreen(
                     profesoresViewModel = profesoresViewModel,
+                    logViewModel = logViewModel,
                     onNavigate = onNavigate
                 )
             }

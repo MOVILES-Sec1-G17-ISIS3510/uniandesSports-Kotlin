@@ -36,6 +36,7 @@ import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -58,11 +59,13 @@ fun ProfesoresScreen(
     authViewModel: FirebaseAuthViewModel = viewModel(),
     bookClassViewModel: com.uniandes.sport.viewmodels.booking.BookClassViewModel = viewModel(),
     weatherViewModel: com.uniandes.sport.viewmodels.weather.WeatherViewModel = viewModel(),
+    logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
     val profesores by profesoresViewModel.profesores.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
+    var searchText by remember { mutableStateOf("") }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
 
@@ -118,10 +121,31 @@ fun ProfesoresScreen(
     // Bug fix #4: guard against timing race where userUid is still null when profesores loads from cache
     val isCurrentUserCoach = userUid != null && profesores.any { it.id == userUid }
 
-    val filteredProfesores = if (selectedFilter == "All") {
-        profesores
-    } else {
-        profesores.filter { it.deporte == selectedFilter }
+    val filteredProfesores = remember(profesores, selectedFilter, searchText) {
+        profesores.filter { prof ->
+            val matchesFilter = selectedFilter == "All" || prof.deporte == selectedFilter
+            val matchesSearch = searchText.isBlank() || 
+                                prof.nombre.contains(searchText, ignoreCase = true) || 
+                                prof.deporte.contains(searchText, ignoreCase = true) ||
+                                prof.especialidad.contains(searchText, ignoreCase = true)
+            matchesFilter && matchesSearch
+        }
+    }
+
+    // Effect to log search demand when the user stops typing (debounced log)
+    LaunchedEffect(searchText) {
+        if (searchText.length >= 3) {
+            delay(1000) // 1 second debounce
+            logViewModel.log(
+                screen = "ProfesoresScreen",
+                action = "SEARCH_PERFORMED",
+                params = mapOf(
+                    "query" to searchText,
+                    "results_found" to filteredProfesores.size.toString(),
+                    "category_filter" to selectedFilter
+                )
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -130,6 +154,31 @@ fun ProfesoresScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Search Bar (Demand Identification)
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { searchText = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Search sport or specialty (e.g. Yoga, Padel)", fontSize = 14.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
+                trailingIcon = {
+                    if (searchText.isNotEmpty()) {
+                        IconButton(onClick = { searchText = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
 
             // Sport Filter
             LazyRow(
@@ -141,7 +190,14 @@ fun ProfesoresScreen(
                     
                     FilterChip(
                         selected = isSelected,
-                        onClick = { selectedFilter = dep },
+                        onClick = { 
+                            selectedFilter = dep 
+                            logViewModel.log(
+                                screen = "ProfesoresScreen",
+                                action = "FILTER_SELECTED",
+                                params = mapOf("sport" to dep)
+                            )
+                        },
                         label = { Text(if (dep == "All") "All Coaches" else dep, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
                         leadingIcon = {
                             if (dep == "All") {
