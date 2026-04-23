@@ -51,6 +51,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -103,6 +104,7 @@ import com.uniandes.sport.models.PostComment
 import com.uniandes.sport.models.MessageStatus
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -860,7 +862,30 @@ private fun ChannelRoomScreen(
                 }
             }
 
-            OfflineSyncBanner(isConnected = rememberNetworkConnectivity())
+            val isConnected = rememberNetworkConnectivity()
+            var bannerState by remember {
+                mutableStateOf(
+                    if (isConnected) ConnectivityBannerState.HIDDEN else ConnectivityBannerState.OFFLINE
+                )
+            }
+            var previousConnectivity by remember { mutableStateOf(isConnected) }
+
+            LaunchedEffect(isConnected) {
+                if (!isConnected) {
+                    bannerState = ConnectivityBannerState.OFFLINE
+                } else if (!previousConnectivity && isConnected) {
+                    // Force a refresh to pull messages that may have arrived while offline.
+                    onLoadMessages()
+                    bannerState = ConnectivityBannerState.RECONNECTED
+                    delay(2400)
+                    if (isConnected) {
+                        bannerState = ConnectivityBannerState.HIDDEN
+                    }
+                }
+                previousConnectivity = isConnected
+            }
+
+            OfflineSyncBanner(state = bannerState)
         }
     }
 
@@ -882,6 +907,17 @@ private fun ChannelRoomScreen(
 private fun rememberNetworkConnectivity(): Boolean {
     val context = LocalContext.current
     var isConnected by remember(context) { mutableStateOf(isNetworkConnected(context)) }
+
+    // Some devices delay network callbacks; this keeps UI state in sync while the screen is open.
+    LaunchedEffect(context) {
+        while (true) {
+            val current = isNetworkConnected(context)
+            if (current != isConnected) {
+                isConnected = current
+            }
+            delay(1000)
+        }
+    }
 
     DisposableEffect(context) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -934,42 +970,83 @@ private fun isNetworkConnected(context: Context): Boolean {
 }
 
 @Composable
-private fun OfflineSyncBanner(isConnected: Boolean) {
-    if (isConnected) return
+private fun OfflineSyncBanner(state: ConnectivityBannerState) {
+    if (state == ConnectivityBannerState.HIDDEN) return
+
+    val containerColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFFFFF3CD)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.surface
+    }
+    val borderColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFFFFC107)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+    }
+    val contentColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFF8A6D00)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.onPrimaryContainer
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.onSurface
+    }
+    val title = when (state) {
+        ConnectivityBannerState.OFFLINE -> "Trying to reconnect"
+        ConnectivityBannerState.RECONNECTED -> "You're back online"
+        ConnectivityBannerState.HIDDEN -> ""
+    }
+    val body = when (state) {
+        ConnectivityBannerState.OFFLINE -> "No internet right now. You can keep sending messages and we'll sync them as soon as the connection is back."
+        ConnectivityBannerState.RECONNECTED -> "Connection restored. Pending messages are being synchronized."
+        ConnectivityBannerState.HIDDEN -> ""
+    }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 4.dp),
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            if (state == ConnectivityBannerState.OFFLINE) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = contentColor
+                )
+            } else {
+                Icon(
+                    Icons.Default.DoneAll,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Sin conexión estable",
+                    text = title,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    color = contentColor
                 )
                 Text(
-                    text = "Estamos intentando reconectarnos para sincronizar los mensajes. Puedes seguir enviando mensajes; se guardarán hasta que vuelva la red.",
+                    text = body,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                    color = contentColor.copy(alpha = 0.85f)
                 )
             }
         }
     }
+}
+
+private enum class ConnectivityBannerState {
+    OFFLINE,
+    RECONNECTED,
+    HIDDEN
 }
 
 @Composable
