@@ -37,6 +37,9 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,6 +94,7 @@ import com.uniandes.sport.models.Community
 import com.uniandes.sport.models.CommunityMember
 import com.uniandes.sport.models.Post
 import com.uniandes.sport.models.PostComment
+import com.uniandes.sport.models.MessageStatus
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
 import java.text.SimpleDateFormat
@@ -795,6 +799,18 @@ private fun ChannelRoomScreen(
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                when (msg.status) {
+                                    MessageStatus.SENDING -> {
+                                        Icon(Icons.Default.Schedule, contentDescription = "Sending", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    MessageStatus.SENT -> {
+                                        Icon(Icons.Default.DoneAll, contentDescription = "Sent", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    MessageStatus.ERROR -> {
+                                        Icon(Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                             Text(

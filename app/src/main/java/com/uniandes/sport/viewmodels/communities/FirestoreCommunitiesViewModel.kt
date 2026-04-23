@@ -10,8 +10,15 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.ktx.messaging
-import com.uniandes.sport.data.local.CachedMemberEntity
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.uniandes.sport.workers.MessageSyncWorker
 import com.uniandes.sport.data.local.CachedMembershipEntity
+import com.uniandes.sport.models.MessageStatus
+import com.uniandes.sport.data.local.PendingMessageEntity
+import java.util.UUID
 import com.uniandes.sport.data.local.CommunitiesCacheDatabase
 import com.uniandes.sport.data.local.toEntity
 import com.uniandes.sport.data.local.toModel
@@ -491,8 +498,23 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                             m?.copy(id = doc.id)
                         }.reversed()
 
-                        // Preserve already loaded older pages and update the latest window in place.
-                        val merged = (_channelMessages.value + latestMessages)
+                        // 1. Filter out any optimistic messages that have a matching server-side message
+                        // We identify matches by (authorId + content + createdAt)
+                        val serverMessagesSet = latestMessages.map {
+                            "${it.authorId}_${it.content}_${it.createdAt}"
+                        }.toSet()
+
+                        val filteredCurrent = _channelMessages.value.filter { msg ->
+                            if (msg.status == MessageStatus.SENDING) {
+                                val identity = "${msg.authorId}_${msg.content}_${msg.createdAt}"
+                                !serverMessagesSet.contains(identity)
+                            } else {
+                                true
+                            }
+                        }
+
+                        // 2. Merge with the latest server messages
+                        val merged = (filteredCurrent + latestMessages)
                             .distinctBy { it.id }
                             .sortedBy { it.createdAt }
 
@@ -569,40 +591,51 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     ) {
         viewModelScope.launch {
             try {
-                val channelRef = db.collection("communities").document(communityId)
-                    .collection("channels").document(channelId)
-
-                val messagePayload = hashMapOf(
-                    "authorId" to authorId,
-                    "authorName" to authorName,
-                    "content" to content.trim(),
-                    "createdAt" to System.currentTimeMillis(),
-                    "reactions" to emptyMap<String, Long>()
-                )
-
-                var newMessageId = ""
-                db.runTransaction { transaction ->
-                    val channelSnapshot = transaction.get(channelRef)
-                    val messageRef = channelRef.collection("messages").document()
-                    newMessageId = messageRef.id
-                    transaction.set(messageRef, messagePayload)
-                    val currentCount = channelSnapshot.getLong("mensajes") ?: 0L
-                    transaction.update(channelRef, "mensajes", currentCount + 1L)
-                    null
-                }.await()
-
-                // Write to Room immediately
+                val localId = UUID.randomUUID().toString()
                 val now = System.currentTimeMillis()
-                val newMsg = ChannelMessage(
-                    id = newMessageId, authorId = authorId, authorName = authorName,
-                    content = content.trim(), createdAt = now
-                )
-                cacheDao.upsertChannelMessages(listOf(newMsg.toEntity(communityId, channelId, now)))
 
-                loadCommunityDetails(communityId)
+                val newMsg = ChannelMessage(
+                    id = localId,
+                    authorId = authorId,
+                    authorName = authorName,
+                    content = content.trim(),
+                    createdAt = now,
+                    status = MessageStatus.SENDING
+                )
+
+                // 1. Update UI immediately
+                _channelMessages.value = (_channelMessages.value + newMsg)
+                    .distinctBy { it.id }
+                    .sortedBy { it.createdAt }
+
+                // 2. Save to cache and pending queue
+                cacheDao.upsertChannelMessages(listOf(newMsg.toEntity(communityId, channelId, now)))
+                cacheDao.upsertPendingMessage(
+                    PendingMessageEntity(
+                        localId = localId,
+                        communityId = communityId,
+                        channelId = channelId,
+                        authorId = authorId,
+                        authorName = authorName,
+                        content = content.trim(),
+                        createdAt = now
+                    )
+                )
+
+                // 3. Schedule background sync
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+
+                val syncRequest = OneTimeWorkRequestBuilder<MessageSyncWorker>()
+                    .setConstraints(constraints)
+                    .build()
+
+                WorkManager.getInstance(getApplication<Application>()).enqueue(syncRequest)
+
                 onSuccess()
             } catch (e: Exception) {
-                Log.e("FirestoreCommunities", "Error sending channel message", e)
+                Log.e("FirestoreCommunities", "Error sending channel message optimistically", e)
                 onFailure(e)
             }
         }

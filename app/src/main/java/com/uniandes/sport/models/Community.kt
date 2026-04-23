@@ -37,6 +37,12 @@ data class CommunityMember(
     val joinedAt: Long = 0L
 )
 
+enum class MessageStatus {
+    SENDING,
+    SENT,
+    ERROR
+}
+
 data class ChannelMessage(
     val id: String = "",
     val authorId: String = "",
@@ -44,7 +50,8 @@ data class ChannelMessage(
     val content: String = "",
     val createdAt: Long = 0L,
     val reactions: Map<String, Long> = emptyMap(),
-    val userReactions: Map<String, String> = emptyMap()
+    val userReactions: Map<String, String> = emptyMap(),
+    val status: MessageStatus = MessageStatus.SENT
 )
 
 data class PostComment(
