@@ -26,7 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Campaign
@@ -35,7 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,12 +51,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -234,7 +232,7 @@ fun CommunityDetailModal(
                             onClick = onDismiss,
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Back to communities")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to communities")
                         }
                     }
                 )
@@ -307,20 +305,10 @@ fun CommunityDetailModal(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = CircleShape
             ) {
-                TabRow(
+                PrimaryTabRow(
                     selectedTabIndex = selectedTabIndex,
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.primary,
-                    divider = {},
-                    indicator = { tabPositions ->
-                        if (selectedTabIndex < tabPositions.size) {
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                                color = MaterialTheme.colorScheme.primary,
-                                height = 2.dp
-                            )
-                        }
-                    }
                 ) {
                     tabs.forEachIndexed { index, tab ->
                         Tab(
@@ -668,7 +656,7 @@ private fun ChannelRoomScreen(
                         onClick = onBack,
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -716,7 +704,7 @@ private fun ChannelRoomScreen(
                         enabled = currentUserId != null && messageInput.isNotBlank()
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Send,
+                            imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
                             tint = if (messageInput.isNotBlank()) MaterialTheme.colorScheme.primary
                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
@@ -1066,7 +1054,7 @@ private fun FeedPostItem(
                                 enabled = canComment && input.isNotBlank()
                             ) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.Send,
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Send",
                                     tint = if (input.isNotBlank()) MaterialTheme.colorScheme.primary
                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
@@ -1128,7 +1116,7 @@ private fun InlinePostComposer(
                             enabled = content.isNotBlank()
                         ) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Send,
+                                imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Publish post",
                                 tint = MaterialTheme.colorScheme.primary
                             )
