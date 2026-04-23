@@ -1,5 +1,10 @@
 package com.uniandes.sport.ui.screens.tabs.communities
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -65,6 +70,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -730,114 +736,120 @@ private fun ChannelRoomScreen(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            state = listState,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 2.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 104.dp, top = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 2.dp)
         ) {
-            if (messages.isEmpty()) {
-                item {
-                    Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                items(messages, key = { it.id }) { msg ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .pointerInput(msg.id) {
-                                detectTapGestures(
-                                    onLongPress = {
-                                        reactionTarget = msg
-                                    }
-                                )
-                            }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Box(
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp, top = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (messages.isEmpty()) {
+                    item {
+                        Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    items(messages, key = { it.id }) { msg ->
+                        Row(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .pointerInput(msg.id) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            reactionTarget = msg
+                                        }
+                                    )
+                                }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text(
-                                text = msg.authorName.ifBlank { currentUserDisplayName }.take(1).uppercase(),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Text(
-                                    text = msg.authorName.ifBlank { currentUserDisplayName },
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = msg.authorName.ifBlank { currentUserDisplayName }.take(1).uppercase(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                if (msg.authorId == community.ownerId) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        com.uniandes.sport.ui.theme.CrownIcon,
-                                        contentDescription = "Admin",
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                }
-                                val ts = formatSmartTimestamp(msg.createdAt)
-                                if (ts.isNotBlank()) {
-                                    Text(
-                                        text = "  •  $ts",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                when (msg.status) {
-                                    MessageStatus.SENDING -> {
-                                        Icon(Icons.Default.Schedule, contentDescription = "Sending", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    MessageStatus.SENT -> {
-                                        Icon(Icons.Default.DoneAll, contentDescription = "Sent", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                    MessageStatus.ERROR -> {
-                                        Icon(Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
                             }
-                            Text(
-                                text = msg.content,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
 
-                            if (msg.reactions.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    msg.reactions.entries.sortedBy { it.key }.forEach { reaction ->
-                                        val count = reaction.value
-                                        if (count > 0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = MaterialTheme.colorScheme.surfaceVariant
-                                            ) {
-                                                Text(
-                                                    text = "${reaction.key} ${count}",
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                                    fontSize = 11.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = msg.authorName.ifBlank { currentUserDisplayName },
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (msg.authorId == community.ownerId) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            com.uniandes.sport.ui.theme.CrownIcon,
+                                            contentDescription = "Admin",
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                    val ts = formatSmartTimestamp(msg.createdAt)
+                                    if (ts.isNotBlank()) {
+                                        Text(
+                                            text = "  •  $ts",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    when (msg.status) {
+                                        MessageStatus.SENDING -> {
+                                            Icon(Icons.Default.Schedule, contentDescription = "Sending", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        MessageStatus.SENT -> {
+                                            Icon(Icons.Default.DoneAll, contentDescription = "Sent", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        MessageStatus.ERROR -> {
+                                            Icon(Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = msg.content,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+
+                                if (msg.reactions.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.padding(top = 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        msg.reactions.entries.sortedBy { it.key }.forEach { reaction ->
+                                            val count = reaction.value
+                                            if (count > 0) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                                ) {
+                                                    Text(
+                                                        text = "${reaction.key} ${count}",
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -847,6 +859,8 @@ private fun ChannelRoomScreen(
                     }
                 }
             }
+
+            OfflineSyncBanner(isConnected = rememberNetworkConnectivity())
         }
     }
 
@@ -861,6 +875,100 @@ private fun ChannelRoomScreen(
                 reactionTarget = null
             }
         )
+    }
+}
+
+@Composable
+private fun rememberNetworkConnectivity(): Boolean {
+    val context = LocalContext.current
+    var isConnected by remember(context) { mutableStateOf(isNetworkConnected(context)) }
+
+    DisposableEffect(context) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        var callback: ConnectivityManager.NetworkCallback? = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onLost(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    isConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                }
+            }
+
+            connectivityManager.registerDefaultNetworkCallback(callback)
+        } else {
+            isConnected = isNetworkConnected(context)
+        }
+
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && callback != null) {
+                connectivityManager.unregisterNetworkCallback(callback)
+            }
+        }
+    }
+
+    return isConnected
+}
+
+private fun isNetworkConnected(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } else {
+        @Suppress("DEPRECATION")
+        val networkInfo = connectivityManager.activeNetworkInfo
+        networkInfo?.isConnected == true
+    }
+}
+
+@Composable
+private fun OfflineSyncBanner(isConnected: Boolean) {
+    if (isConnected) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Sin conexión estable",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = "Estamos intentando reconectarnos para sincronizar los mensajes. Puedes seguir enviando mensajes; se guardarán hasta que vuelva la red.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                )
+            }
+        }
     }
 }
 
