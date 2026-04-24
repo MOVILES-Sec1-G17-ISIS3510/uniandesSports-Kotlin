@@ -1,5 +1,10 @@
 package com.uniandes.sport.ui.screens.tabs.communities
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -37,12 +42,16 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,6 +69,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -89,8 +99,10 @@ import com.uniandes.sport.models.Community
 import com.uniandes.sport.models.CommunityMember
 import com.uniandes.sport.models.Post
 import com.uniandes.sport.models.PostComment
+import com.uniandes.sport.models.MessageStatus
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -714,102 +726,120 @@ private fun ChannelRoomScreen(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            state = listState,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 2.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 104.dp, top = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 2.dp)
         ) {
-            if (messages.isEmpty()) {
-                item {
-                    Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                items(messages, key = { it.id }) { msg ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .pointerInput(msg.id) {
-                                detectTapGestures(
-                                    onLongPress = {
-                                        reactionTarget = msg
-                                    }
-                                )
-                            }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Box(
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp, top = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (messages.isEmpty()) {
+                    item {
+                        Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    items(messages, key = { it.id }) { msg ->
+                        Row(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .pointerInput(msg.id) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            reactionTarget = msg
+                                        }
+                                    )
+                                }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text(
-                                text = msg.authorName.ifBlank { currentUserDisplayName }.take(1).uppercase(),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Text(
-                                    text = msg.authorName.ifBlank { currentUserDisplayName },
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = msg.authorName.ifBlank { currentUserDisplayName }.take(1).uppercase(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                if (msg.authorId == community.ownerId) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        com.uniandes.sport.ui.theme.CrownIcon,
-                                        contentDescription = "Admin",
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                }
-                                val ts = formatSmartTimestamp(msg.createdAt)
-                                if (ts.isNotBlank()) {
-                                    Text(
-                                        text = "  •  $ts",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
                             }
-                            Text(
-                                text = msg.content,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
 
-                            if (msg.reactions.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    msg.reactions.entries.sortedBy { it.key }.forEach { reaction ->
-                                        val count = reaction.value
-                                        if (count > 0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = MaterialTheme.colorScheme.surfaceVariant
-                                            ) {
-                                                Text(
-                                                    text = "${reaction.key} ${count}",
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                                    fontSize = 11.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = msg.authorName.ifBlank { currentUserDisplayName },
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (msg.authorId == community.ownerId) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            com.uniandes.sport.ui.theme.CrownIcon,
+                                            contentDescription = "Admin",
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                    val ts = formatSmartTimestamp(msg.createdAt)
+                                    if (ts.isNotBlank()) {
+                                        Text(
+                                            text = "  •  $ts",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    when (msg.status) {
+                                        MessageStatus.SENDING -> {
+                                            Icon(Icons.Default.Schedule, contentDescription = "Sending", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        MessageStatus.SENT -> {
+                                            Icon(Icons.Default.DoneAll, contentDescription = "Sent", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        MessageStatus.ERROR -> {
+                                            Icon(Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = msg.content,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+
+                                if (msg.reactions.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.padding(top = 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        msg.reactions.entries.sortedBy { it.key }.forEach { reaction ->
+                                            val count = reaction.value
+                                            if (count > 0) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                                ) {
+                                                    Text(
+                                                        text = "${reaction.key} ${count}",
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -819,6 +849,31 @@ private fun ChannelRoomScreen(
                     }
                 }
             }
+
+            val isConnected = rememberNetworkConnectivity()
+            var bannerState by remember {
+                mutableStateOf(
+                    if (isConnected) ConnectivityBannerState.HIDDEN else ConnectivityBannerState.OFFLINE
+                )
+            }
+            var previousConnectivity by remember { mutableStateOf(isConnected) }
+
+            LaunchedEffect(isConnected) {
+                if (!isConnected) {
+                    bannerState = ConnectivityBannerState.OFFLINE
+                } else if (!previousConnectivity && isConnected) {
+                    // Force a refresh to pull messages that may have arrived while offline.
+                    onLoadMessages()
+                    bannerState = ConnectivityBannerState.RECONNECTED
+                    delay(2400)
+                    if (isConnected) {
+                        bannerState = ConnectivityBannerState.HIDDEN
+                    }
+                }
+                previousConnectivity = isConnected
+            }
+
+            OfflineSyncBanner(state = bannerState)
         }
     }
 
@@ -834,6 +889,152 @@ private fun ChannelRoomScreen(
             }
         )
     }
+}
+
+@Composable
+private fun rememberNetworkConnectivity(): Boolean {
+    val context = LocalContext.current
+    var isConnected by remember(context) { mutableStateOf(isNetworkConnected(context)) }
+
+    // Some devices delay network callbacks; this keeps UI state in sync while the screen is open.
+    LaunchedEffect(context) {
+        while (true) {
+            val current = isNetworkConnected(context)
+            if (current != isConnected) {
+                isConnected = current
+            }
+            delay(1000)
+        }
+    }
+
+    DisposableEffect(context) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        var callback: ConnectivityManager.NetworkCallback? = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onLost(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    isConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                }
+            }
+
+            connectivityManager.registerDefaultNetworkCallback(callback)
+        } else {
+            isConnected = isNetworkConnected(context)
+        }
+
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && callback != null) {
+                connectivityManager.unregisterNetworkCallback(callback)
+            }
+        }
+    }
+
+    return isConnected
+}
+
+private fun isNetworkConnected(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } else {
+        @Suppress("DEPRECATION")
+        val networkInfo = connectivityManager.activeNetworkInfo
+        networkInfo?.isConnected == true
+    }
+}
+
+@Composable
+private fun OfflineSyncBanner(state: ConnectivityBannerState) {
+    if (state == ConnectivityBannerState.HIDDEN) return
+
+    val containerColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFFFFF3CD)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.surface
+    }
+    val borderColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFFFFC107)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+    }
+    val contentColor = when (state) {
+        ConnectivityBannerState.OFFLINE -> Color(0xFF8A6D00)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.onPrimaryContainer
+        ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.onSurface
+    }
+    val title = when (state) {
+        ConnectivityBannerState.OFFLINE -> "Trying to reconnect"
+        ConnectivityBannerState.RECONNECTED -> "You're back online"
+        ConnectivityBannerState.HIDDEN -> ""
+    }
+    val body = when (state) {
+        ConnectivityBannerState.OFFLINE -> "No internet right now. You can keep sending messages and we'll sync them as soon as the connection is back."
+        ConnectivityBannerState.RECONNECTED -> "Connection restored. Pending messages are being synchronized."
+        ConnectivityBannerState.HIDDEN -> ""
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (state == ConnectivityBannerState.OFFLINE) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = contentColor
+                )
+            } else {
+                Icon(
+                    Icons.Default.DoneAll,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor
+                )
+                Text(
+                    text = body,
+                    fontSize = 11.sp,
+                    color = contentColor.copy(alpha = 0.85f)
+                )
+            }
+        }
+    }
+}
+
+private enum class ConnectivityBannerState {
+    OFFLINE,
+    RECONNECTED,
+    HIDDEN
 }
 
 @Composable

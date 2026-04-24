@@ -88,4 +88,21 @@ interface CommunitiesCacheDao {
 
     @Query("DELETE FROM cached_channel_messages WHERE communityId = :communityId AND channelId = :channelId")
     suspend fun clearChannelMessages(communityId: String, channelId: String)
+
+    @Query("UPDATE cached_channel_messages SET status = :status WHERE communityId = :communityId AND channelId = :channelId AND messageId = :messageId")
+    suspend fun updateMessageStatus(communityId: String, channelId: String, messageId: String, status: String)
+
+    @Query("UPDATE cached_channel_messages SET messageId = :newId WHERE communityId = :communityId AND channelId = :channelId AND messageId = :oldId")
+    suspend fun updateMessageId(communityId: String, channelId: String, oldId: String, newId: String)
+
+    // ─── Pending Messages ──────────────────────────────────────────────────────
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPendingMessage(message: PendingMessageEntity)
+
+    @Query("DELETE FROM pending_messages WHERE localId = :localId")
+    suspend fun deletePendingMessage(localId: String)
+
+    @Query("SELECT * FROM pending_messages")
+    suspend fun getPendingMessages(): List<PendingMessageEntity>
 }

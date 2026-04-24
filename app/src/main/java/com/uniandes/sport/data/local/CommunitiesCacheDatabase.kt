@@ -13,9 +13,10 @@ import androidx.room.RoomDatabase
         CachedMemberEntity::class,
         CachedPostCommentEntity::class,
         CachedMembershipEntity::class,
-        CachedChannelMessageEntity::class
+        CachedChannelMessageEntity::class,
+        PendingMessageEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class CommunitiesCacheDatabase : RoomDatabase() {

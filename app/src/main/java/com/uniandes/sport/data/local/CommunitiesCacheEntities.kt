@@ -6,6 +6,7 @@ import com.uniandes.sport.models.Channel
 import com.uniandes.sport.models.ChannelMessage
 import com.uniandes.sport.models.Community
 import com.uniandes.sport.models.CommunityMember
+import com.uniandes.sport.models.MessageStatus
 import com.uniandes.sport.models.Post
 import com.uniandes.sport.models.PostComment
 import org.json.JSONObject
@@ -135,8 +136,22 @@ data class CachedChannelMessageEntity(
     val createdAt: Long,
     val reactionsJson: String,
     val userReactionsJson: String,
+    val status: String,
     val cachedAt: Long
 )
+
+@Entity(tableName = "pending_messages")
+data class PendingMessageEntity(
+    @PrimaryKey val localId: String,
+    val communityId: String,
+    val channelId: String,
+    val authorId: String,
+    val authorName: String,
+    val content: String,
+    val createdAt: Long,
+    val retryCount: Int = 0
+)
+
 
 fun ChannelMessage.toEntity(
     communityId: String,
@@ -159,6 +174,7 @@ fun ChannelMessage.toEntity(
         createdAt = createdAt,
         reactionsJson = reactionsObject.toString(),
         userReactionsJson = userReactionsObject.toString(),
+        status = status.name,
         cachedAt = now
     )
 }
@@ -179,6 +195,7 @@ fun CachedChannelMessageEntity.toModel(): ChannelMessage {
         content = content,
         createdAt = createdAt,
         reactions = reactions,
-        userReactions = userReactions
+        userReactions = userReactions,
+        status = MessageStatus.valueOf(status)
     )
 }
