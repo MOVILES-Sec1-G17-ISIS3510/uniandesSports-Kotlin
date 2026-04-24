@@ -31,7 +31,7 @@ abstract class CommunitiesCacheDatabase : RoomDatabase() {
                     context.applicationContext,
                     CommunitiesCacheDatabase::class.java,
                     "communities_cache.db"
-                ).fallbackToDestructiveMigration().build()
+                ).fallbackToDestructiveMigration(dropAllTables = true).build()
                 INSTANCE = instance
                 instance
             }

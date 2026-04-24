@@ -458,6 +458,11 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 activeCommunityId = communityId
                 activeChannelId = channelId
 
+                // Clear the previous conversation immediately so a different community/channel never shows stale messages.
+                _channelMessages.value = emptyList()
+                _hasMoreOldChannelMessages.value = false
+                _isLoadingOlderChannelMessages.value = false
+
                 if (isDifferentChannel) {
                     oldestLoadedMessageSnapshot = null
                 }
