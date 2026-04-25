@@ -32,6 +32,11 @@ import androidx.compose.ui.window.DialogProperties
 import android.content.Intent
 import android.content.ContentUris
 import android.content.pm.PackageManager
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,7 +44,9 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -54,6 +61,7 @@ import com.uniandes.sport.patterns.event.PhoneCalendarEvent
 import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.resume
 import com.uniandes.sport.ui.components.OptionSelectionRow
 import com.uniandes.sport.ui.components.SportIconPicker
 import com.uniandes.sport.ui.components.getSportAccentColor
@@ -111,6 +119,15 @@ fun CreateEventDialog(
     val coroutineScope = rememberCoroutineScope()
 
     val context = LocalContext.current
+    val isConnected = rememberNetworkConnectivity()
+    var wasQueuedOffline by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isConnected) {
+        // Specific location must stay disabled while offline.
+        if (!isConnected && isLocationSpecific) {
+            isLocationSpecific = false
+        }
+    }
 
     fun launchCalendarIntent(title: String, location: String, description: String, date: Date) {
         val intent = Intent(Intent.ACTION_INSERT).apply {
@@ -461,12 +478,42 @@ fun CreateEventDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .verticalScroll(scrollState)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (!isConnected && !isCreatedSuccessfully) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                            Text(
+                                text = "No internet connection. Open Match will be queued and created when internet is back.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 24.dp,
+                            end = 24.dp,
+                            bottom = 24.dp,
+                            top = if (!isConnected && !isCreatedSuccessfully) 72.dp else 24.dp
+                        )
+                        .verticalScroll(scrollState)
+                ) {
                 if (!isCreatedSuccessfully) {
                 // Header
                 Row(
@@ -818,15 +865,35 @@ fun CreateEventDialog(
                         Switch(
                             checked = isLocationSpecific,
                             onCheckedChange = { isLocationSpecific = it },
+                            enabled = isConnected,
                             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                         )
                     }
+                }
+
+                if (!isConnected) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Specific location is disabled while you are offline.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 
                 if (isLocationSpecific) {
                     Spacer(modifier = Modifier.height(12.dp))
                     if (modality.lowercase() == "training") {
-                        Box(modifier = Modifier.fillMaxWidth().clickable { showLocationPicker = true }) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (isConnected) {
+                                        showLocationPicker = true
+                                    } else {
+                                        errorMessage = "No internet connection. The map is unavailable offline."
+                                    }
+                                }
+                        ) {
                             OutlinedTextField(
                                 value = location,
                                 onValueChange = { },
@@ -855,7 +922,16 @@ fun CreateEventDialog(
                             placeholder = { Text("Where is it?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                             leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                             trailingIcon = {
-                                IconButton(onClick = { showLocationPicker = true }) {
+                                IconButton(
+                                    onClick = {
+                                        if (isConnected) {
+                                            showLocationPicker = true
+                                        } else {
+                                            errorMessage = "No internet connection. The map is unavailable offline."
+                                        }
+                                    },
+                                    enabled = isConnected
+                                ) {
                                     Icon(Icons.Default.Map, contentDescription = "Pick on map", tint = MaterialTheme.colorScheme.primary)
                                 }
                             },
@@ -867,6 +943,15 @@ fun CreateEventDialog(
                                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 focusedTextColor = MaterialTheme.colorScheme.onSurface
                             )
+                        )
+                    }
+
+                    if (!isConnected) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Offline: map access is disabled. You can still create the Open Match and we will sync it once internet is back.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -1072,6 +1157,7 @@ fun CreateEventDialog(
                         
                         errorMessage = null
                         isLoading = true
+                        wasQueuedOffline = !isConnected
 
                         onFinish(
                             finalSport,
@@ -1137,7 +1223,7 @@ fun CreateEventDialog(
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     Text(
-                        "Event Created!",
+                        if (wasQueuedOffline) "Open Match queued" else "Event Created!",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface
@@ -1146,7 +1232,10 @@ fun CreateEventDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        "Your event is ready. Don't forget to add it to your calendar so you don't miss it!",
+                        if (wasQueuedOffline)
+                            "You were offline. Your Open Match is pending and will be created automatically when internet returns. You will receive a notification."
+                        else
+                            "Your event is ready. Don't forget to add it to your calendar so you don't miss it!",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1187,6 +1276,7 @@ fun CreateEventDialog(
                     ) {
                         Text("Done", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
+                }
                 }
             }
         }
@@ -1554,7 +1644,7 @@ private fun LocationPickerDialog(
                             val target = cameraPositionState.position.target
                             coroutineScope.launch(Dispatchers.IO) {
                                 try {
-                                    val addresses = geocoder.getFromLocation(target.latitude, target.longitude, 1)
+                                    val addresses = reverseGeocode(geocoder, target.latitude, target.longitude)
                                     val addressName = if (!addresses.isNullOrEmpty()) {
                                         val address = addresses[0]
                                         val parts = mutableListOf<String>()
@@ -1590,6 +1680,33 @@ private fun LocationPickerDialog(
     }
 }
 
+private suspend fun reverseGeocode(
+    geocoder: Geocoder,
+    latitude: Double,
+    longitude: Double
+): List<android.location.Address> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        suspendCancellableCoroutine { continuation ->
+            geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<android.location.Address>) {
+                    if (continuation.isActive) {
+                        continuation.resume(addresses)
+                    }
+                }
+
+                override fun onError(errorMessage: String?) {
+                    if (continuation.isActive) {
+                        continuation.resume(emptyList())
+                    }
+                }
+            })
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        geocoder.getFromLocation(latitude, longitude, 1) ?: emptyList()
+    }
+}
+
 
 @Composable
 fun FormLabel(text: String) {
@@ -1600,5 +1717,71 @@ fun FormLabel(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+@Composable
+private fun rememberNetworkConnectivity(): Boolean {
+    val context = LocalContext.current
+    var isConnected by remember(context) { mutableStateOf(isNetworkConnected(context)) }
+
+    LaunchedEffect(context) {
+        while (true) {
+            val current = isNetworkConnected(context)
+            if (current != isConnected) {
+                isConnected = current
+            }
+            delay(1000)
+        }
+    }
+
+    DisposableEffect(context) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        var callback: ConnectivityManager.NetworkCallback? = null
+
+        try {
+            callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onLost(network: Network) {
+                    isConnected = isNetworkConnected(context)
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    isConnected = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                }
+            }
+
+            connectivityManager.registerDefaultNetworkCallback(callback)
+            isConnected = isNetworkConnected(context)
+        } catch (_: Exception) {
+            isConnected = isNetworkConnected(context)
+        }
+
+        onDispose {
+            try {
+                callback?.let { connectivityManager.unregisterNetworkCallback(it) }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    return isConnected
+}
+
+private fun isNetworkConnected(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } else {
+        @Suppress("DEPRECATION")
+        connectivityManager.activeNetworkInfo?.isConnected == true
+    }
 }
 

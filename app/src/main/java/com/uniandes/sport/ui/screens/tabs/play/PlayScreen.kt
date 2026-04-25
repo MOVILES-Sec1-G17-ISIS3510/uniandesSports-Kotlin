@@ -88,6 +88,7 @@ fun PlayScreen(
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var isPullRefreshing by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
+    var hasTriedDirectOpenById by remember(openEventId) { mutableStateOf(false) }
     
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     var trackEvent by remember { mutableStateOf<Event?>(null) }
@@ -132,8 +133,14 @@ fun PlayScreen(
         }
     }
 
-    val joinedEvents = remember(events, joinedEventIds, searchText) {
-        events.filter { joinedEventIds.contains(it.id) }
+    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val isInMySchedule: (Event) -> Boolean = { event ->
+        val isCreator = !currentUserId.isNullOrBlank() && event.createdBy == currentUserId
+        isCreator || joinedEventIds.contains(event.id)
+    }
+
+    val joinedEvents = remember(events, joinedEventIds, searchText, currentUserId) {
+        events.filter { isInMySchedule(it) }
             .filter { event ->
                 searchText.isBlank() || 
                 event.title.lowercase().contains(searchText.lowercase()) ||
@@ -142,18 +149,17 @@ fun PlayScreen(
             }
             .sortedBy { it.scheduledAt }
     }
-    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
-        finishedEvents.filter { joinedEventIds.contains(it.id) }
+    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds, currentUserId) {
+        finishedEvents.filter { isInMySchedule(it) }
     }
     val historyEvents = remember(joinedEvents, joinedFinishedEvents) {
         (joinedEvents + joinedFinishedEvents).distinctBy { it.id }
     }
-    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
     val myAppEvents = remember(events, joinedEventIds, currentUserId) {
-        events.filter { it.createdBy == currentUserId || joinedEventIds.contains(it.id) }
+        events.filter { isInMySchedule(it) }
     }
-    val otherEvents = remember(events, joinedEventIds, searchText) {
-        events.filterNot { joinedEventIds.contains(it.id) }
+    val otherEvents = remember(events, joinedEventIds, searchText, currentUserId) {
+        events.filterNot { isInMySchedule(it) }
             .filter { event ->
                 searchText.isBlank() || 
                 event.title.lowercase().contains(searchText.lowercase()) ||
@@ -221,16 +227,30 @@ fun PlayScreen(
         if (!openEventId.isNullOrBlank() && selectedSports.isNotEmpty()) {
             viewModel.clearSportFilters()
         }
+        if (!openEventId.isNullOrBlank()) {
+            // Bypass cache TTL to surface the just-synced event immediately.
+            viewModel.refreshEvents()
+        }
     }
 
     LaunchedEffect(openEventId, events) {
         val pendingId = openEventId ?: return@LaunchedEffect
-        if (events.isEmpty()) return@LaunchedEffect
-
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
             onOpenEventConsumed()
+            hasTriedDirectOpenById = false
+        } else if (!hasTriedDirectOpenById) {
+            hasTriedDirectOpenById = true
+            viewModel.fetchEventByIdOnce(
+                eventId = pendingId,
+                onSuccess = { directEvent ->
+                    if (directEvent != null) {
+                        selectedEventUIModel = EventUIAdapter.toUIModel(directEvent)
+                        onOpenEventConsumed()
+                    }
+                }
+            )
         }
     }
 
