@@ -3,7 +3,9 @@ package com.uniandes.sport.workers
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
@@ -12,9 +14,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.uniandes.sport.MainActivity
 import com.uniandes.sport.R
 import com.uniandes.sport.data.local.PendingOpenMatchStore
 import com.uniandes.sport.patterns.event.EventFactory
@@ -77,7 +79,10 @@ class OpenMatchSyncWorker(
 
                 batch.commit().await()
                 PendingOpenMatchStore.remove(applicationContext, pending.localId)
-                notifyOpenMatchCreated(pending.title)
+                notifyOpenMatchCreated(
+                    title = pending.title,
+                    eventId = pending.localId
+                )
 
                 Log.d("OpenMatchSyncWorker", "Pending open match synced successfully: ${pending.localId}")
             } catch (e: Exception) {
@@ -89,7 +94,7 @@ class OpenMatchSyncWorker(
         return if (allSuccessful) Result.success() else Result.retry()
     }
 
-    private fun notifyOpenMatchCreated(title: String) {
+    private fun notifyOpenMatchCreated(title: String, eventId: String) {
         createNotificationChannelIfNeeded()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -103,12 +108,26 @@ class OpenMatchSyncWorker(
             }
         }
 
+        val openAppIntent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_NOTIFICATION_TYPE, "open_match")
+            putExtra(MainActivity.EXTRA_EVENT_ID, eventId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext,
+            eventId.hashCode(),
+            openAppIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val notification = NotificationCompat.Builder(applicationContext, OPEN_MATCH_SYNC_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Open Match creado")
-            .setContentText("\"$title\" se creo cuando volvio tu conexion.")
+            .setContentTitle("Open Match created")
+            .setContentText("\"$title\" was created when your internet came back.")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         NotificationManagerCompat.from(applicationContext).notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
@@ -126,7 +145,7 @@ class OpenMatchSyncWorker(
             "Open Match Sync",
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Notificaciones cuando un Open Match pendiente se sincroniza"
+            description = "Notifications when a pending Open Match is synchronized"
         }
 
         manager.createNotificationChannel(channel)

@@ -119,6 +119,13 @@ fun CreateEventDialog(
     val isConnected = rememberNetworkConnectivity()
     var wasQueuedOffline by remember { mutableStateOf(false) }
 
+    LaunchedEffect(isConnected) {
+        // Specific location must stay disabled while offline.
+        if (!isConnected && isLocationSpecific) {
+            isLocationSpecific = false
+        }
+    }
+
     fun launchCalendarIntent(title: String, location: String, description: String, date: Date) {
         val intent = Intent(Intent.ACTION_INSERT).apply {
             data = CalendarContract.Events.CONTENT_URI
@@ -825,9 +832,19 @@ fun CreateEventDialog(
                         Switch(
                             checked = isLocationSpecific,
                             onCheckedChange = { isLocationSpecific = it },
+                            enabled = isConnected,
                             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                         )
                     }
+                }
+
+                if (!isConnected) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Specific location is disabled while you are offline.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 
                 if (isLocationSpecific) {
@@ -840,7 +857,7 @@ fun CreateEventDialog(
                                     if (isConnected) {
                                         showLocationPicker = true
                                     } else {
-                                        errorMessage = "No tienes conexion. El mapa no esta disponible sin internet."
+                                        errorMessage = "No internet connection. The map is unavailable offline."
                                     }
                                 }
                         ) {
@@ -877,7 +894,7 @@ fun CreateEventDialog(
                                         if (isConnected) {
                                             showLocationPicker = true
                                         } else {
-                                            errorMessage = "No tienes conexion. El mapa no esta disponible sin internet."
+                                            errorMessage = "No internet connection. The map is unavailable offline."
                                         }
                                     },
                                     enabled = isConnected
@@ -899,7 +916,7 @@ fun CreateEventDialog(
                     if (!isConnected) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Sin internet: el mapa esta deshabilitado. Aun puedes crear el Open Match y lo sincronizamos cuando vuelva la conexion.",
+                            text = "Offline: map access is disabled. You can still create the Open Match and we will sync it once internet is back.",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -1097,7 +1114,7 @@ fun CreateEventDialog(
                         ) {
                             Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
                             Text(
-                                text = "No hay conexion. Si creas ahora, tu Open Match quedara pendiente y se creara automaticamente cuando vuelva internet.",
+                                text = "No internet connection. If you create now, your Open Match will stay pending and be created automatically once internet is back.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -1195,7 +1212,7 @@ fun CreateEventDialog(
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     Text(
-                        if (wasQueuedOffline) "Open Match en cola" else "Event Created!",
+                        if (wasQueuedOffline) "Open Match queued" else "Event Created!",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface
@@ -1205,7 +1222,7 @@ fun CreateEventDialog(
                     
                     Text(
                         if (wasQueuedOffline)
-                            "No tenias conexion. Tu Open Match se creara automaticamente cuando vuelva internet y te avisaremos con una notificacion."
+                            "You were offline. Your Open Match is pending and will be created automatically when internet returns. You will receive a notification."
                         else
                             "Your event is ready. Don't forget to add it to your calendar so you don't miss it!",
                         style = MaterialTheme.typography.bodyMedium,
