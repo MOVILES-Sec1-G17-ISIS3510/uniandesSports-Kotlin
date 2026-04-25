@@ -31,10 +31,20 @@ import com.uniandes.sport.models.PostComment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel(application), CommunitiesViewModelInterface {
+
+    private data class CommunityDetailsPayload(
+        val posts: List<Post>,
+        val channels: List<Channel>,
+        val members: List<CommunityMember>
+    )
 
     private val db = FirebaseFirestore.getInstance()
     private val cacheDao = CommunitiesCacheDatabase.getInstance(application).cacheDao()
@@ -76,9 +86,14 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private var channelMessagesListener: ListenerRegistration? = null
 
     init {
-        viewModelScope.launch {
+        // A: corrutina con dispatcher.
+        // Se carga cache de Room en IO para no bloquear el hilo principal.
+        viewModelScope.launch(Dispatchers.IO) {
             val cached = cacheDao.getCachedCommunities().map { it.toModel() }
-            if (cached.isNotEmpty()) _communities.value = cached
+            // separacion IO/Main. La actualizacion de estado para UI se hace en Main.
+            withContext(Dispatchers.Main) {
+                if (cached.isNotEmpty()) _communities.value = cached
+            }
         }
     }
 
@@ -123,23 +138,34 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                // 1. Emit from Room cache immediately
-                if (_communities.value.isEmpty()) {
-                    val cached = cacheDao.getCachedCommunities().map { it.toModel() }
-                    if (cached.isNotEmpty()) _communities.value = cached
+                val loadedCommunities = withContext(Dispatchers.IO) {
+                    // Rubrica (10): operacion de Input/Output en hilo IO.
+                    // Cache-first: si no hay datos en pantalla, mostrar cache local primero.
+                    if (_communities.value.isEmpty()) {
+                        val cached = cacheDao.getCachedCommunities().map { it.toModel() }
+                        withContext(Dispatchers.Main) {
+                            if (cached.isNotEmpty()) _communities.value = cached
+                        }
+                    }
+
+                    // Red/Firebase tambien se resuelve en IO.
+                    val snapshot = db.collection("communities").get().await()
+                    snapshot.documents.mapNotNull { doc ->
+                        val c = doc.toObject(Community::class.java)
+                        c?.copy(id = doc.id)
+                    }
                 }
 
-                // 2. Fetch from Firebase
-                val snapshot = db.collection("communities").get().await()
-                val loadedCommunities = snapshot.documents.mapNotNull { doc ->
-                    val c = doc.toObject(Community::class.java)
-                    c?.copy(id = doc.id)
+                // Rubrica (10): actualizacion de estado en Main (UI reactiva via StateFlow).
+                withContext(Dispatchers.Main) {
+                    _communities.value = loadedCommunities
                 }
-                _communities.value = loadedCommunities
 
-                // 3. Write back to Room
-                cacheDao.clearCommunities()
-                cacheDao.upsertCommunities(loadedCommunities.map { it.toEntity() })
+                // Persistencia en background para no bloquear el render principal.
+                launch(Dispatchers.IO) {
+                    cacheDao.clearCommunities()
+                    cacheDao.upsertCommunities(loadedCommunities.map { it.toEntity() })
+                }
 
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error fetching communities", e)
@@ -155,54 +181,80 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                // 1. Immediately emit Room cache for all three
-                val cachedPosts = cacheDao.getPostsByCommunity(communityId).map { it.toModel() }
-                if (cachedPosts.isNotEmpty()) _posts.value = cachedPosts
-
-                val cachedChannels = cacheDao.getChannelsByCommunity(communityId).map { it.toModel() }
-                if (cachedChannels.isNotEmpty()) _channels.value = cachedChannels
-
-                val cachedMembers = cacheDao.getMembersByCommunity(communityId).map { it.toModel() }
-                if (cachedMembers.isNotEmpty()) _members.value = cachedMembers
-
-                // 2. Fetch fresh data from Firebase in parallel
-                val postsSnapshot = db.collection("communities").document(communityId)
-                    .collection("posts").get().await()
-                val loadedPosts = postsSnapshot.documents.mapNotNull { doc ->
-                    val p = doc.toObject(Post::class.java)
-                    p?.copy(id = doc.id)
-                }.sortedByDescending { it.createdAt }
-                _posts.value = loadedPosts
-
-                val channelsSnapshot = db.collection("communities").document(communityId)
-                    .collection("channels").get().await()
-                val loadedChannels = channelsSnapshot.documents.mapNotNull { doc ->
-                    val ch = doc.toObject(Channel::class.java)
-                    ch?.copy(id = doc.id)
-                }
-                _channels.value = loadedChannels
-
-                val membersSnapshot = db.collection("communities").document(communityId)
-                    .collection("members").get().await()
-                val loadedMembers = membersSnapshot.documents.mapNotNull { doc ->
-                    val member = doc.toObject(CommunityMember::class.java)
-                    member?.copy(
-                        id = doc.id,
-                        userId = if (member.userId.isBlank()) doc.id else member.userId,
-                        displayName = if (member.displayName.isBlank()) "Miembro" else member.displayName
+                // B: IO + Main.
+                // Primero recuperamos cache local en IO y luego actualizamos estado en Main.
+                val cachedPayload = withContext(Dispatchers.IO) {
+                    CommunityDetailsPayload(
+                        posts = cacheDao.getPostsByCommunity(communityId).map { it.toModel() },
+                        channels = cacheDao.getChannelsByCommunity(communityId).map { it.toModel() },
+                        members = cacheDao.getMembersByCommunity(communityId).map { it.toModel() }
                     )
-                }.sortedBy { it.displayName.lowercase() }
-                _members.value = loadedMembers
+                }
+                withContext(Dispatchers.Main) {
+                    if (cachedPayload.posts.isNotEmpty()) _posts.value = cachedPayload.posts
+                    if (cachedPayload.channels.isNotEmpty()) _channels.value = cachedPayload.channels
+                    if (cachedPayload.members.isNotEmpty()) _members.value = cachedPayload.members
+                }
 
-                // 3. Write back to Room
-                cacheDao.clearPostsByCommunity(communityId)
-                cacheDao.upsertPosts(loadedPosts.map { it.toEntity(communityId) })
+                // multiples corrutinas anidadas usando Input/Output.
+                // Corrutina externa (viewModelScope.launch) + corrutinas internas async(IO) en paralelo.
+                val remotePayload = coroutineScope {
+                    val postsDeferred = async(Dispatchers.IO) {
+                        db.collection("communities").document(communityId)
+                            .collection("posts").get().await()
+                            .documents.mapNotNull { doc ->
+                                val p = doc.toObject(Post::class.java)
+                                p?.copy(id = doc.id)
+                            }.sortedByDescending { it.createdAt }
+                    }
 
-                cacheDao.clearChannelsByCommunity(communityId)
-                cacheDao.upsertChannels(loadedChannels.map { it.toEntity(communityId) })
+                    val channelsDeferred = async(Dispatchers.IO) {
+                        db.collection("communities").document(communityId)
+                            .collection("channels").get().await()
+                            .documents.mapNotNull { doc ->
+                                val ch = doc.toObject(Channel::class.java)
+                                ch?.copy(id = doc.id)
+                            }
+                    }
 
-                cacheDao.clearMembersByCommunity(communityId)
-                cacheDao.upsertMembers(loadedMembers.map { it.toEntity(communityId) })
+                    val membersDeferred = async(Dispatchers.IO) {
+                        db.collection("communities").document(communityId)
+                            .collection("members").get().await()
+                            .documents.mapNotNull { doc ->
+                                val member = doc.toObject(CommunityMember::class.java)
+                                member?.copy(
+                                    id = doc.id,
+                                    userId = if (member.userId.isBlank()) doc.id else member.userId,
+                                    displayName = if (member.displayName.isBlank()) "Miembro" else member.displayName
+                                )
+                            }.sortedBy { it.displayName.lowercase() }
+                    }
+
+                    CommunityDetailsPayload(
+                        posts = postsDeferred.await(),
+                        channels = channelsDeferred.await(),
+                        members = membersDeferred.await()
+                    )
+                }
+
+                // resultado remoto se publica en Main para refrescar UI.
+                withContext(Dispatchers.Main) {
+                    _posts.value = remotePayload.posts
+                    _channels.value = remotePayload.channels
+                    _members.value = remotePayload.members
+                }
+
+                // Persistencia de datos remotos en Room en IO para cache offline.
+                launch(Dispatchers.IO) {
+                    cacheDao.clearPostsByCommunity(communityId)
+                    cacheDao.upsertPosts(remotePayload.posts.map { it.toEntity(communityId) })
+
+                    cacheDao.clearChannelsByCommunity(communityId)
+                    cacheDao.upsertChannels(remotePayload.channels.map { it.toEntity(communityId) })
+
+                    cacheDao.clearMembersByCommunity(communityId)
+                    cacheDao.upsertMembers(remotePayload.members.map { it.toEntity(communityId) })
+                }
 
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error fetching community details", e)
