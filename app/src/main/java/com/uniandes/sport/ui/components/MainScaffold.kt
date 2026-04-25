@@ -74,7 +74,6 @@ fun MainScaffold(
                 launchSingleTop = true
                 restoreState = true
             }
-            onOpenMatchConsumed()
         }
     }
 

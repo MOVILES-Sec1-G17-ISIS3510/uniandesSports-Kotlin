@@ -44,7 +44,9 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -59,6 +61,7 @@ import com.uniandes.sport.patterns.event.PhoneCalendarEvent
 import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.resume
 import com.uniandes.sport.ui.components.OptionSelectionRow
 import com.uniandes.sport.ui.components.SportIconPicker
 import com.uniandes.sport.ui.components.getSportAccentColor
@@ -475,12 +478,42 @@ fun CreateEventDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .verticalScroll(scrollState)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (!isConnected && !isCreatedSuccessfully) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                            Text(
+                                text = "No internet connection. Open Match will be queued and created when internet is back.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 24.dp,
+                            end = 24.dp,
+                            bottom = 24.dp,
+                            top = if (!isConnected && !isCreatedSuccessfully) 72.dp else 24.dp
+                        )
+                        .verticalScroll(scrollState)
+                ) {
                 if (!isCreatedSuccessfully) {
                 // Header
                 Row(
@@ -1099,28 +1132,6 @@ fun CreateEventDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-
-                if (!isConnected) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
-                            Text(
-                                text = "No internet connection. If you create now, your Open Match will stay pending and be created automatically once internet is back.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
                 
                 Button(
                     onClick = {
@@ -1265,6 +1276,7 @@ fun CreateEventDialog(
                     ) {
                         Text("Done", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
+                }
                 }
             }
         }
@@ -1632,7 +1644,7 @@ private fun LocationPickerDialog(
                             val target = cameraPositionState.position.target
                             coroutineScope.launch(Dispatchers.IO) {
                                 try {
-                                    val addresses = geocoder.getFromLocation(target.latitude, target.longitude, 1)
+                                    val addresses = reverseGeocode(geocoder, target.latitude, target.longitude)
                                     val addressName = if (!addresses.isNullOrEmpty()) {
                                         val address = addresses[0]
                                         val parts = mutableListOf<String>()
@@ -1668,6 +1680,33 @@ private fun LocationPickerDialog(
     }
 }
 
+private suspend fun reverseGeocode(
+    geocoder: Geocoder,
+    latitude: Double,
+    longitude: Double
+): List<android.location.Address> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        suspendCancellableCoroutine { continuation ->
+            geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<android.location.Address>) {
+                    if (continuation.isActive) {
+                        continuation.resume(addresses)
+                    }
+                }
+
+                override fun onError(errorMessage: String?) {
+                    if (continuation.isActive) {
+                        continuation.resume(emptyList())
+                    }
+                }
+            })
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        geocoder.getFromLocation(latitude, longitude, 1) ?: emptyList()
+    }
+}
+
 
 @Composable
 fun FormLabel(text: String) {
@@ -1684,6 +1723,16 @@ fun FormLabel(text: String) {
 private fun rememberNetworkConnectivity(): Boolean {
     val context = LocalContext.current
     var isConnected by remember(context) { mutableStateOf(isNetworkConnected(context)) }
+
+    LaunchedEffect(context) {
+        while (true) {
+            val current = isNetworkConnected(context)
+            if (current != isConnected) {
+                isConnected = current
+            }
+            delay(1000)
+        }
+    }
 
     DisposableEffect(context) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

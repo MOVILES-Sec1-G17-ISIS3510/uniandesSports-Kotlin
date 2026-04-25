@@ -221,6 +221,10 @@ fun PlayScreen(
         if (!openEventId.isNullOrBlank() && selectedSports.isNotEmpty()) {
             viewModel.clearSportFilters()
         }
+        if (!openEventId.isNullOrBlank()) {
+            // Bypass cache TTL to surface the just-synced event immediately.
+            viewModel.refreshEvents()
+        }
     }
 
     LaunchedEffect(openEventId, events) {
