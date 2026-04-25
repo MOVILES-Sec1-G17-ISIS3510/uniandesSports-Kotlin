@@ -1,27 +1,46 @@
 package com.uniandes.sport.viewmodels.play
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.uniandes.sport.data.local.PendingOpenMatchPayload
+import com.uniandes.sport.data.local.PendingOpenMatchStore
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.models.MatchMember
 import com.uniandes.sport.models.Track
 import com.uniandes.sport.patterns.event.AllActiveEventsStrategy
 import com.uniandes.sport.patterns.event.EventFilterStrategy
 import com.uniandes.sport.patterns.event.MultiSportFilterStrategy
+import com.uniandes.sport.workers.OpenMatchSyncWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 class FirestorePlayViewModel(
     private val logViewModel: LogViewModelInterface? = null
 ) : ViewModel(), PlayViewModelInterface {
     private val db = FirebaseFirestore.getInstance()
+    private val appContext: Context?
+        get() = try {
+            FirebaseApp.getInstance().applicationContext
+        } catch (_: Exception) {
+            null
+        }
 
     private val _rawEvents = MutableStateFlow<List<Event>>(emptyList())
     private val _events = MutableStateFlow<List<Event>>(emptyList())
@@ -414,6 +433,25 @@ class FirestorePlayViewModel(
             return
         }
 
+        if (!isNetworkConnected()) {
+            queuePendingOpenMatch(
+                uid = uid,
+                title = title,
+                description = description,
+                location = location,
+                sport = sport,
+                modality = modality,
+                scheduledAt = scheduledAt,
+                finishedAt = finishedAt,
+                skillLevel = skillLevel,
+                maxParticipants = maxParticipants,
+                shouldJoin = shouldJoin,
+                onSuccess = onSuccess,
+                onError = onError
+            )
+            return
+        }
+
         try {
             Log.d("PlayVM", "Starting createEvent for $title...")
             val event = com.uniandes.sport.patterns.event.EventFactory.createEvent(
@@ -472,7 +510,26 @@ class FirestorePlayViewModel(
                 }
                 .addOnFailureListener { e ->
                     Log.e("PlayVM", "Batch commit FAILED: ${e.message}")
-                    onError(e) 
+
+                    if (!isNetworkConnected()) {
+                        queuePendingOpenMatch(
+                            uid = uid,
+                            title = title,
+                            description = description,
+                            location = location,
+                            sport = sport,
+                            modality = modality,
+                            scheduledAt = scheduledAt,
+                            finishedAt = finishedAt,
+                            skillLevel = skillLevel,
+                            maxParticipants = maxParticipants,
+                            shouldJoin = shouldJoin,
+                            onSuccess = onSuccess,
+                            onError = onError
+                        )
+                    } else {
+                        onError(e)
+                    }
                 }
         } catch (e: Exception) {
             Log.e("PlayVM", "EXCEPTION in createEvent: ${e.message}")
@@ -563,6 +620,78 @@ class FirestorePlayViewModel(
     override fun onCleared() {
         super.onCleared()
         joinedEventsListener?.remove()
+    }
+
+    private fun queuePendingOpenMatch(
+        uid: String,
+        title: String,
+        description: String,
+        location: String,
+        sport: String,
+        modality: String,
+        scheduledAt: java.util.Date,
+        finishedAt: java.util.Date?,
+        skillLevel: String,
+        maxParticipants: Long,
+        shouldJoin: Boolean,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val context = appContext
+        if (context == null) {
+            onError(Exception("No internet and local queue unavailable"))
+            return
+        }
+
+        try {
+            val pending = PendingOpenMatchPayload(
+                localId = UUID.randomUUID().toString(),
+                title = title,
+                description = description,
+                location = location,
+                sport = sport,
+                modality = modality,
+                scheduledAtMillis = scheduledAt.time,
+                finishedAtMillis = finishedAt?.time,
+                skillLevel = skillLevel,
+                maxParticipants = maxParticipants,
+                shouldJoin = shouldJoin,
+                createdBy = uid
+            )
+
+            PendingOpenMatchStore.enqueue(context, pending)
+            schedulePendingOpenMatchSync(context)
+            onSuccess()
+        } catch (e: Exception) {
+            onError(e)
+        }
+    }
+
+    private fun schedulePendingOpenMatchSync(context: Context) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<OpenMatchSyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueue(request)
+    }
+
+    private fun isNetworkConnected(): Boolean {
+        val context = appContext ?: return false
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            @Suppress("DEPRECATION")
+            connectivityManager.activeNetworkInfo?.isConnected == true
+        }
     }
 
     companion object {
