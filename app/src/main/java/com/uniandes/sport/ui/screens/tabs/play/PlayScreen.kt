@@ -133,8 +133,14 @@ fun PlayScreen(
         }
     }
 
-    val joinedEvents = remember(events, joinedEventIds, searchText) {
-        events.filter { joinedEventIds.contains(it.id) }
+    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val isInMySchedule: (Event) -> Boolean = { event ->
+        val isCreator = !currentUserId.isNullOrBlank() && event.createdBy == currentUserId
+        isCreator || joinedEventIds.contains(event.id)
+    }
+
+    val joinedEvents = remember(events, joinedEventIds, searchText, currentUserId) {
+        events.filter { isInMySchedule(it) }
             .filter { event ->
                 searchText.isBlank() || 
                 event.title.lowercase().contains(searchText.lowercase()) ||
@@ -143,18 +149,17 @@ fun PlayScreen(
             }
             .sortedBy { it.scheduledAt }
     }
-    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds) {
-        finishedEvents.filter { joinedEventIds.contains(it.id) }
+    val joinedFinishedEvents = remember(finishedEvents, joinedEventIds, currentUserId) {
+        finishedEvents.filter { isInMySchedule(it) }
     }
     val historyEvents = remember(joinedEvents, joinedFinishedEvents) {
         (joinedEvents + joinedFinishedEvents).distinctBy { it.id }
     }
-    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
     val myAppEvents = remember(events, joinedEventIds, currentUserId) {
-        events.filter { it.createdBy == currentUserId || joinedEventIds.contains(it.id) }
+        events.filter { isInMySchedule(it) }
     }
-    val otherEvents = remember(events, joinedEventIds, searchText) {
-        events.filterNot { joinedEventIds.contains(it.id) }
+    val otherEvents = remember(events, joinedEventIds, searchText, currentUserId) {
+        events.filterNot { isInMySchedule(it) }
             .filter { event ->
                 searchText.isBlank() || 
                 event.title.lowercase().contains(searchText.lowercase()) ||
