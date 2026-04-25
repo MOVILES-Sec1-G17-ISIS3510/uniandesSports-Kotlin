@@ -28,6 +28,7 @@ interface PlayViewModelInterface {
     fun fetchMyTracksForEvents(eventIds: List<String>)
     
     fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit = {})
+    fun fetchEventByIdOnce(eventId: String, onSuccess: (Event?) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
     fun joinEvent(eventId: String, userId: String, sport: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun leaveEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})

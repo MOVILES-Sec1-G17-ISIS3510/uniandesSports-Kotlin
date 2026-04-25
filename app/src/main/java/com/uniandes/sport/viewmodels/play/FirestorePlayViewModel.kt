@@ -177,6 +177,25 @@ class FirestorePlayViewModel(
             }
     }
 
+    override fun fetchEventByIdOnce(eventId: String, onSuccess: (Event?) -> Unit, onError: (Exception) -> Unit) {
+        db.collection("events")
+            .document(eventId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                if (!snapshot.exists()) {
+                    onSuccess(null)
+                    return@addOnSuccessListener
+                }
+
+                val event = snapshot.toObject(Event::class.java)
+                event?.id = snapshot.id
+                onSuccess(event)
+            }
+            .addOnFailureListener { e ->
+                onError(e as? Exception ?: Exception(e.message))
+            }
+    }
+
     override fun toggleSportFilter(sport: String) {
         val current = _selectedSports.value
         val normalized = sport.lowercase()

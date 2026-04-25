@@ -88,6 +88,7 @@ fun PlayScreen(
     var selectedMode by remember { mutableStateOf<String?>(null) }
     var isPullRefreshing by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
+    var hasTriedDirectOpenById by remember(openEventId) { mutableStateOf(false) }
     
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
     var trackEvent by remember { mutableStateOf<Event?>(null) }
@@ -229,12 +230,22 @@ fun PlayScreen(
 
     LaunchedEffect(openEventId, events) {
         val pendingId = openEventId ?: return@LaunchedEffect
-        if (events.isEmpty()) return@LaunchedEffect
-
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
             onOpenEventConsumed()
+            hasTriedDirectOpenById = false
+        } else if (!hasTriedDirectOpenById) {
+            hasTriedDirectOpenById = true
+            viewModel.fetchEventByIdOnce(
+                eventId = pendingId,
+                onSuccess = { directEvent ->
+                    if (directEvent != null) {
+                        selectedEventUIModel = EventUIAdapter.toUIModel(directEvent)
+                        onOpenEventConsumed()
+                    }
+                }
+            )
         }
     }
 
