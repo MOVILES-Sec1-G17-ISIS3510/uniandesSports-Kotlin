@@ -251,11 +251,17 @@ fun CommunityDetailModal(
             },
         bottomBar = {
             if (!userAlreadyMember) {
+                val isOnline by viewModel.isOnline.collectAsState()
                 Button(
                     onClick = {
                         val uid = currentUserId
                         if (uid == null) {
                             Toast.makeText(context, "Please log in to join", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        if (!isOnline) {
+                            Toast.makeText(context, "Cannot join community while offline", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
 
@@ -274,7 +280,7 @@ fun CommunityDetailModal(
                             }
                         )
                     },
-                    enabled = !isJoining,
+                    enabled = !isJoining && isOnline,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
@@ -456,8 +462,32 @@ private fun FeedTab(
     onSendComment: (String) -> Unit
 ) {
     var isComposing by remember { mutableStateOf(false) }
+    val isConnected = rememberNetworkConnectivity()
 
     Column(modifier = Modifier.fillMaxSize()) {
+        var bannerState by remember {
+            mutableStateOf(ConnectivityBannerState.HIDDEN)
+        }
+        var previousConnectivity by remember { mutableStateOf(isConnected) }
+
+        LaunchedEffect(isConnected) {
+            if (!isConnected && previousConnectivity) {
+                // Only show offline banner if we just lost connection
+                bannerState = ConnectivityBannerState.OFFLINE
+            } else if (!previousConnectivity && isConnected) {
+                // Connection restored - show brief confirmation
+                bannerState = ConnectivityBannerState.RECONNECTED
+                delay(2000) // Shorter duration
+                bannerState = ConnectivityBannerState.HIDDEN
+            }
+            previousConnectivity = isConnected
+        }
+
+        // Show connectivity banner only when state changes
+        if (bannerState != ConnectivityBannerState.HIDDEN) {
+            OfflineSyncBanner(state = bannerState)
+        }
+
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (isComposing && canPost) {
                 item {
@@ -962,41 +992,41 @@ private fun OfflineSyncBanner(state: ConnectivityBannerState) {
     if (state == ConnectivityBannerState.HIDDEN) return
 
     val containerColor = when (state) {
-        ConnectivityBannerState.OFFLINE -> Color(0xFFFFF3CD)
-        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        ConnectivityBannerState.OFFLINE -> MaterialTheme.colorScheme.surfaceVariant
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primaryContainer
         ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.surface
     }
     val borderColor = when (state) {
-        ConnectivityBannerState.OFFLINE -> Color(0xFFFFC107)
-        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+        ConnectivityBannerState.OFFLINE -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
         ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
     }
     val contentColor = when (state) {
-        ConnectivityBannerState.OFFLINE -> Color(0xFF8A6D00)
+        ConnectivityBannerState.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
         ConnectivityBannerState.RECONNECTED -> MaterialTheme.colorScheme.onPrimaryContainer
         ConnectivityBannerState.HIDDEN -> MaterialTheme.colorScheme.onSurface
     }
     val title = when (state) {
-        ConnectivityBannerState.OFFLINE -> "Trying to reconnect"
-        ConnectivityBannerState.RECONNECTED -> "You're back online"
+        ConnectivityBannerState.OFFLINE -> "Offline mode"
+        ConnectivityBannerState.RECONNECTED -> "Back online"
         ConnectivityBannerState.HIDDEN -> ""
     }
     val body = when (state) {
-        ConnectivityBannerState.OFFLINE -> "No internet right now. You can keep sending messages and we'll sync them as soon as the connection is back."
-        ConnectivityBannerState.RECONNECTED -> "Connection restored. Pending messages are being synchronized."
+        ConnectivityBannerState.OFFLINE -> "Your posts will sync automatically when connected."
+        ConnectivityBannerState.RECONNECTED -> "Posts are syncing..."
         ConnectivityBannerState.HIDDEN -> ""
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp),
-        shape = RoundedCornerShape(14.dp),
+            .padding(top = 4.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(8.dp),
         color = containerColor,
-        border = BorderStroke(1.dp, borderColor)
+        border = BorderStroke(0.5.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (state == ConnectivityBannerState.OFFLINE) {
@@ -1017,14 +1047,14 @@ private fun OfflineSyncBanner(state: ConnectivityBannerState) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
                     color = contentColor
                 )
                 Text(
                     text = body,
-                    fontSize = 11.sp,
-                    color = contentColor.copy(alpha = 0.85f)
+                    fontSize = 10.sp,
+                    color = contentColor.copy(alpha = 0.7f)
                 )
             }
         }
@@ -1168,9 +1198,28 @@ private fun FeedPostItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                // Show status indicator for post sync status (only for user's own posts)
+                when (post.status) {
+                    MessageStatus.SENDING -> {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.Schedule, contentDescription = "Sending", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    }
+                    MessageStatus.SENT -> {
+                        if (post.pinned) {
+                            Icon(androidx.compose.material.icons.Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+                    MessageStatus.ERROR -> {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
-                if (post.pinned) {
-                    Icon(androidx.compose.material.icons.Icons.Default.PushPin, contentDescription = "Pinned", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+
+                // Show checkmark for sent posts (only if not pinned)
+                if (post.status == MessageStatus.SENT && !post.pinned) {
+                    Icon(Icons.Default.DoneAll, contentDescription = "Sent", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))

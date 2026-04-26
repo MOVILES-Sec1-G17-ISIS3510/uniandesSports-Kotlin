@@ -15,9 +15,11 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.uniandes.sport.workers.MessageSyncWorker
+import com.uniandes.sport.workers.PostSyncWorker
 import com.uniandes.sport.data.local.CachedMembershipEntity
 import com.uniandes.sport.models.MessageStatus
 import com.uniandes.sport.data.local.PendingMessageEntity
+import com.uniandes.sport.data.local.PendingPostEntity
 import java.util.UUID
 import com.uniandes.sport.data.local.CommunitiesCacheDatabase
 import com.uniandes.sport.data.local.toEntity
@@ -28,6 +30,7 @@ import com.uniandes.sport.models.Community
 import com.uniandes.sport.models.CommunityMember
 import com.uniandes.sport.models.Post
 import com.uniandes.sport.models.PostComment
+import com.uniandes.sport.utils.observeConnectivityAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +40,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel(application), CommunitiesViewModelInterface {
 
@@ -80,6 +86,12 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isOnline = MutableStateFlow(true)
+    override val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    private val _lastOnlineTime = MutableStateFlow<String?>(null)
+    override val lastOnlineTime: StateFlow<String?> = _lastOnlineTime.asStateFlow()
+
     private var activeCommunityId: String? = null
     private var activeChannelId: String? = null
     private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
@@ -93,6 +105,47 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
             // separacion IO/Main. La actualizacion de estado para UI se hace en Main.
             withContext(Dispatchers.Main) {
                 if (cached.isNotEmpty()) _communities.value = cached
+            }
+        }
+
+        // Monitor network connectivity
+        viewModelScope.launch(Dispatchers.IO) {
+            application.observeConnectivityAsFlow().collect { isConnected ->
+                _isOnline.value = isConnected
+                if (!isConnected) {
+                    // Store last online time when connection is lost
+                    val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                    _lastOnlineTime.value = sdf.format(Date())
+                } else {
+                    // When connection is restored, trigger sync of pending posts
+                    syncPendingPosts()
+                }
+            }
+        }
+    }
+
+    private fun syncPendingPosts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Schedule background sync for any pending posts
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+
+                val syncRequest = OneTimeWorkRequestBuilder<PostSyncWorker>()
+                    .setConstraints(constraints)
+                    .build()
+
+                WorkManager.getInstance(getApplication()).enqueue(syncRequest)
+                Log.d("FirestoreCommunities", "Scheduled sync for pending posts")
+
+                // Refresh posts to update status indicators
+                val currentCommunity = activeCommunityId
+                if (currentCommunity != null) {
+                    loadCommunityDetails(currentCommunity)
+                }
+            } catch (e: Exception) {
+                Log.e("FirestoreCommunities", "Error scheduling post sync", e)
             }
         }
     }
@@ -275,6 +328,11 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     ) {
         viewModelScope.launch {
             try {
+                // Prevent joining when offline - requires real-time Firestore transaction
+                if (!_isOnline.value) {
+                    onFailure(Exception("Cannot join community while offline"))
+                    return@launch
+                }
                 val communityRef = db.collection("communities").document(communityId)
                 val memberRef = communityRef.collection("members").document(userId)
 
@@ -395,31 +453,80 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     ) {
         viewModelScope.launch {
             try {
-                val payload = hashMapOf(
-                    "author" to author,
-                    "role" to role,
-                    "content" to content.trim(),
-                    "time" to "Just now",
-                    "pinned" to pinned,
-                    "likes" to 0,
-                    "createdAt" to System.currentTimeMillis()
-                )
-                val docRef = db.collection("communities")
-                    .document(communityId)
-                    .collection("posts")
-                    .add(payload)
-                    .await()
-
-                // Write to Room immediately
                 val now = System.currentTimeMillis()
-                val newPost = Post(
-                    id = docRef.id, author = author, role = role, content = content.trim(),
-                    time = "Just now", pinned = pinned, likes = 0, createdAt = now
-                )
-                cacheDao.upsertPosts(listOf(newPost.toEntity(communityId, now)))
+                val localId = java.util.UUID.randomUUID().toString()
 
-                loadCommunityDetails(communityId)
-                onSuccess()
+                if (_isOnline.value) {
+                    // Online: post directly to Firestore
+                    val payload = hashMapOf(
+                        "author" to author,
+                        "role" to role,
+                        "content" to content.trim(),
+                        "time" to "Just now",
+                        "pinned" to pinned,
+                        "likes" to 0,
+                        "createdAt" to now
+                    )
+                    val docRef = db.collection("communities")
+                        .document(communityId)
+                        .collection("posts")
+                        .document(localId) // Use local ID for consistency
+                        .set(payload)
+                        .await()
+
+                    // Write to Room with SENT status
+                    val newPost = Post(
+                        id = localId, author = author, role = role, content = content.trim(),
+                        time = "Just now", pinned = pinned, likes = 0, createdAt = now,
+                        status = MessageStatus.SENT
+                    )
+                    cacheDao.upsertPosts(listOf(newPost.toEntity(communityId, now)))
+
+                    loadCommunityDetails(communityId)
+                    onSuccess()
+                } else {
+                    // Offline: store pending post and show optimistic UI
+                    val newPost = Post(
+                        id = localId, author = author, role = role, content = content.trim(),
+                        time = "Just now", pinned = pinned, likes = 0, createdAt = now,
+                        status = MessageStatus.SENDING
+                    )
+
+                    // Add to cache with SENDING status
+                    cacheDao.upsertPosts(listOf(newPost.toEntity(communityId, now)))
+
+                    // Store in pending queue for later sync
+                    cacheDao.upsertPendingPost(
+                        PendingPostEntity(
+                            localId = localId,
+                            communityId = communityId,
+                            authorId = "", // Not needed for posts
+                            authorName = author,
+                            role = role,
+                            content = content.trim(),
+                            pinned = pinned,
+                            createdAt = now
+                        )
+                    )
+
+                    // Schedule background sync
+                    val constraints = androidx.work.Constraints.Builder()
+                        .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                        .build()
+
+                    val syncRequest = androidx.work.OneTimeWorkRequestBuilder<PostSyncWorker>()
+                        .setConstraints(constraints)
+                        .build()
+
+                    androidx.work.WorkManager.getInstance(getApplication()).enqueue(syncRequest)
+
+                    // Update local state to show the post immediately
+                    val currentPosts = _posts.value.toMutableList()
+                    currentPosts.add(0, newPost) // Add at beginning
+                    _posts.value = currentPosts
+
+                    onSuccess()
+                }
             } catch (e: Exception) {
                 Log.e("FirestoreCommunities", "Error creating announcement", e)
                 onFailure(e)
