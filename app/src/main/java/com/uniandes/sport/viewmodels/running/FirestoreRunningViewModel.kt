@@ -36,8 +36,8 @@ class FirestoreRunningViewModel : ViewModel() {
         return try {
             val docId = session.id.takeIf { it.isNotBlank() } ?: collection.document().id
             val sessionWithId = session.copy(id = docId, userId = userId)
-            collection.document(docId).set(sessionWithId).await()
-            Log.d("FirestoreRunning", "Session saved successfully with ID: $docId")
+            collection.document(docId).set(sessionWithId) // EVC: Removed .await() to use Firestore native offline cache
+            Log.d("FirestoreRunning", "Session saved (locally if offline) with ID: $docId")
             docId
         } catch (e: Exception) {
             Log.e("FirestoreRunning", "Error saving session to Firestore", e)

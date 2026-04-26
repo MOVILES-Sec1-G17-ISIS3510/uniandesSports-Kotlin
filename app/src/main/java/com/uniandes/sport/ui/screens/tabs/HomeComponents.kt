@@ -103,6 +103,7 @@ fun StatCard(
 fun HomeActionChip(
     icon: ImageVector,
     label: String,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
@@ -112,6 +113,7 @@ fun HomeActionChip(
 
     Surface(
         onClick = onClick,
+        modifier = modifier,
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
@@ -253,7 +255,6 @@ fun MultiActionFAB(
     ) {
         if (expanded) {
             HomeFabItem("Surprise Me", Icons.Default.Casino) { onActionClick("surprise"); expanded = false }
-            HomeFabItem("Connect Devices", Icons.Default.Link) { onActionClick("connect"); expanded = false }
             HomeFabItem("Schedule Match", Icons.Default.CalendarToday) { onActionClick("schedule"); expanded = false }
         }
         FloatingActionButton(

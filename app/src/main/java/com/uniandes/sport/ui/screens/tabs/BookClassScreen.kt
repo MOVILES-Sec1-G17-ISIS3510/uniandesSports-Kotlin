@@ -541,8 +541,12 @@ fun BookClassScreen(
                             profesorName = profesorName,
                             studentId = userUid,
                             studentName = userName,
-                            onSuccess = {
-                                android.widget.Toast.makeText(context, "Request sent to coaches!", android.widget.Toast.LENGTH_LONG).show()
+                            onSuccess = { isPending ->
+                                if (isPending) {
+                                    android.widget.Toast.makeText(context, "You are offline. Booking request is pending and will sync automatically.", android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "Request sent to coaches!", android.widget.Toast.LENGTH_LONG).show()
+                                }
                                 onNavigateBack()
                             },
                             onError = { error ->

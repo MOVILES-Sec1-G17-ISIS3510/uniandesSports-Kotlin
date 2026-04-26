@@ -37,6 +37,8 @@ import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,6 +90,9 @@ fun ProfesoresScreen(
     )
 
     val coroutineScope = rememberCoroutineScope()
+
+    // EVC: Eventual Connectivity — estado reactivo de red para esta vista
+    val isOnline = rememberIsOnline()
 
     LaunchedEffect(Unit) {
         profesoresViewModel.fetchProfesores()
@@ -154,14 +159,17 @@ fun ProfesoresScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Search Bar (Demand Identification)
+            // Search Bar (Demand Identification) — funciona offline para filtrar caché local
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search sport or specialty (e.g. Yoga, Padel)", fontSize = 14.sp) },
+                placeholder = { Text(
+                    "Search sport or specialty",
+                    fontSize = 14.sp
+                ) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
                 trailingIcon = {
                     if (searchText.isNotEmpty()) {
@@ -178,6 +186,11 @@ fun ProfesoresScreen(
                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                 )
+            )
+
+            // EVC: Banner de conectividad específico para la vista de Profesores
+            OfflineConnectivityBanner(
+                offlineMessage = "Showing ${if (filteredProfesores.isNotEmpty()) filteredProfesores.size.toString() + " coaches" else "coaches"} from cache. Booking disabled."
             )
 
             // Sport Filter
@@ -348,6 +361,7 @@ fun ProfesoresScreen(
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
+                                // EVC: La cola local maneja las solicitudes offline
                                 // Pass 'broadcast' instead of a specific ID when using the main FAB
                                 onNavigate("book_class/broadcast")
                             }

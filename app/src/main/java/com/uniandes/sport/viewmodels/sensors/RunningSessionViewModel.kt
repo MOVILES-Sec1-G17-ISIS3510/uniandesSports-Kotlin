@@ -91,7 +91,7 @@ class RunningSessionViewModel(application: Application) : AndroidViewModel(appli
                 } catch (e: Exception) {
                     android.util.Log.e("RunningVM", "AI feedback failed", e)
                     null
-                } ?: "Amazing run! Your progress is unstoppable."
+                } ?: "Great run! Saved locally. 🌍 (Connect to the internet next time for deep AI Analysis)"
                 
                 // TERCER PASO: Actualizar el documento con el feedback final
                 val finalSession = tempSession.copy(id = docId ?: "", aiFeedback = feedback)

@@ -5,23 +5,42 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.uniandes.sport.data.local.PendingBookingPayload
+import com.uniandes.sport.data.local.PendingBookingStore
 import com.uniandes.sport.models.BookingRequest
+import com.uniandes.sport.models.CoachInsight
 import com.uniandes.sport.models.CoachingNotification
+import com.uniandes.sport.models.InsightType
+import com.uniandes.sport.models.Profesor
+import com.uniandes.sport.workers.BookingSyncWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-import com.uniandes.sport.models.CoachInsight
-import com.uniandes.sport.models.InsightType
-import com.uniandes.sport.models.Profesor
 
 class BookClassViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
+    
+    private val appContext: Context?
+        get() = try {
+            FirebaseApp.getInstance().applicationContext
+        } catch (_: Exception) {
+            null
+        }
     
     var selectedSport by mutableStateOf("Soccer")
     var selectedSkillLevel by mutableStateOf("Beginner")
@@ -140,15 +159,81 @@ class BookClassViewModel : ViewModel() {
         _smartCoachInsights.value = newInsights
     }
 
+    private fun isNetworkConnected(): Boolean {
+        val context = appContext ?: return false
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            @Suppress("DEPRECATION")
+            connectivityManager.activeNetworkInfo?.isConnected == true
+        }
+    }
+
+    private fun queuePendingBooking(
+        profesorId: String,
+        profesorName: String,
+        studentId: String,
+        studentName: String,
+        onSuccess: (Boolean) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val context = appContext
+        if (context == null) {
+            onError("No internet and local queue unavailable")
+            return
+        }
+
+        try {
+            val finalProfId = if (profesorId == "broadcast") "" else profesorId
+            val finalProfName = if (profesorId == "broadcast") "" else profesorName
+
+            val pending = PendingBookingPayload(
+                userId = studentId,
+                studentName = studentName,
+                targetProfesorId = finalProfId,
+                targetProfesorName = finalProfName,
+                sport = selectedSport,
+                skillLevel = selectedSkillLevel,
+                schedule = preferredSchedule,
+                notes = notes
+            )
+
+            PendingBookingStore.enqueue(context, pending)
+            
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val request = OneTimeWorkRequestBuilder<BookingSyncWorker>()
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(context).enqueue(request)
+            onSuccess(true) // true implies it's pending offline
+        } catch (e: Exception) {
+            onError(e.message ?: "Unknown error when queuing")
+        }
+    }
+
     fun submitBooking(
         profesorId: String, 
         profesorName: String, 
         studentId: String, 
         studentName: String, 
-        onSuccess: () -> Unit,
+        onSuccess: (Boolean) -> Unit,
         onError: (String) -> Unit
     ) {
         if (isSubmitting) return
+        if (!isNetworkConnected()) {
+            queuePendingBooking(profesorId, profesorName, studentId, studentName, onSuccess, onError)
+            return
+        }
+
         isSubmitting = true
         
         viewModelScope.launch {
@@ -176,11 +261,15 @@ class BookClassViewModel : ViewModel() {
                 Log.d("BookClassVM", "Booking request saved successfully")
                 
                 isSubmitting = false
-                onSuccess()
+                onSuccess(false) // false implies it was successfully sent online
             } catch (e: Exception) {
                 Log.e("BookClassVM", "Error submitting booking", e)
                 isSubmitting = false
-                onError(e.message ?: "Unknown error")
+                if (!isNetworkConnected()) {
+                    queuePendingBooking(profesorId, profesorName, studentId, studentName, onSuccess, onError)
+                } else {
+                    onError(e.message ?: "Unknown error")
+                }
             }
         }
     }

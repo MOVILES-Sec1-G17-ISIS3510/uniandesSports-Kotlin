@@ -47,6 +47,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 
 data class SurpriseContent(
     val title: String,
@@ -127,12 +129,16 @@ fun HomeScreen(
         }
     )
 
-    // Pull Refresh State
+    // EVC: Eventual Connectivity — estado reactivo de red
+    val isOnline = rememberIsOnline()
+
+    // Pull Refresh State — solo disponible con red
     var isRefreshing by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
+            if (!isOnline) return@rememberPullRefreshState // no-op sin red
             isRefreshing = true
             playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
@@ -165,6 +171,12 @@ fun HomeScreen(
         (upcomingMatches + joinedFinishedEvents).distinctBy { it.id }
     }
     val currentLocation by rememberCurrentLocationState()
+    LaunchedEffect(currentLocation) {
+        currentLocation?.let { loc ->
+            weatherViewModel.fetchWeather(loc.latitude, loc.longitude)
+        }
+    }
+    
     val phoneCalendarEvents by rememberPhoneCalendarEventsState()
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
@@ -293,6 +305,12 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 100.dp, start = horizontalPadding, end = horizontalPadding, top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(sectionSpacing)
         ) {
+            // EVC: Banner de conectividad — cada vista tiene su propio mensaje descriptivo
+            item {
+                OfflineConnectivityBanner(
+                    offlineMessage = "Coaches, challenges & matches shown from cache."
+                )
+            }
             item {
                 Column {
                     Text(
@@ -336,16 +354,12 @@ fun HomeScreen(
 
             // Actions - Centered & Responsive
             item {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                    contentPadding = PaddingValues(horizontal = if (isSmall) 4.dp else 0.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = if (isSmall) 4.dp else 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
                 ) {
-                    item { 
-                        HomeActionChip(Icons.Default.Cloud, currentTempStr) { onNavigate("weather") } 
-                    }
-                    item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
-                    item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
+                    HomeActionChip(Icons.Default.Cloud, currentTempStr, modifier = Modifier.weight(1f)) { onNavigate("weather") }
+                    HomeActionChip(Icons.Default.History, "History", modifier = Modifier.weight(1f)) { onNavigate("history") }
                 }
             }
 
@@ -354,7 +368,7 @@ fun HomeScreen(
                 DailyStepChallenge(steps = currentSteps, goal = dailyGoal)
             }
 
-            // Start Live Run Button
+            // Start Live Run Button — deshabilitado offline (requiere GPS + sync en tiempo real)
             item {
                 Button(
                     onClick = { 
@@ -369,7 +383,9 @@ fun HomeScreen(
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                 ) {
