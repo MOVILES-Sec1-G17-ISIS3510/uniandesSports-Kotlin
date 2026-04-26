@@ -362,15 +362,7 @@ fun ProfesoresScreen(
                             icon = Icons.Default.CalendarToday,
                             onClick = { 
                                 isFabExpanded = false
-                                if (!isOnline) {
-                                    // EVC: Booking requiere conexión para crear solicitudes en Firestore
-                                    android.widget.Toast.makeText(
-                                        context, 
-                                        "Booking requires internet connection", 
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    return@FabMenuItem
-                                }
+                                // EVC: La cola local maneja las solicitudes offline
                                 // Pass 'broadcast' instead of a specific ID when using the main FAB
                                 onNavigate("book_class/broadcast")
                             }
