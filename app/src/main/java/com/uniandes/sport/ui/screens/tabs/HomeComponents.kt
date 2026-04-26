@@ -255,7 +255,6 @@ fun MultiActionFAB(
     ) {
         if (expanded) {
             HomeFabItem("Surprise Me", Icons.Default.Casino) { onActionClick("surprise"); expanded = false }
-            HomeFabItem("Connect Devices", Icons.Default.Link) { onActionClick("connect"); expanded = false }
             HomeFabItem("Schedule Match", Icons.Default.CalendarToday) { onActionClick("schedule"); expanded = false }
         }
         FloatingActionButton(
