@@ -17,7 +17,9 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +51,8 @@ fun CommunitiesMainScreen(
     val context = LocalContext.current
     val communities by viewModel.communities.collectAsState()
     val myCommunityIds by viewModel.myCommunityIds.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
+    val lastOnlineTime by viewModel.lastOnlineTime.collectAsState()
 
     var selectedFilter by remember { mutableStateOf("Mine") }
     var searchQuery by remember { mutableStateOf("") }
@@ -130,6 +134,73 @@ fun CommunitiesMainScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
+            // Show connectivity warning when offline
+            if (!isOnline) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.WifiOff,
+                                contentDescription = "No connection",
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "No connection",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Show offline message for "Others" tab
+            if (!isOnline && selectedFilter == "Others") {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Offline mode",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Last connection: ${lastOnlineTime ?: "unknown"}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Showing cached communities only",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+                        }
+                    }
+                }
+            }
+
                 // Filters
                 item {
                     OutlinedTextField(
@@ -198,8 +269,15 @@ fun CommunitiesMainScreen(
                 }
 
                 items(listToRender, key = { it.id }) { community ->
+                    val isMember = currentUserId != null && (community.ownerId == currentUserId || myCommunityIds.contains(community.id))
+                    val canAccessDetails = isOnline || isMember
+
                     StandardCommunityCard(community, currentUserId, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
-                        selectedCommunityId = it.id
+                        if (canAccessDetails) {
+                            selectedCommunityId = it.id
+                        } else {
+                            Toast.makeText(context, "Cannot access community details while offline", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
@@ -315,7 +393,7 @@ fun CreateCommunityDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         colors = pillColors(),
                         shape = pillShape,
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,

@@ -19,6 +19,8 @@ interface CommunitiesViewModelInterface {
     val postComments: StateFlow<List<PostComment>>
     val isLoading: StateFlow<Boolean>
     val myCommunityIds: StateFlow<Set<String>>
+    val isOnline: StateFlow<Boolean>
+    val lastOnlineTime: StateFlow<String?>
 
     fun loadCommunities()
     fun loadUserMemberships(userId: String)

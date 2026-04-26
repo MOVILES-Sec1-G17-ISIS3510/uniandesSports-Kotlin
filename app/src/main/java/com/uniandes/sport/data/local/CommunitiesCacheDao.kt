@@ -30,6 +30,9 @@ interface CommunitiesCacheDao {
     @Query("DELETE FROM cached_posts WHERE communityId = :communityId")
     suspend fun clearPostsByCommunity(communityId: String)
 
+    @Query("UPDATE cached_posts SET status = :status WHERE communityId = :communityId AND postId = :postId")
+    suspend fun updatePostStatus(communityId: String, postId: String, status: String)
+
     // ─── Channels ─────────────────────────────────────────────────────────────
 
     @Query("SELECT * FROM cached_channels WHERE communityId = :communityId ORDER BY name ASC")
@@ -105,4 +108,18 @@ interface CommunitiesCacheDao {
 
     @Query("SELECT * FROM pending_messages")
     suspend fun getPendingMessages(): List<PendingMessageEntity>
+
+    // ─── Pending Posts ──────────────────────────────────────────────────────────
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPendingPost(post: PendingPostEntity)
+
+    @Query("DELETE FROM pending_posts WHERE localId = :localId")
+    suspend fun deletePendingPost(localId: String)
+
+    @Query("SELECT * FROM pending_posts")
+    suspend fun getPendingPosts(): List<PendingPostEntity>
+
+    @Query("DELETE FROM pending_posts")
+    suspend fun clearPendingPosts()
 }

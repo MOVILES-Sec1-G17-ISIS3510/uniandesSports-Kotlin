@@ -45,14 +45,15 @@ data class CachedPostEntity(
     val pinned: Boolean,
     val likes: Int,
     val createdAt: Long,
-    val cachedAt: Long
+    val cachedAt: Long,
+    val status: String = MessageStatus.SENT.name
 )
 
 fun Post.toEntity(communityId: String, now: Long = System.currentTimeMillis()): CachedPostEntity =
-    CachedPostEntity(communityId, id, author, role, content, time, pinned, likes, createdAt, now)
+    CachedPostEntity(communityId, id, author, role, content, time, pinned, likes, createdAt, now, status.name)
 
 fun CachedPostEntity.toModel(): Post =
-    Post(postId, author, role, content, time, pinned, likes, createdAt)
+    Post(postId, author, role, content, time, pinned, likes, createdAt, MessageStatus.valueOf(status))
 
 // ─── Channel ──────────────────────────────────────────────────────────────────
 
@@ -148,6 +149,19 @@ data class PendingMessageEntity(
     val authorId: String,
     val authorName: String,
     val content: String,
+    val createdAt: Long,
+    val retryCount: Int = 0
+)
+
+@Entity(tableName = "pending_posts")
+data class PendingPostEntity(
+    @PrimaryKey val localId: String,
+    val communityId: String,
+    val authorId: String,
+    val authorName: String,
+    val role: String,
+    val content: String,
+    val pinned: Boolean,
     val createdAt: Long,
     val retryCount: Int = 0
 )

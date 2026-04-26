@@ -43,6 +43,12 @@ class DummyCommunitiesViewModel : ViewModel(), CommunitiesViewModelInterface {
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isOnline = MutableStateFlow(true)
+    override val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    private val _lastOnlineTime = MutableStateFlow<String?>(null)
+    override val lastOnlineTime: StateFlow<String?> = _lastOnlineTime.asStateFlow()
+
     override fun loadCommunities() {
         _isLoading.value = true
         // Hardcoded Dummy Data referencing the React equivalent

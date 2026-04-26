@@ -19,7 +19,8 @@ data class Post(
     val time: String = "",
     val pinned: Boolean = false,
     val likes: Int = 0,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    val status: MessageStatus = MessageStatus.SENT
 )
 
 data class Channel(
