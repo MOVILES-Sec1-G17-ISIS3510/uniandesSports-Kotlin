@@ -171,6 +171,12 @@ fun HomeScreen(
         (upcomingMatches + joinedFinishedEvents).distinctBy { it.id }
     }
     val currentLocation by rememberCurrentLocationState()
+    LaunchedEffect(currentLocation) {
+        currentLocation?.let { loc ->
+            weatherViewModel.fetchWeather(loc.latitude, loc.longitude)
+        }
+    }
+    
     val phoneCalendarEvents by rememberPhoneCalendarEventsState()
     val preferredSports = remember(authViewModel.mainSport) {
         OpenMatchRanker.parsePreferredSports(authViewModel.mainSport)
