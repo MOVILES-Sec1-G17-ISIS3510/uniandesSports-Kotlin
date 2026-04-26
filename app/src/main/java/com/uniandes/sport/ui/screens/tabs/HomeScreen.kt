@@ -47,6 +47,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 
 data class SurpriseContent(
     val title: String,
@@ -127,12 +129,16 @@ fun HomeScreen(
         }
     )
 
-    // Pull Refresh State
+    // EVC: Eventual Connectivity — estado reactivo de red
+    val isOnline = rememberIsOnline()
+
+    // Pull Refresh State — solo disponible con red
     var isRefreshing by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
+            if (!isOnline) return@rememberPullRefreshState // no-op sin red
             isRefreshing = true
             playViewModel.refreshEvents()
             retosViewModel.fetchRetos()
@@ -293,6 +299,12 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 100.dp, start = horizontalPadding, end = horizontalPadding, top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(sectionSpacing)
         ) {
+            // EVC: Banner de conectividad — cada vista tiene su propio mensaje descriptivo
+            item {
+                OfflineConnectivityBanner(
+                    offlineMessage = "Coaches, challenges & matches shown from cache."
+                )
+            }
             item {
                 Column {
                     Text(
@@ -354,7 +366,7 @@ fun HomeScreen(
                 DailyStepChallenge(steps = currentSteps, goal = dailyGoal)
             }
 
-            // Start Live Run Button
+            // Start Live Run Button — deshabilitado offline (requiere GPS + sync en tiempo real)
             item {
                 Button(
                     onClick = { 
@@ -365,11 +377,14 @@ fun HomeScreen(
                         )
                         onNavigate("live_run") 
                     },
+                    enabled = isOnline, // EVC: no se puede iniciar run sin conexión
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                 ) {
