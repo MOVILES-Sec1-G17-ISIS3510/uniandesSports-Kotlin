@@ -16,7 +16,7 @@ import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.ktx.messaging
 
 /**
- * IMPLEMENTACIÓN DE MULTITHREADING (CORRUTINAS) - CRITERIOS DE EVALUACIÓN
+ * IMPLEMENTACIÓN DE MULTITHREADING (CORRUTINAS)
  * Esta clase demuestra tres estrategias fundamentales de concurrencia en Kotlin:
  * 1. Corrutina con Dispatcher: Uso explícito de Dispatchers.IO para operaciones pesadas.
  * 2. Múltiples corrutinas anidadas: Una corrutina lanza otra en segundo plano (nested).
@@ -225,10 +225,38 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
                     transaction.update(profRef, "rating", newRating)
                 }.await()
 
+                // CRITERIO: Corrutina anidada (nested coroutine)
+                // Desde la corrutina IO principal lanzamos una corrutina hija
+                // en background para re-sincronizar el conteo total sin bloquear al usuario.
+                launch(Dispatchers.IO) {
+                    Log.d("Coroutine_Debug", "Nested coroutine: re-syncing review count in background")
+                    syncReviewsCountInternal(profesorId)
+                }
+
                 withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onFailure(e) }
             }
+        }
+    }
+
+    /**
+     * CRITERIO: Función de I/O pura invocada desde corrutina anidada.
+     * Recalcula el rating real desde el servidor y lo persiste en Firestore.
+     * Solo se llama internamente (desde una nested coroutine en addReview).
+     */
+    private suspend fun syncReviewsCountInternal(profesorId: String) = withContext(Dispatchers.IO) {
+        try {
+            val profRef = db.collection("profesores").document(profesorId)
+            val snapshot = profRef.collection("reviews")
+                .get(com.google.firebase.firestore.Source.SERVER).await()
+            val realCount = snapshot.size()
+            val totalRating = snapshot.sumOf { it.getDouble("rating") ?: 0.0 }
+            val newRating = if (realCount > 0) totalRating / realCount else 0.0
+            profRef.update(mapOf("totalReviews" to realCount, "rating" to newRating)).await()
+            Log.d("Coroutine_Debug", "Nested coroutine: review count synced. Total=$realCount, Rating=$newRating")
+        } catch (e: Exception) {
+            Log.e("Coroutine_Debug", "Nested coroutine: review count sync failed", e)
         }
     }
 
