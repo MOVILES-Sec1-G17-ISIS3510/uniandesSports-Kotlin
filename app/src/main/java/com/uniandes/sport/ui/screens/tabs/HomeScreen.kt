@@ -348,16 +348,12 @@ fun HomeScreen(
 
             // Actions - Centered & Responsive
             item {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                    contentPadding = PaddingValues(horizontal = if (isSmall) 4.dp else 0.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = if (isSmall) 4.dp else 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
                 ) {
-                    item { 
-                        HomeActionChip(Icons.Default.Cloud, currentTempStr) { onNavigate("weather") } 
-                    }
-                    item { HomeActionChip(Icons.Default.DirectionsRun, "Strava") { onNavigate("strava") } }
-                    item { HomeActionChip(Icons.Default.History, "History") { onNavigate("history") } }
+                    HomeActionChip(Icons.Default.Cloud, currentTempStr, modifier = Modifier.weight(1f)) { onNavigate("weather") }
+                    HomeActionChip(Icons.Default.History, "History", modifier = Modifier.weight(1f)) { onNavigate("history") }
                 }
             }
 
@@ -377,7 +373,6 @@ fun HomeScreen(
                         )
                         onNavigate("live_run") 
                     },
-                    enabled = isOnline, // EVC: no se puede iniciar run sin conexión
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(

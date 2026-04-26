@@ -167,8 +167,7 @@ fun ProfesoresScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text(
-                    if (isOnline) "Search sport or specialty (e.g. Yoga, Padel)"
-                    else "Searching cached coaches...",
+                    "Search sport or specialty",
                     fontSize = 14.sp
                 ) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
