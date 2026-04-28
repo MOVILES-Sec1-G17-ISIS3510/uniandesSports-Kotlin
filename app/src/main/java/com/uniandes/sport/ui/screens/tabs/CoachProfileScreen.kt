@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
+import com.uniandes.sport.data.local.ProfesoresFileStorage
 import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,6 +62,22 @@ fun CoachProfileScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (profesor != null) {
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val file = ProfesoresFileStorage.exportProfesorReviews(context, profesor, reviews)
+                                    android.widget.Toast.makeText(context, "Reseñas guardadas: ${file.name}", android.widget.Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "No se pudieron guardar las reseñas: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Guardar reseñas")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -53,6 +53,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import com.uniandes.sport.models.InsightType
 import com.uniandes.sport.models.CoachInsight
+import com.uniandes.sport.data.local.BecomeCoachDraft
+import com.uniandes.sport.data.local.ProfesoresFileStorage
+import com.uniandes.sport.data.local.ProfesoresKeyValueStore
+import com.uniandes.sport.data.preferences.ProfesoresPreferencesRepository
+import com.uniandes.sport.data.preferences.ProfesoresSortMode
+import com.uniandes.sport.data.preferences.ProfesoresUiPreferences
 
 @OptIn(ExperimentalMaterialApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +71,10 @@ fun ProfesoresScreen(
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val preferencesRepository = remember(context) { ProfesoresPreferencesRepository.getInstance(context) }
+    val uiPreferences by preferencesRepository.preferencesFlow.collectAsState(
+        initial = ProfesoresUiPreferences()
+    )
     val profesores by profesoresViewModel.profesores.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
     var searchText by remember { mutableStateOf("") }
@@ -78,6 +88,7 @@ fun ProfesoresScreen(
 
     var userUid by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var coachDraft by remember { mutableStateOf(BecomeCoachDraft()) }
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
@@ -95,6 +106,9 @@ fun ProfesoresScreen(
     val isOnline = rememberIsOnline()
 
     LaunchedEffect(Unit) {
+        selectedFilter = ProfesoresKeyValueStore.getSelectedFilter(context)
+        searchText = ProfesoresKeyValueStore.getSearchQuery(context)
+        coachDraft = ProfesoresKeyValueStore.getBecomeCoachDraft(context)
         profesoresViewModel.fetchProfesores()
         authViewModel.getUser(
             onSuccess = { user -> 
@@ -116,6 +130,14 @@ fun ProfesoresScreen(
         }
     }
 
+    LaunchedEffect(selectedFilter) {
+        ProfesoresKeyValueStore.saveSelectedFilter(context, selectedFilter)
+    }
+
+    LaunchedEffect(searchText) {
+        ProfesoresKeyValueStore.saveSearchQuery(context, searchText)
+    }
+
     // Connect Coaches context for personalized recommendation
     LaunchedEffect(profesores) {
         if (profesores.isNotEmpty()) {
@@ -126,15 +148,29 @@ fun ProfesoresScreen(
     // Bug fix #4: guard against timing race where userUid is still null when profesores loads from cache
     val isCurrentUserCoach = userUid != null && profesores.any { it.id == userUid }
 
-    val filteredProfesores = remember(profesores, selectedFilter, searchText) {
-        profesores.filter { prof ->
-            val matchesFilter = selectedFilter == "All" || prof.deporte == selectedFilter
-            val matchesSearch = searchText.isBlank() || 
-                                prof.nombre.contains(searchText, ignoreCase = true) || 
-                                prof.deporte.contains(searchText, ignoreCase = true) ||
-                                prof.especialidad.contains(searchText, ignoreCase = true)
-            matchesFilter && matchesSearch
-        }
+    val filteredProfesores = remember(profesores, selectedFilter, searchText, uiPreferences) {
+        profesores
+            .asSequence()
+            .filter { prof ->
+                val matchesFilter = selectedFilter == "All" || prof.deporte.equals(selectedFilter, ignoreCase = true)
+                val matchesSearch = searchText.isBlank() ||
+                    prof.nombre.contains(searchText, ignoreCase = true) ||
+                    prof.deporte.contains(searchText, ignoreCase = true) ||
+                    prof.especialidad.contains(searchText, ignoreCase = true)
+                val matchesVerified = !uiPreferences.onlyVerified || prof.verified
+                matchesFilter && matchesSearch && matchesVerified
+            }
+            .sortedWith(
+                when (uiPreferences.sortMode) {
+                    ProfesoresSortMode.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.nombre }
+                    ProfesoresSortMode.EXPERIENCE -> compareByDescending<Profesor> {
+                        it.experiencia.filter(Char::isDigit).toIntOrNull() ?: 0
+                    }.thenByDescending { it.rating }
+                    ProfesoresSortMode.RATING -> compareByDescending<Profesor> { it.rating }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.nombre }
+                }
+            )
+            .toList()
     }
 
     // Effect to log search demand when the user stops typing (debounced log)
@@ -192,6 +228,48 @@ fun ProfesoresScreen(
             OfflineConnectivityBanner(
                 offlineMessage = "Showing ${if (filteredProfesores.isNotEmpty()) filteredProfesores.size.toString() + " coaches" else "coaches"} from cache. Booking disabled."
             )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = uiPreferences.onlyVerified,
+                    onClick = {
+                        coroutineScope.launch {
+                            preferencesRepository.setOnlyVerified(!uiPreferences.onlyVerified)
+                        }
+                    },
+                    label = { Text("Verified only") }
+                )
+                AssistChip(
+                    onClick = {
+                        coroutineScope.launch {
+                            val nextMode = when (uiPreferences.sortMode) {
+                                ProfesoresSortMode.RATING -> ProfesoresSortMode.NAME
+                                ProfesoresSortMode.NAME -> ProfesoresSortMode.EXPERIENCE
+                                ProfesoresSortMode.EXPERIENCE -> ProfesoresSortMode.RATING
+                            }
+                            preferencesRepository.setSortMode(nextMode)
+                        }
+                    },
+                    label = { Text("Sort: ${uiPreferences.sortMode.name.lowercase().replaceFirstChar { it.uppercase() }}") }
+                )
+                AssistChip(
+                    onClick = {
+                        try {
+                            val file = ProfesoresFileStorage.exportProfesoresSnapshot(context, filteredProfesores)
+                            Toast.makeText(context, "Respaldo guardado: ${file.name}", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "No se pudo guardar el respaldo: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    label = { Text("Guardar respaldo") },
+                    leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) }
+                )
+            }
 
             // Sport Filter
             LazyRow(
@@ -297,7 +375,7 @@ fun ProfesoresScreen(
                 }
 
                 // YOUR REQUESTS SECTION (G17 Rubric: User History)
-                if (userBookings.isNotEmpty()) {
+                if (userBookings.isNotEmpty() && uiPreferences.showRecentRequests) {
                     item {
                         Text(
                             "YOUR RECENT REQUESTS",
@@ -334,7 +412,11 @@ fun ProfesoresScreen(
                     items(filteredProfesores) { prof ->
                         CoachCard(
                             profesor = prof,
-                            onViewProfile = { onNavigate(Screen.CoachProfile.route.replace("{profesorId}", prof.id)) }
+                            showQuickContact = uiPreferences.showQuickContact,
+                            onViewProfile = {
+                                ProfesoresKeyValueStore.saveLastOpenedProfesorId(context, prof.id)
+                                onNavigate(Screen.CoachProfile.route.replace("{profesorId}", prof.id))
+                            }
                         )
                     }
                 }
@@ -447,6 +529,11 @@ fun ProfesoresScreen(
 
         BecomeCoachDialog(
             onDismiss = { showBecomeCoachDialog = false },
+            initialDraft = coachDraft,
+            onDraftChange = { draft ->
+                coachDraft = draft
+                ProfesoresKeyValueStore.saveBecomeCoachDraft(context, draft)
+            },
             onSubmit = { deporte, precio, experiencia, whatsapp, especialidad ->
                 val newCoach = ProfesorBuilder(id = dialogUserUid)
                     .setBasicInfo(
@@ -464,6 +551,8 @@ fun ProfesoresScreen(
                 profesoresViewModel.createProfesor(newCoach,
                     onSuccess = {
                         showBecomeCoachDialog = false
+                        coachDraft = BecomeCoachDraft()
+                        ProfesoresKeyValueStore.clearBecomeCoachDraft(context)
                         profesoresViewModel.refreshProfesores {} // Bug fix #8: refresh so new coach appears immediately
                     },
                     onFailure = { /* Handle failure */ }
@@ -474,7 +563,11 @@ fun ProfesoresScreen(
 }
 
 @Composable
-fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
+fun CoachCard(
+    profesor: Profesor,
+    showQuickContact: Boolean = true,
+    onViewProfile: () -> Unit
+) {
     val context = LocalContext.current
     val openWhatsApp = {
         val cleanNumber = profesor.whatsapp.replace(Regex("\\D"), "")
@@ -612,14 +705,16 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
                 ) {
                     Text("View Profile", fontWeight = FontWeight.Bold)
                 }
-                Button(
-                    onClick = openWhatsApp,
-                    modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(24.dp))
+                if (showQuickContact) {
+                    Button(
+                        onClick = openWhatsApp,
+                        modifier = Modifier.size(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(24.dp))
+                    }
                 }
             }
         }
@@ -629,12 +724,17 @@ fun CoachCard(profesor: Profesor, onViewProfile: () -> Unit) {
 
 
 @Composable
-fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, String, String) -> Unit) {
-    var deporte by remember { mutableStateOf("Soccer") }
-    var precio by remember { mutableStateOf("") }
-    var experiencia by remember { mutableStateOf("") }
-    var whatsapp by remember { mutableStateOf("") }
-    var especialidad by remember { mutableStateOf("") }
+fun BecomeCoachDialog(
+    onDismiss: () -> Unit,
+    initialDraft: BecomeCoachDraft = BecomeCoachDraft(),
+    onDraftChange: (BecomeCoachDraft) -> Unit = {},
+    onSubmit: (String, String, String, String, String) -> Unit
+) {
+    var deporte by remember(initialDraft) { mutableStateOf(initialDraft.sport) }
+    var precio by remember(initialDraft) { mutableStateOf(initialDraft.precio) }
+    var experiencia by remember(initialDraft) { mutableStateOf(initialDraft.experiencia) }
+    var whatsapp by remember(initialDraft) { mutableStateOf(initialDraft.whatsapp) }
+    var especialidad by remember(initialDraft) { mutableStateOf(initialDraft.especialidad) }
 
     // Validation States
     val isPriceValid = precio.isNotEmpty() && precio.all { it.isDigit() }
@@ -646,6 +746,18 @@ fun BecomeCoachDialog(onDismiss: () -> Unit, onSubmit: (String, String, String, 
 
     val deportes = listOf("Soccer", "Tennis", "Basketball", "Swimming", "Running")
     var expanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(deporte, precio, experiencia, whatsapp, especialidad) {
+        onDraftChange(
+            BecomeCoachDraft(
+                sport = deporte,
+                precio = precio,
+                experiencia = experiencia,
+                whatsapp = whatsapp,
+                especialidad = especialidad
+            )
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
