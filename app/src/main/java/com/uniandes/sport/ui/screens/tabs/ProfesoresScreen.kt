@@ -257,18 +257,7 @@ fun ProfesoresScreen(
                     },
                     label = { Text("Sort: ${uiPreferences.sortMode.name.lowercase().replaceFirstChar { it.uppercase() }}") }
                 )
-                AssistChip(
-                    onClick = {
-                        try {
-                            val file = ProfesoresFileStorage.exportProfesoresSnapshot(context, filteredProfesores)
-                            Toast.makeText(context, "Respaldo guardado: ${file.name}", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "No se pudo guardar el respaldo: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    label = { Text("Guardar respaldo") },
-                    leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) }
-                )
+
             }
 
             // Sport Filter

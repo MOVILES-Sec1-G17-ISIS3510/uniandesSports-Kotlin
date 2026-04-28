@@ -25,6 +25,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.MainActivity
 import com.uniandes.sport.models.User
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
+import com.uniandes.sport.viewmodels.profesores.FirestoreProfesoresViewModel
+import com.uniandes.sport.data.local.ProfesoresFileStorage
 import java.text.Normalizer
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +42,13 @@ fun PerfilUsuarioScreen(
     var isLoggingOut by remember { mutableStateOf(false) }
     var selectedSportsCsv by remember { mutableStateOf("") }
     var isSavingSports by remember { mutableStateOf(false) }
+
+    val profesoresViewModel: FirestoreProfesoresViewModel = viewModel()
+    val profesores by profesoresViewModel.profesores.collectAsState()
+
+    LaunchedEffect(Unit) {
+        profesoresViewModel.fetchProfesores()
+    }
 
     LaunchedEffect(Unit) {
         authViewModel.getUser(
@@ -140,6 +149,53 @@ fun PerfilUsuarioScreen(
                     }
                 )
                 InfoRow(icon = Icons.Default.Badge, label = "Role", value = user?.role?.uppercase() ?: "ATHLETE")
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Data & Storage Section
+                Text(
+                    text = "DATA & STORAGE",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 1.sp
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                InfoRowWithAction(
+                    icon = Icons.Default.SdStorage,
+                    label = "Coaches Backup",
+                    value = "Export all coaches into a JSON file",
+                    actionIcon = Icons.Default.Download,
+                    onAction = {
+                        try {
+                            if (profesores.isNotEmpty()) {
+                                val file = ProfesoresFileStorage.exportProfesoresSnapshot(context, profesores)
+                                
+                                // Logic to share/open the file so the user can actually SEE it
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "com.uniandes.sport.fileprovider",
+                                    file
+                                )
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Open backup with..."))
+                                
+                                Toast.makeText(context, "Backup saved: ${file.name}", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "No coaches data to backup", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -376,6 +432,53 @@ fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
         Column {
             Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+fun InfoRowWithAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+        }
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+        }
+
+        IconButton(
+            onClick = onAction,
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp))
         }
     }
 }
