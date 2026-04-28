@@ -416,6 +416,36 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
             .addOnFailureListener { onFailure(it) }
     }
 
+    fun updateUserProfile(
+        newName: String,
+        newProgram: String,
+        newSemester: String,
+        onSuccess: () -> Unit,
+        onFailure: (exception: Exception) -> Unit
+    ) {
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            onFailure(Exception("User is not logged in."))
+            return
+        }
+
+        val updates = mapOf(
+            "fullName" to newName,
+            "program" to newProgram,
+            "semester" to (newSemester.toIntOrNull() ?: 0)
+        )
+
+        db.collection("users").document(currentUser.uid)
+            .update(updates)
+            .addOnSuccessListener {
+                _fullName = newName
+                _program = newProgram
+                _semester = newSemester
+                onSuccess()
+            }
+            .addOnFailureListener { onFailure(it) }
+    }
+
     private fun normalizeSportId(value: String): String {
         val withoutAccents = Normalizer.normalize(value, Normalizer.Form.NFD)
             .replace(Regex("\\p{Mn}+"), "")
