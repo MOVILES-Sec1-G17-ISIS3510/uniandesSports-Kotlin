@@ -1,30 +1,39 @@
 package com.uniandes.sport.viewmodels.profesores
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.uniandes.sport.models.Profesor
-import com.uniandes.sport.models.Review
+import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import android.util.Log
-import kotlinx.coroutines.*
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.ktx.messaging
+import com.uniandes.sport.data.local.ProfesoresLocalRepository
+import com.uniandes.sport.models.BookingRequest
+import com.uniandes.sport.models.Profesor
+import com.uniandes.sport.models.Review
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.messaging.ktx.messaging
+import kotlinx.coroutines.withContext
 
-/**
- * IMPLEMENTACIÓN DE MULTITHREADING (CORRUTINAS)
- * Esta clase demuestra tres estrategias fundamentales de concurrencia en Kotlin:
- * 1. Corrutina con Dispatcher: Uso explícito de Dispatchers.IO para operaciones pesadas.
- * 2. Múltiples corrutinas anidadas: Una corrutina lanza otra en segundo plano (nested).
- * 3. Coordinación I/O + Main: Ejecución en segundo plano y actualización en el hilo principal.
- */
 class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
     private val db = FirebaseFirestore.getInstance()
+
+    private val appContext
+        get() = try {
+            FirebaseApp.getInstance().applicationContext
+        } catch (_: Exception) {
+            null
+        }
+
+    private val localRepository: ProfesoresLocalRepository?
+        get() = appContext?.let { ProfesoresLocalRepository.getInstance(it) }
 
     private val _profesores = MutableStateFlow<List<Profesor>>(emptyList())
     override val profesores: StateFlow<List<Profesor>> = _profesores.asStateFlow()
@@ -32,119 +41,129 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     private val _reviews = MutableStateFlow<List<Review>>(emptyList())
     override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
 
-    private val _bookingRequests = MutableStateFlow<List<com.uniandes.sport.models.BookingRequest>>(emptyList())
-    override val bookingRequests: StateFlow<List<com.uniandes.sport.models.BookingRequest>> = _bookingRequests.asStateFlow()
+    private val _bookingRequests = MutableStateFlow<List<BookingRequest>>(emptyList())
+    override val bookingRequests: StateFlow<List<BookingRequest>> = _bookingRequests.asStateFlow()
 
     private var cachedProfesores: List<Profesor>? = null
     private var reviewsListener: ListenerRegistration? = null
     private var requestsListener: ListenerRegistration? = null
+    private var profesoresCacheJob: Job? = null
+    private var reviewsCacheJob: Job? = null
+    private var requestsCacheJob: Job? = null
 
-    /**
-     * CRITERIO: Una corrutina ejecutando en Input/Output y otra encargada del Main (UI).
-     */
     override fun fetchProfesores(
-        onSuccess: (List<Profesor>) -> Unit, 
+        onSuccess: (List<Profesor>) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        // RAM (L1) - Síncrona, no requiere corrutina
-        if (cachedProfesores != null && cachedProfesores!!.isNotEmpty()) {
-            _profesores.value = cachedProfesores!!
-            onSuccess(cachedProfesores!!)
+        observeLocalProfesores()
+
+        cachedProfesores?.takeIf { it.isNotEmpty() }?.let { memoryCache ->
+            _profesores.value = memoryCache
+            onSuccess(memoryCache)
             return
         }
 
-        // Definimos el Scope (viewModelScope) para que la corrutina muera si el ViewModel se destruye
-        viewModelScope.launch(Dispatchers.Main) { // Hilo Principal (Main)
+        viewModelScope.launch {
             try {
-                // Cambiamos el contexto a IO para no bloquear la interfaz de usuario
-                val cachedList = withContext(Dispatchers.IO) { // ESTRATEGIA: Input/Output Dispatcher
-                    Log.d("Coroutine_Debug", "Fetching from Disk Cache (IO Thread)")
-                    val snapshot = db.collection("profesores")
+                val firestoreCache = withContext(Dispatchers.IO) {
+                    db.collection("profesores")
                         .get(com.google.firebase.firestore.Source.CACHE)
-                        .await() // Suspensión: Espera el resultado sin bloquear el hilo
-                    
-                    snapshot.mapNotNull { doc ->
-                        try { doc.toObject(Profesor::class.java).apply { id = doc.id } } catch (e: Exception) { null }
-                    }
+                        .await()
+                        .mapNotNull { doc ->
+                            runCatching {
+                                doc.toObject(Profesor::class.java).apply { id = doc.id }
+                            }.getOrNull()
+                        }
                 }
 
-                if (cachedList.isNotEmpty()) {
-                    cachedProfesores = cachedList
-                    _profesores.value = cachedList // Actualización segura en el Main Thread
-                    onSuccess(cachedList)
-                    
-                    // CRITERIO: Múltiples corrutinas, una dentro de la otra (Nested Coroutines)
-                    // Lanzamos una corrutina hermana para actualizar el caché desde el servidor en background
-                    launch(Dispatchers.IO) {
-                        Log.d("Coroutine_Debug", "Starting nested coroutine for background sync")
-                        syncFromServer()
+                when {
+                    firestoreCache.isNotEmpty() -> {
+                        cachedProfesores = firestoreCache
+                        _profesores.value = firestoreCache
+                        withContext(Dispatchers.IO) {
+                            localRepository?.replaceProfesores(firestoreCache)
+                        }
+                        onSuccess(firestoreCache)
+                        launch(Dispatchers.IO) { syncFromServer() }
                     }
-                } else {
-                    // Si no hay caché, forzamos descarga desde el servidor
-                    syncFromServer()
-                    onSuccess(_profesores.value)
+
+                    else -> {
+                        val localCache = withContext(Dispatchers.IO) {
+                            localRepository?.getCachedProfesores().orEmpty()
+                        }
+                        if (localCache.isNotEmpty()) {
+                            cachedProfesores = localCache
+                            _profesores.value = localCache
+                            onSuccess(localCache)
+                        }
+                        syncFromServer()
+                        onSuccess(_profesores.value)
+                    }
                 }
             } catch (e: Exception) {
-                Log.e("Coroutine_Debug", "Error in main fetch coroutine", e)
-                // Fallback al servidor si falla el caché
+                Log.e("ProfesoresVM", "Error loading profesores", e)
                 viewModelScope.launch(Dispatchers.IO) { syncFromServer() }
                 onFailure(e)
             }
         }
     }
 
-    /**
-     * Función privada de suspensión que maneja la lógica de I/O pura.
-     */
     private suspend fun syncFromServer() = withContext(Dispatchers.IO) {
         try {
-            Log.d("Coroutine_Debug", "Syncing from Server (IO Thread)")
             val snapshot = db.collection("profesores")
                 .get(com.google.firebase.firestore.Source.SERVER)
                 .await()
 
             val list = snapshot.mapNotNull { doc ->
-                try {
-                    val p = doc.toObject(Profesor::class.java).apply { id = doc.id }
-                    if (p.disponibilidad == "A convenir") {
-                        p.disponibilidad = "To be agreed"
+                runCatching {
+                    val profesor = doc.toObject(Profesor::class.java).apply { id = doc.id }
+                    if (profesor.disponibilidad == "A convenir") {
+                        profesor.disponibilidad = "To be agreed"
                         doc.reference.update("disponibilidad", "To be agreed")
                     }
-                    p
-                } catch (e: Exception) { null }
+                    profesor
+                }.getOrNull()
             }
 
-            // Actualizamos la UI volviendo al Main Thread internamente o usando StateFlow
             cachedProfesores = list
             _profesores.value = list
+            localRepository?.replaceProfesores(list)
         } catch (e: Exception) {
-            Log.e("Coroutine_Debug", "Cloud Sync Failed", e)
+            Log.e("ProfesoresVM", "Cloud sync failed", e)
         }
     }
 
     override fun refreshProfesores(onComplete: () -> Unit) {
         cachedProfesores = null
-        viewModelScope.launch(Dispatchers.Main) {
+        viewModelScope.launch {
             syncFromServer()
             onComplete()
         }
     }
 
     override fun fetchReviews(profesorId: String) {
+        observeLocalReviews(profesorId)
         reviewsListener?.remove()
         reviewsListener = db.collection("profesores").document(profesorId)
             .collection("reviews")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) return@addSnapshotListener
                 if (snapshot != null) {
-                    _reviews.value = snapshot.mapNotNull { doc ->
-                        try { doc.toObject(Review::class.java).apply { id = doc.id } } catch (parseError: Exception) { null }
+                    val list = snapshot.mapNotNull { doc ->
+                        runCatching {
+                            doc.toObject(Review::class.java).apply { id = doc.id }
+                        }.getOrNull()
+                    }
+                    _reviews.value = list
+                    viewModelScope.launch(Dispatchers.IO) {
+                        localRepository?.replaceReviews(profesorId, list)
                     }
                 }
             }
     }
 
     override fun fetchBookingRequestsBySport(sport: String) {
+        observeLocalBookingRequests(sport)
         requestsListener?.remove()
         requestsListener = db.collection("coach_requests")
             .whereEqualTo("sport", sport)
@@ -152,16 +171,20 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
                 if (e != null) return@addSnapshotListener
                 if (snapshot != null) {
                     val list = snapshot.map { doc ->
-                        doc.toObject(com.uniandes.sport.models.BookingRequest::class.java).apply { id = doc.id }
+                        doc.toObject(BookingRequest::class.java).apply { id = doc.id }
+                    }.sortedByDescending { it.createdAt }
+
+                    _bookingRequests.value = list
+                    viewModelScope.launch(Dispatchers.IO) {
+                        localRepository?.replaceBookingRequestsBySport(sport, list)
                     }
-                    _bookingRequests.value = list.sortedByDescending { it.createdAt }
                 }
             }
     }
 
     override fun syncCoachingLeadsTopic(sport: String) {
         val topic = "sport_leads_${sport.lowercase().replace(Regex("[^a-z0-9]"), "_")}"
-        viewModelScope.launch(Dispatchers.IO) { // Corrutina con Dispatcher I/O para red
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 Firebase.messaging.subscribeToTopic(topic).await()
                 Log.d("FCM", "Subscribed to $topic")
@@ -176,7 +199,7 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        viewModelScope.launch(Dispatchers.IO) { // Operación de escritura en background (I/O)
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val documentRef = if (profesor.id.isNotEmpty()) {
                     db.collection("profesores").document(profesor.id)
@@ -185,8 +208,9 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
                 }
                 val profToSave = profesor.copy(id = documentRef.id)
                 documentRef.set(profToSave).await()
-                
-                withContext(Dispatchers.Main) { onSuccess() } // Regresamos al Main para notificar éxito
+                localRepository?.upsertProfesor(profToSave)
+
+                withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onFailure(e) }
             }
@@ -199,11 +223,15 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        viewModelScope.launch(Dispatchers.IO) { // Manejo asíncrono robusto
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val reviewsCollection = db.collection("profesores").document(profesorId).collection("reviews")
-                val existing = reviewsCollection.whereEqualTo("estudiante", review.estudiante).limit(1).get().await()
-                
+                val existing = reviewsCollection
+                    .whereEqualTo("estudiante", review.estudiante)
+                    .limit(1)
+                    .get()
+                    .await()
+
                 if (!existing.isEmpty) {
                     withContext(Dispatchers.Main) { onFailure(Exception("Already reviewed")) }
                     return@launch
@@ -225,13 +253,8 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
                     transaction.update(profRef, "rating", newRating)
                 }.await()
 
-                // CRITERIO: Corrutina anidada (nested coroutine)
-                // Desde la corrutina IO principal lanzamos una corrutina hija
-                // en background para re-sincronizar el conteo total sin bloquear al usuario.
-                launch(Dispatchers.IO) {
-                    Log.d("Coroutine_Debug", "Nested coroutine: re-syncing review count in background")
-                    syncReviewsCountInternal(profesorId)
-                }
+                launch(Dispatchers.IO) { syncReviewsCountInternal(profesorId) }
+                localRepository?.upsertReview(profesorId, reviewToSave)
 
                 withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
@@ -240,23 +263,18 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         }
     }
 
-    /**
-     * CRITERIO: Función de I/O pura invocada desde corrutina anidada.
-     * Recalcula el rating real desde el servidor y lo persiste en Firestore.
-     * Solo se llama internamente (desde una nested coroutine en addReview).
-     */
     private suspend fun syncReviewsCountInternal(profesorId: String) = withContext(Dispatchers.IO) {
         try {
             val profRef = db.collection("profesores").document(profesorId)
             val snapshot = profRef.collection("reviews")
-                .get(com.google.firebase.firestore.Source.SERVER).await()
+                .get(com.google.firebase.firestore.Source.SERVER)
+                .await()
             val realCount = snapshot.size()
             val totalRating = snapshot.sumOf { it.getDouble("rating") ?: 0.0 }
             val newRating = if (realCount > 0) totalRating / realCount else 0.0
             profRef.update(mapOf("totalReviews" to realCount, "rating" to newRating)).await()
-            Log.d("Coroutine_Debug", "Nested coroutine: review count synced. Total=$realCount, Rating=$newRating")
         } catch (e: Exception) {
-            Log.e("Coroutine_Debug", "Nested coroutine: review count sync failed", e)
+            Log.e("ProfesoresVM", "Review count sync failed", e)
         }
     }
 
@@ -268,13 +286,14 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val profRef = db.collection("profesores").document(profesorId)
-                val snapshot = profRef.collection("reviews").get(com.google.firebase.firestore.Source.SERVER).await()
+                val snapshot = profRef.collection("reviews")
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
                 val realCount = snapshot.size()
                 val totalRating = snapshot.sumOf { it.getDouble("rating") ?: 0.0 }
                 val newRating = if (realCount > 0) totalRating / realCount else 0.0
 
                 profRef.update(mapOf("totalReviews" to realCount, "rating" to newRating)).await()
-                
                 withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onFailure(e) }
@@ -292,14 +311,68 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.collection("coach_requests").document(requestId)
-                    .update(mapOf(
-                        "status" to "accepted",
-                        "targetProfesorId" to professorId,
-                        "targetProfesorName" to professorName
-                    )).await()
+                    .update(
+                        mapOf(
+                            "status" to "accepted",
+                            "targetProfesorId" to professorId,
+                            "targetProfesorName" to professorName
+                        )
+                    ).await()
+
+                val updated = _bookingRequests.value.map { request ->
+                    if (request.id == requestId) {
+                        request.copy(
+                            targetProfesorId = professorId,
+                            targetProfesorName = professorName,
+                            status = "accepted"
+                        )
+                    } else {
+                        request
+                    }
+                }
+                _bookingRequests.value = updated
+                localRepository?.upsertBookingRequests(updated)
+
                 withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onFailure(e) }
+            }
+        }
+    }
+
+    private fun observeLocalProfesores() {
+        if (profesoresCacheJob != null) return
+        val repo = localRepository ?: return
+        profesoresCacheJob = viewModelScope.launch {
+            repo.observeProfesores().collect { localList ->
+                if (localList.isNotEmpty()) {
+                    cachedProfesores = localList
+                    _profesores.value = localList
+                }
+            }
+        }
+    }
+
+    private fun observeLocalReviews(profesorId: String) {
+        reviewsCacheJob?.cancel()
+        val repo = localRepository ?: return
+        reviewsCacheJob = viewModelScope.launch {
+            repo.observeReviews(profesorId).collect { localList ->
+                if (localList.isNotEmpty() || _reviews.value.isEmpty()) {
+                    _reviews.value = localList
+                }
+            }
+        }
+    }
+
+    private fun observeLocalBookingRequests(sport: String) {
+        requestsCacheJob?.cancel()
+        val repo = localRepository ?: return
+        requestsCacheJob = viewModelScope.launch {
+            repo.observeBookingRequestsBySport(sport).collect { localList ->
+                if (localList.isNotEmpty() || _bookingRequests.value.isEmpty()) {
+                    _bookingRequests.value = localList
+                }
             }
         }
     }
@@ -308,5 +381,8 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         super.onCleared()
         reviewsListener?.remove()
         requestsListener?.remove()
+        profesoresCacheJob?.cancel()
+        reviewsCacheJob?.cancel()
+        requestsCacheJob?.cancel()
     }
 }
