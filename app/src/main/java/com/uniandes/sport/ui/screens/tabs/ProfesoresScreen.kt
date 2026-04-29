@@ -1,6 +1,7 @@
 package com.uniandes.sport.ui.screens.tabs
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.*
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -67,6 +69,7 @@ fun ProfesoresScreen(
     authViewModel: FirebaseAuthViewModel = viewModel(),
     bookClassViewModel: com.uniandes.sport.viewmodels.booking.BookClassViewModel = viewModel(),
     weatherViewModel: com.uniandes.sport.viewmodels.weather.WeatherViewModel = viewModel(),
+    storageViewModel: com.uniandes.sport.viewmodels.storage.FirebaseStorageViewModel = viewModel(),
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
 ) {
@@ -517,18 +520,20 @@ fun ProfesoresScreen(
         }
 
         BecomeCoachDialog(
+            storageViewModel = storageViewModel,
             onDismiss = { showBecomeCoachDialog = false },
             initialDraft = coachDraft,
             onDraftChange = { draft ->
                 coachDraft = draft
                 ProfesoresKeyValueStore.saveBecomeCoachDraft(context, draft)
             },
-            onSubmit = { deporte, precio, experiencia, whatsapp, especialidad ->
+            onSubmit = { deporte, precio, experiencia, whatsapp, especialidad, photoUrl ->
                 val newCoach = ProfesorBuilder(id = dialogUserUid)
                     .setBasicInfo(
                         nombre = userName.takeIf { it.isNotBlank() } ?: userEmail,
                         deporte = deporte
                     )
+                    .setPhoto(photoUrl)
                     .setProfessionalProfile(
                         precio = precio,
                         experiencia = experiencia,
@@ -583,8 +588,8 @@ fun CoachCard(
             // Header
             Row(verticalAlignment = Alignment.Top) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    com.uniandes.sport.ui.components.SportIconBox(
-                        sport = profesor.deporte,
+                    com.uniandes.sport.ui.components.CoachAvatar(
+                        profesor = profesor,
                         size = 64.dp
                     )
                     if (profesor.verified) {
@@ -714,16 +719,23 @@ fun CoachCard(
 
 @Composable
 fun BecomeCoachDialog(
+    storageViewModel: com.uniandes.sport.viewmodels.storage.FirebaseStorageViewModel,
     onDismiss: () -> Unit,
     initialDraft: BecomeCoachDraft = BecomeCoachDraft(),
     onDraftChange: (BecomeCoachDraft) -> Unit = {},
-    onSubmit: (String, String, String, String, String) -> Unit
+    onSubmit: (String, String, String, String, String, String) -> Unit
 ) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val dialogMaxHeight = configuration.screenHeightDp.dp * 0.9f
     var deporte by remember(initialDraft) { mutableStateOf(initialDraft.sport) }
     var precio by remember(initialDraft) { mutableStateOf(initialDraft.precio) }
     var experiencia by remember(initialDraft) { mutableStateOf(initialDraft.experiencia) }
     var whatsapp by remember(initialDraft) { mutableStateOf(initialDraft.whatsapp) }
     var especialidad by remember(initialDraft) { mutableStateOf(initialDraft.especialidad) }
+    var selectedPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var photoUrl by remember { mutableStateOf("") }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
 
     // Validation States
     val isPriceValid = precio.isNotEmpty() && precio.all { it.isDigit() }
@@ -752,125 +764,174 @@ fun BecomeCoachDialog(
         Card(
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(max = dialogMaxHeight)
         ) {
-            LazyColumn(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                item {
-                    Text("BECOME A COACH", fontWeight = FontWeight.Black, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("Fill in your professional details to start coaching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                
-                // Sport Dropdown
-                item {
-                    Text("Sport Category", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            .clickable { expanded = true }
-                            .padding(16.dp)
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(deporte, fontWeight = FontWeight.Medium)
-                            Icon(Icons.Default.KeyboardArrowDown, null)
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            deportes.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = { deporte = option; expanded = false })
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        Text("BECOME A COACH", fontWeight = FontWeight.Black, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("Fill in your professional details to start coaching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    item {
+                        com.uniandes.sport.ui.components.CoachPhotoPicker(
+                            name = "Coach",
+                            currentPhotoUrl = photoUrl,
+                            selectedBitmap = selectedPhotoBitmap,
+                            onBitmapSelected = { selectedPhotoBitmap = it },
+                            onRemovePhoto = {
+                                selectedPhotoBitmap = null
+                                photoUrl = ""
+                            }
+                        )
+                    }
+
+                    item {
+                        Text("Sport Category", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clickable { expanded = true }
+                                .padding(16.dp)
+                        ) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(deporte, fontWeight = FontWeight.Medium)
+                                Icon(Icons.Default.KeyboardArrowDown, null)
+                            }
+                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                deportes.forEach { option ->
+                                    DropdownMenuItem(text = { Text(option) }, onClick = { deporte = option; expanded = false })
+                                }
                             }
                         }
                     }
-                }
 
-                // Price
-                item {
-                    Text("Hourly Price (USD)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = precio, 
-                        onValueChange = { if (it.all { char -> char.isDigit() }) precio = it }, 
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. 15") },
-                        prefix = { Text("$ ") },
-                        isError = precio.isNotEmpty() && !isPriceValid,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                // Experience
-                item {
-                     Text("Years of Experience", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                     OutlinedTextField(
-                        value = experiencia, 
-                        onValueChange = { if (it.all { char -> char.isDigit() }) experiencia = it }, 
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. 3") },
-                        suffix = { Text("years") },
-                        isError = experiencia.isNotEmpty() && !isExperienceValid,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp)
-                     )
-                }
-                
-                // Specialty
-                item {
-                     Text("Professional Specialty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                     OutlinedTextField(
-                        value = especialidad, 
-                        onValueChange = { especialidad = it }, 
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Describe your main focus...") },
-                        supportingText = { 
-                            if (!isSpecialtyValid && especialidad.isNotEmpty()) {
-                                Text("Min 10 characters needed", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        isError = especialidad.isNotEmpty() && !isSpecialtyValid,
-                        shape = RoundedCornerShape(12.dp)
-                     )
-                }
-
-                // WhatsApp
-                item {
-                    Text("WhatsApp Contact", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = whatsapp, 
-                        onValueChange = { if (it.length <= 10 && it.all { char -> char.isDigit() }) whatsapp = it }, 
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("3001234567") },
-                        leadingIcon = { Icon(Icons.Default.Call, null, Modifier.size(20.dp)) },
-                        supportingText = {
-                            if (whatsapp.isNotEmpty() && !isWhatsAppValid) {
-                                Text("Exactly 10 digits required", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        isError = whatsapp.isNotEmpty() && !isWhatsAppValid,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.weight(1f).height(54.dp),
+                    item {
+                        Text("Hourly Price (USD)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = precio,
+                            onValueChange = { if (it.all { char -> char.isDigit() }) precio = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("e.g. 15") },
+                            prefix = { Text("$ ") },
+                            isError = precio.isNotEmpty() && !isPriceValid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = { onSubmit(deporte, precio, experiencia, whatsapp, especialidad) },
-                            enabled = isFormValid,
-                            modifier = Modifier.weight(1f).height(54.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+
+                    item {
+                        Text("Years of Experience", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = experiencia,
+                            onValueChange = { if (it.all { char -> char.isDigit() }) experiencia = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("e.g. 3") },
+                            suffix = { Text("years") },
+                            isError = experiencia.isNotEmpty() && !isExperienceValid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+
+                    item {
+                        Text("Professional Specialty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = especialidad,
+                            onValueChange = { especialidad = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Describe your main focus...") },
+                            supportingText = {
+                                if (!isSpecialtyValid && especialidad.isNotEmpty()) {
+                                    Text("Min 10 characters needed", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            isError = especialidad.isNotEmpty() && !isSpecialtyValid,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+
+                    item {
+                        Text("WhatsApp Contact", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = whatsapp,
+                            onValueChange = { if (it.length <= 10 && it.all { char -> char.isDigit() }) whatsapp = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("3001234567") },
+                            leadingIcon = { Icon(Icons.Default.Call, null, Modifier.size(20.dp)) },
+                            supportingText = {
+                                if (whatsapp.isNotEmpty() && !isWhatsAppValid) {
+                                    Text("Exactly 10 digits required", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            isError = whatsapp.isNotEmpty() && !isWhatsAppValid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            if (selectedPhotoBitmap != null) {
+                                isUploadingPhoto = true
+                                storageViewModel.uploadImage(
+                                    image = selectedPhotoBitmap!!,
+                                    onSuccess = { uploadedUrl ->
+                                        isUploadingPhoto = false
+                                        photoUrl = uploadedUrl
+                                        onSubmit(deporte, precio, experiencia, whatsapp, especialidad, uploadedUrl)
+                                    },
+                                    onFailure = {
+                                        isUploadingPhoto = false
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Photo upload failed: ${it.message}",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                )
+                            } else {
+                                onSubmit(deporte, precio, experiencia, whatsapp, especialidad, photoUrl)
+                            }
+                        },
+                        enabled = isFormValid && !isUploadingPhoto,
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        if (isUploadingPhoto) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
-                        ) {
+                        } else {
                             Text("Register")
                         }
                     }

@@ -11,6 +11,7 @@ import com.uniandes.sport.models.Review
 data class CachedProfesorEntity(
     @PrimaryKey val id: String,
     val nombre: String,
+    val photoUrl: String,
     val deporte: String,
     val rating: Double,
     val totalReviews: Int,
@@ -31,6 +32,7 @@ fun Profesor.toEntity(now: Long = System.currentTimeMillis()): CachedProfesorEnt
     CachedProfesorEntity(
         id = id,
         nombre = nombre,
+        photoUrl = photoUrl,
         deporte = deporte,
         rating = rating,
         totalReviews = totalReviews,
@@ -51,6 +53,7 @@ fun CachedProfesorEntity.toModel(): Profesor =
     Profesor(
         id = id,
         nombre = nombre,
+        photoUrl = photoUrl,
         deporte = deporte,
         rating = rating,
         totalReviews = totalReviews,

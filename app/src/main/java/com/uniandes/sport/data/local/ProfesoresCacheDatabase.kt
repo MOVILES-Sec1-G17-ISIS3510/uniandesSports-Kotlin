@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
         CachedReviewEntity::class,
         CachedBookingRequestEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ProfesoresCacheDatabase : RoomDatabase() {
