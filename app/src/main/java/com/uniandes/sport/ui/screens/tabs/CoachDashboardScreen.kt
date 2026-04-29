@@ -1,16 +1,17 @@
 package com.uniandes.sport.ui.screens.tabs
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Star
@@ -26,12 +27,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.Profesor
+import com.uniandes.sport.viewmodels.storage.FirebaseStorageViewModel
 import com.uniandes.sport.viewmodels.profesores.FirestoreProfesoresViewModel
 import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 
@@ -40,6 +45,7 @@ import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 fun CoachDashboardScreen(
     profesorId: String,
     profesoresViewModel: ProfesoresViewModelInterface = viewModel<FirestoreProfesoresViewModel>(),
+    storageViewModel: FirebaseStorageViewModel = viewModel(),
     onNavigate: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -47,6 +53,7 @@ fun CoachDashboardScreen(
     val profesores by profesoresViewModel.profesores.collectAsState()
     val profesor = profesores.find { it.id == profesorId }
     val bookingRequests by profesoresViewModel.bookingRequests.collectAsState()
+    var showEditDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (profesores.isEmpty()) {
@@ -86,12 +93,7 @@ fun CoachDashboardScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onNavigate(com.uniandes.sport.ui.navigation.Screen.Perfil.route) }) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { 
-                        android.widget.Toast.makeText(context, "Edit Profile Coming Soon!", android.widget.Toast.LENGTH_SHORT).show() 
-                    }) {
+                    IconButton(onClick = { showEditDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit profile", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
@@ -349,6 +351,27 @@ fun CoachDashboardScreen(
             }
         }
     }
+
+    if (showEditDialog && profesor != null) {
+        EditCoachProfileDialog(
+            profesor = profesor,
+            storageViewModel = storageViewModel,
+            onDismiss = { showEditDialog = false },
+            onSave = { updatedProfesor ->
+                profesoresViewModel.createProfesor(
+                    profesor = updatedProfesor,
+                    onSuccess = {
+                        showEditDialog = false
+                        profesoresViewModel.refreshProfesores()
+                        android.widget.Toast.makeText(context, "Coach profile updated", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onFailure = {
+                        android.widget.Toast.makeText(context, "Error: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                )
+            }
+        )
+    }
 }
 
 @Composable
@@ -372,6 +395,189 @@ fun DashboardStat(title: String, value: String, icon: ImageVector, iconColor: Co
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(value, fontSize = 26.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+private fun EditCoachProfileDialog(
+    profesor: Profesor,
+    storageViewModel: FirebaseStorageViewModel,
+    onDismiss: () -> Unit,
+    onSave: (Profesor) -> Unit
+) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val dialogMaxHeight = configuration.screenHeightDp.dp * 0.9f
+    var precio by remember(profesor.id) {
+        mutableStateOf(profesor.precio.filter(Char::isDigit).ifBlank { profesor.precio })
+    }
+    var experiencia by remember(profesor.id) { mutableStateOf(profesor.experiencia) }
+    var especialidad by remember(profesor.id) { mutableStateOf(profesor.especialidad) }
+    var whatsapp by remember(profesor.id) {
+        mutableStateOf(profesor.whatsapp.filter(Char::isDigit).ifBlank { profesor.whatsapp })
+    }
+    var disponibilidad by remember(profesor.id) { mutableStateOf(profesor.disponibilidad) }
+    var photoUrl by remember(profesor.id) { mutableStateOf(profesor.photoUrl) }
+    var selectedPhotoBitmap by remember(profesor.id) { mutableStateOf<Bitmap?>(null) }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
+
+    val canSave = precio.isNotBlank() &&
+        experiencia.isNotBlank() &&
+        especialidad.isNotBlank() &&
+        whatsapp.length >= 7 &&
+        disponibilidad.isNotBlank() &&
+        !isUploadingPhoto
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth().heightIn(max = dialogMaxHeight)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("EDIT COACH PROFILE", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text(
+                        "Update the information students see in your dashboard.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp
+                    )
+
+                    com.uniandes.sport.ui.components.CoachPhotoPicker(
+                        name = profesor.nombre,
+                        currentPhotoUrl = photoUrl,
+                        selectedBitmap = selectedPhotoBitmap,
+                        onBitmapSelected = { selectedPhotoBitmap = it },
+                        onRemovePhoto = {
+                            selectedPhotoBitmap = null
+                            photoUrl = ""
+                        }
+                    )
+
+                    OutlinedTextField(
+                        value = precio,
+                        onValueChange = { if (it.all(Char::isDigit)) precio = it },
+                        label = { Text("Hourly Price") },
+                        prefix = { Text("$ ") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = experiencia,
+                        onValueChange = { experiencia = it },
+                        label = { Text("Experience") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = especialidad,
+                        onValueChange = { especialidad = it },
+                        label = { Text("Specialty") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = whatsapp,
+                        onValueChange = { if (it.all(Char::isDigit)) whatsapp = it },
+                        label = { Text("WhatsApp") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = disponibilidad,
+                        onValueChange = { disponibilidad = it },
+                        label = { Text("Availability") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            if (selectedPhotoBitmap != null) {
+                                isUploadingPhoto = true
+                                storageViewModel.uploadImage(
+                                    image = selectedPhotoBitmap!!,
+                                    onSuccess = { uploadedUrl ->
+                                        isUploadingPhoto = false
+                                        photoUrl = uploadedUrl
+                                        onSave(
+                                            profesor.copy(
+                                                photoUrl = uploadedUrl,
+                                                precio = precio,
+                                                experiencia = experiencia,
+                                                especialidad = especialidad,
+                                                whatsapp = whatsapp,
+                                                disponibilidad = disponibilidad
+                                            )
+                                        )
+                                    },
+                                    onFailure = {
+                                        isUploadingPhoto = false
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Photo upload failed: ${it.message}",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                )
+                            } else {
+                                onSave(
+                                    profesor.copy(
+                                        photoUrl = photoUrl,
+                                        precio = precio,
+                                        experiencia = experiencia,
+                                        especialidad = especialidad,
+                                        whatsapp = whatsapp,
+                                        disponibilidad = disponibilidad
+                                    )
+                                )
+                            }
+                        },
+                        enabled = canSave,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (isUploadingPhoto) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Save", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ package com.uniandes.sport.models
 data class Profesor(
     var id: String = "",
     var nombre: String = "",
+    var photoUrl: String = "",
     var deporte: String = "",
     var rating: Double = 0.0,
     var totalReviews: Int = 0,
@@ -28,6 +29,7 @@ data class Review(
 
 class ProfesorBuilder(private val id: String) {
     private var nombre: String = ""
+    private var photoUrl: String = ""
     private var deporte: String = ""
     private var precio: String = ""
     private var experiencia: String = ""
@@ -37,6 +39,10 @@ class ProfesorBuilder(private val id: String) {
     fun setBasicInfo(nombre: String, deporte: String) = apply {
         this.nombre = nombre
         this.deporte = deporte
+    }
+
+    fun setPhoto(photoUrl: String) = apply {
+        this.photoUrl = photoUrl
     }
 
     fun setProfessionalProfile(precio: String, experiencia: String, especialidad: String) = apply {
@@ -62,6 +68,7 @@ class ProfesorBuilder(private val id: String) {
         return Profesor(
             id = this.id,
             nombre = this.nombre,
+            photoUrl = this.photoUrl,
             deporte = this.deporte,
             precio = this.precio,
             experiencia = this.experiencia,

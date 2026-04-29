@@ -156,8 +156,8 @@ fun CoachProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(contentAlignment = Alignment.BottomEnd) {
-                            com.uniandes.sport.ui.components.SportIconBox(
-                                sport = profesor.deporte,
+                            com.uniandes.sport.ui.components.CoachAvatar(
+                                profesor = profesor,
                                 size = 100.dp
                             )
                             if (profesor.verified) {
