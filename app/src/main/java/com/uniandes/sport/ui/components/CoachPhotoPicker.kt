@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -48,6 +49,8 @@ fun CoachPhotoPicker(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isCompact = configuration.screenWidthDp < 380
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -100,21 +103,50 @@ fun CoachPhotoPicker(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilledTonalButton(
-                onClick = { imagePickerLauncher.launch("image/*") },
-                colors = ButtonDefaults.filledTonalButtonColors()
+        if (isCompact) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(Icons.Default.AddAPhoto, contentDescription = null)
-                Spacer(modifier = Modifier.size(6.dp))
-                Text(if (currentPhotoUrl.isBlank() && selectedBitmap == null) "Add photo" else "Change photo")
-            }
-
-            if (currentPhotoUrl.isNotBlank() || selectedBitmap != null) {
-                OutlinedButton(onClick = onRemovePhoto) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
+                FilledTonalButton(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    colors = ButtonDefaults.filledTonalButtonColors(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.AddAPhoto, contentDescription = null)
                     Spacer(modifier = Modifier.size(6.dp))
-                    Text("Remove")
+                    Text(if (currentPhotoUrl.isBlank() && selectedBitmap == null) "Add photo" else "Change photo")
+                }
+
+                if (currentPhotoUrl.isNotBlank() || selectedBitmap != null) {
+                    OutlinedButton(
+                        onClick = onRemovePhoto,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("Remove photo")
+                    }
+                }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilledTonalButton(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    colors = ButtonDefaults.filledTonalButtonColors()
+                ) {
+                    Icon(Icons.Default.AddAPhoto, contentDescription = null)
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text(if (currentPhotoUrl.isBlank() && selectedBitmap == null) "Add photo" else "Change photo")
+                }
+
+                if (currentPhotoUrl.isNotBlank() || selectedBitmap != null) {
+                    OutlinedButton(onClick = onRemovePhoto) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("Remove")
+                    }
                 }
             }
         }
