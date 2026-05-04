@@ -32,7 +32,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.ui.components.ThemeModeToggle
-import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
@@ -141,6 +140,24 @@ fun OnboardingScreen(
         }
     }
 
+    // Ensure progress is saved when the composable leaves composition (app closed or navigated away)
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                OnboardingLocalStore.saveProgress(
+                    context = context,
+                    step = currentStep,
+                    fullName = authViewModel.fullName,
+                    email = authViewModel.email,
+                    password = authViewModel.password,
+                    program = authViewModel.program,
+                    semester = authViewModel.semester,
+                    mainSport = authViewModel.mainSport
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
     // If pending onboarding was saved due to offline, watch connectivity and sync when back online.
     LaunchedEffect(waitingForConnectivity) {
         if (!waitingForConnectivity) return@LaunchedEffect
@@ -240,9 +257,6 @@ fun OnboardingScreen(
         ) {
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Show immediate offline banner when there's no connectivity
-            OfflineConnectivityBanner(modifier = Modifier.fillMaxWidth())
-
             // Progress Indicator
             StepIndicator(currentStep = currentStep, totalSteps = totalSteps)
 
@@ -259,7 +273,18 @@ fun OnboardingScreen(
                     Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Progress saved locally. Reopen the app to continue where you left off (step $currentStep).", color = colorScheme.onSurfaceVariant)
+                        Column {
+                            if (!isOnline) {
+                                Text("No internet connection.", fontWeight = FontWeight.ExtraBold)
+                                Text(
+                                    "Your data is saved locally and will be synced when you reconnect. Reopen the app to continue where you left off (step $currentStep).",
+                                    color = colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            } else {
+                                Text("Progress saved locally. Reopen the app to continue where you left off (step $currentStep).", color = colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }
@@ -353,7 +378,21 @@ fun OnboardingScreen(
                     Button(
                         onClick = {
                             if (currentStep < totalSteps) {
-                                    currentStep++
+                                    val newStep = currentStep + 1
+                                    currentStep = newStep
+                                    // persist immediately
+                                    try {
+                                        OnboardingLocalStore.saveProgress(
+                                            context = context,
+                                            step = newStep,
+                                            fullName = authViewModel.fullName,
+                                            email = authViewModel.email,
+                                            password = authViewModel.password,
+                                            program = authViewModel.program,
+                                            semester = authViewModel.semester,
+                                            mainSport = authViewModel.mainSport
+                                        )
+                                    } catch (_: Exception) {}
                                 } else {
                                     // If online, proceed as before. If offline, persist pending onboarding and wait for connectivity.
                                     if (isOnline) {
@@ -362,6 +401,8 @@ fun OnboardingScreen(
                                             onSuccess = {
                                                 isLoading = false
                                                 logViewModel.log(screenName, "ONBOARDING_COMPLETED")
+                                                // clear saved progress now that onboarding finished
+                                                try { OnboardingLocalStore.clearProgress(context) } catch (_: Exception) {}
                                                 onFinishOnboarding()
                                             },
                                             onFailure = { exception ->
@@ -416,23 +457,38 @@ fun OnboardingScreen(
 
                     // Hide navigation out while waiting for connectivity
                     if (!waitingForConnectivity) {
-                        if (currentStep > 1) {
-                            TextButton(
-                                onClick = { currentStep-- },
-                                enabled = inputsEnabled,
-                                modifier = Modifier.padding(top = 8.dp)
-                            ) {
-                                Text("Previous Step", color = colorScheme.primary)
+                            if (currentStep > 1) {
+                                TextButton(
+                                    onClick = {
+                                        val newStep = (currentStep - 1).coerceAtLeast(1)
+                                        currentStep = newStep
+                                        try {
+                                            OnboardingLocalStore.saveProgress(
+                                                context = context,
+                                                step = newStep,
+                                                fullName = authViewModel.fullName,
+                                                email = authViewModel.email,
+                                                password = authViewModel.password,
+                                                program = authViewModel.program,
+                                                semester = authViewModel.semester,
+                                                mainSport = authViewModel.mainSport
+                                            )
+                                        } catch (_: Exception) {}
+                                    },
+                                    enabled = inputsEnabled,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    Text("Previous Step", color = colorScheme.primary)
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = { onBackToLogin() },
+                                    enabled = inputsEnabled,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    Text("Back to Login", color = colorScheme.onSurfaceVariant)
+                                }
                             }
-                        } else {
-                            TextButton(
-                                onClick = { onBackToLogin() },
-                                enabled = inputsEnabled,
-                                modifier = Modifier.padding(top = 8.dp)
-                            ) {
-                                Text("Back to Login", color = colorScheme.onSurfaceVariant)
-                            }
-                        }
                     } else {
                         // Informational persistent status when waiting
                         Spacer(modifier = Modifier.height(12.dp))
