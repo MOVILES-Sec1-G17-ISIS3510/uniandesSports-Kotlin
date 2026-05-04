@@ -35,6 +35,11 @@ import com.uniandes.sport.ui.components.ThemeModeToggle
 import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
+import com.uniandes.sport.data.local.OnboardingLocalStore
+import com.uniandes.sport.ui.components.rememberIsOnline
+import com.uniandes.sport.utils.observeConnectivityAsFlow
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import java.text.Normalizer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -55,6 +60,11 @@ fun OnboardingScreen(
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var pendingSaved by remember { mutableStateOf(false) }
+    var waitingForConnectivity by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val isOnline = rememberIsOnline()
 
     val isStep1Valid = authViewModel.program.isNotBlank() && authViewModel.semester.isNotBlank()
     val isStep2Valid = authViewModel.mainSport.isNotBlank()
@@ -62,6 +72,51 @@ fun OnboardingScreen(
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
             authViewModel.semester = "1"
+        }
+    }
+
+    // If pending onboarding was saved due to offline, watch connectivity and sync when back online.
+    LaunchedEffect(waitingForConnectivity) {
+        if (!waitingForConnectivity) return@LaunchedEffect
+
+        context.observeConnectivityAsFlow().collect { connected ->
+            if (connected) {
+                // Attempt to load pending data and sync
+                val pending = OnboardingLocalStore.loadPending(context)
+                if (pending != null) {
+                    // Populate ViewModel with stored values
+                    authViewModel.fullName = pending.fullName
+                    authViewModel.email = pending.email
+                    authViewModel.password = pending.password
+                    authViewModel.program = pending.program
+                    authViewModel.semester = pending.semester
+                    authViewModel.mainSport = pending.mainSport
+
+                    // Try to create the user now
+                    isLoading = true
+                    authViewModel.saveOnboardingData(
+                        onSuccess = {
+                            isLoading = false
+                            waitingForConnectivity = false
+                            pendingSaved = false
+                            OnboardingLocalStore.clear(context)
+                            logViewModel.log(screenName, "ONBOARDING_SYNCED_AFTER_OFFLINE")
+                            onFinishOnboarding()
+                        },
+                        onFailure = { exception ->
+                            isLoading = false
+                            dialogMessage = "Could not complete registration: ${exception.message}"
+                            showDialog = true
+                            logViewModel.crash(screenName, exception)
+                            // keep pending for retry
+                        }
+                    )
+                } else {
+                    // Nothing pending, stop watching
+                    waitingForConnectivity = false
+                    pendingSaved = false
+                }
+            }
         }
     }
 
@@ -195,23 +250,41 @@ fun OnboardingScreen(
                     Button(
                         onClick = {
                             if (currentStep < totalSteps) {
-                                currentStep++
-                            } else {
-                                isLoading = true
-                                authViewModel.saveOnboardingData(
-                                    onSuccess = {
-                                        isLoading = false
-                                        logViewModel.log(screenName, "ONBOARDING_COMPLETED")
-                                        onFinishOnboarding()
-                                    },
-                                    onFailure = { exception ->
-                                        isLoading = false
-                                        dialogMessage = exception.message.toString()
+                                    currentStep++
+                                } else {
+                                    // If online, proceed as before. If offline, persist pending onboarding and wait for connectivity.
+                                    if (isOnline) {
+                                        isLoading = true
+                                        authViewModel.saveOnboardingData(
+                                            onSuccess = {
+                                                isLoading = false
+                                                logViewModel.log(screenName, "ONBOARDING_COMPLETED")
+                                                onFinishOnboarding()
+                                            },
+                                            onFailure = { exception ->
+                                                isLoading = false
+                                                dialogMessage = exception.message.toString()
+                                                showDialog = true
+                                                logViewModel.crash(screenName, exception)
+                                            }
+                                        )
+                                    } else {
+                                        // Save pending onboarding locally and inform the user
+                                        OnboardingLocalStore.savePending(
+                                            context = context,
+                                            fullName = authViewModel.fullName,
+                                            email = authViewModel.email,
+                                            password = authViewModel.password,
+                                            program = authViewModel.program,
+                                            semester = authViewModel.semester,
+                                            mainSport = authViewModel.mainSport
+                                        )
+                                        pendingSaved = true
+                                        waitingForConnectivity = true
+                                        dialogMessage = "No internet connection. Your data is saved locally and will be synced when online."
                                         showDialog = true
-                                        logViewModel.crash(screenName, exception)
                                     }
-                                )
-                            }
+                                }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
