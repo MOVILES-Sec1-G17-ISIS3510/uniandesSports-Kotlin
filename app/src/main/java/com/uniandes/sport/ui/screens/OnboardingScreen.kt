@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.ui.components.ThemeModeToggle
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
@@ -62,16 +63,81 @@ fun OnboardingScreen(
     var isLoading by remember { mutableStateOf(false) }
     var pendingSaved by remember { mutableStateOf(false) }
     var waitingForConnectivity by remember { mutableStateOf(false) }
+    var syncedAndReady by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val isOnline = rememberIsOnline()
+    var savedProgressExists by remember { mutableStateOf(false) }
 
     val isStep1Valid = authViewModel.program.isNotBlank() && authViewModel.semester.isNotBlank()
     val isStep2Valid = authViewModel.mainSport.isNotBlank()
+    val inputsEnabled = !isLoading && !waitingForConnectivity
 
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
             authViewModel.semester = "1"
+        }
+    }
+
+    // On start restore any saved progress (partial or pending)
+    LaunchedEffect(Unit) {
+        val progress = OnboardingLocalStore.loadProgress(context)
+        if (progress != null) {
+            // restore viewmodel and UI step
+            authViewModel.fullName = progress.fullName
+            authViewModel.email = progress.email
+            authViewModel.password = progress.password
+            authViewModel.program = progress.program
+            authViewModel.semester = progress.semester
+            authViewModel.mainSport = progress.mainSport
+            currentStep = progress.step.coerceIn(1, totalSteps)
+            savedProgressExists = true
+        }
+
+        val pending = OnboardingLocalStore.loadPending(context)
+        if (pending != null) {
+            // There is a full pending registration (user hit Create while offline)
+            waitingForConnectivity = true
+            pendingSaved = true
+            // ensure UI reflects stored values
+            authViewModel.fullName = pending.fullName
+            authViewModel.email = pending.email
+            authViewModel.password = pending.password
+            authViewModel.program = pending.program
+            authViewModel.semester = pending.semester
+            authViewModel.mainSport = pending.mainSport
+            currentStep = 3
+        }
+    }
+
+    // Persist progress whenever inputs or current step change
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            listOf(
+                authViewModel.fullName,
+                authViewModel.email,
+                authViewModel.password,
+                authViewModel.program,
+                authViewModel.semester,
+                authViewModel.mainSport,
+                currentStep
+            )
+        }.collect { list ->
+            try {
+                OnboardingLocalStore.saveProgress(
+                    context = context,
+                    step = (list.last() as? Int) ?: currentStep,
+                    fullName = list[0] as String,
+                    email = list[1] as String,
+                    password = list[2] as String,
+                    program = list[3] as String,
+                    semester = list[4] as String,
+                    mainSport = list[5] as String
+                )
+                savedProgressExists = true
+            } catch (_: Exception) {
+                // ignore persistence errors
+            }
         }
     }
 
@@ -101,7 +167,12 @@ fun OnboardingScreen(
                             pendingSaved = false
                             OnboardingLocalStore.clear(context)
                             logViewModel.log(screenName, "ONBOARDING_SYNCED_AFTER_OFFLINE")
-                            onFinishOnboarding()
+                            // Show success dialog; navigation will happen when user confirms
+                                    dialogMessage = "Registration complete. You're online and can use the app now."
+                                    showDialog = true
+                                    syncedAndReady = true
+                            // mark so dialog confirm navigates
+                            pendingSaved = false
                         },
                         onFailure = { exception ->
                             isLoading = false
@@ -120,6 +191,11 @@ fun OnboardingScreen(
         }
     }
 
+    // Prevent navigating back while waiting for connectivity
+    BackHandler(enabled = waitingForConnectivity) {
+        // swallow back presses
+    }
+
     BackHandler {
         if (currentStep > 1) {
             currentStep--
@@ -130,11 +206,17 @@ fun OnboardingScreen(
 
     if (showDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { if (!syncedAndReady) showDialog = false },
             title = { Text(text = "Notice", fontWeight = FontWeight.Bold) },
             text = { Text(dialogMessage) },
             confirmButton = {
-                TextButton(onClick = { showDialog = false }) {
+                TextButton(onClick = {
+                    showDialog = false
+                    if (syncedAndReady) {
+                        syncedAndReady = false
+                        onFinishOnboarding()
+                    }
+                }) {
                     Text("OK")
                 }
             },
@@ -158,8 +240,29 @@ fun OnboardingScreen(
         ) {
             Spacer(modifier = Modifier.height(48.dp))
 
+            // Show immediate offline banner when there's no connectivity
+            OfflineConnectivityBanner(modifier = Modifier.fillMaxWidth())
+
             // Progress Indicator
             StepIndicator(currentStep = currentStep, totalSteps = totalSteps)
+
+            // Show saved-progress hint so user knows they can exit and resume
+            if (savedProgressExists && !waitingForConnectivity) {
+                Surface(
+                    tonalElevation = 1.dp,
+                    shape = RoundedCornerShape(10.dp),
+                    color = colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Progress saved locally. Reopen the app to continue where you left off (step $currentStep).", color = colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -216,20 +319,20 @@ fun OnboardingScreen(
                                     ProgramSearchField(
                                         value = authViewModel.program,
                                         onValueChange = { authViewModel.program = it },
-                                        enabled = !isLoading
+                                        enabled = inputsEnabled
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     SemesterStepperField(
                                         semesterValue = authViewModel.semester,
                                         onSemesterChange = { authViewModel.semester = it },
-                                        enabled = !isLoading
+                                        enabled = inputsEnabled
                                     )
                                 }
                                 2 -> {
                                     MainSportLabelsField(
                                         selectedSportsCsv = authViewModel.mainSport,
                                         onSelectionChange = { authViewModel.mainSport = it },
-                                        enabled = !isLoading
+                                        enabled = inputsEnabled
                                     )
                                 }
                                 3 -> {
@@ -290,7 +393,7 @@ fun OnboardingScreen(
                             .fillMaxWidth()
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
-                        enabled = !isLoading && when(currentStep) {
+                        enabled = inputsEnabled && when(currentStep) {
                             1 -> isStep1Valid
                             2 -> isStep2Valid
                             else -> true
@@ -311,21 +414,44 @@ fun OnboardingScreen(
                         }
                     }
 
-                    if (currentStep > 1) {
-                        TextButton(
-                            onClick = { currentStep-- },
-                            enabled = !isLoading,
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            Text("Previous Step", color = colorScheme.primary)
+                    // Hide navigation out while waiting for connectivity
+                    if (!waitingForConnectivity) {
+                        if (currentStep > 1) {
+                            TextButton(
+                                onClick = { currentStep-- },
+                                enabled = inputsEnabled,
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Text("Previous Step", color = colorScheme.primary)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { onBackToLogin() },
+                                enabled = inputsEnabled,
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Text("Back to Login", color = colorScheme.onSurfaceVariant)
+                            }
                         }
                     } else {
-                        TextButton(
-                            onClick = { onBackToLogin() },
-                            enabled = !isLoading,
-                            modifier = Modifier.padding(top = 8.dp)
+                        // Informational persistent status when waiting
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            tonalElevation = 2.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            color = colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
                         ) {
-                            Text("Back to Login", color = colorScheme.onSurfaceVariant)
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.FormatListNumbered, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Waiting for internet connection to complete account creation", fontWeight = FontWeight.SemiBold)
+                                    Text("Your data was saved locally. The app will finish registration once online.", color = colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
