@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.screens.tabs.running
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -19,14 +21,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.uniandes.sport.data.local.RunningFileStorage
 import com.uniandes.sport.models.RunSession
 import com.uniandes.sport.ui.theme.ArchivoFamily
 
 @Composable
 fun RunSummaryDialog(
     session: RunSession,
+    isOfflineMode: Boolean = false,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -136,6 +141,22 @@ fun RunSummaryDialog(
                         }
                         
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        if (isOfflineMode && session.aiFeedback.contains("queued", ignoreCase = true)) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Offline mode: your AI coach request is queued and will sync automatically when internet returns.",
+                                    modifier = Modifier.padding(12.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         
                         if (session.aiFeedback.isBlank()) {
                             CircularProgressIndicator(
@@ -157,13 +178,53 @@ fun RunSummaryDialog(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("CLOSE REPORT", fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val file = RunningFileStorage.exportRunReport(context, session)
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "com.uniandes.sport.fileprovider",
+                                    file
+                                )
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Open report with..."))
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Report saved: ${file.name}",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Could not save report: ${e.message}",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("DOWNLOAD", fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("CLOSE REPORT", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

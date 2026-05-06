@@ -11,7 +11,12 @@ import kotlinx.coroutines.launch
 
 sealed class WeatherState {
     object Loading : WeatherState()
-    data class Success(val data: WeatherResponse) : WeatherState()
+    data class Success(
+        val data: WeatherResponse,
+        val lastUpdatedMillis: Long,
+        val isFromCache: Boolean,
+        val showOfflineMessage: Boolean = false
+    ) : WeatherState()
     data class Error(val message: String) : WeatherState()
 }
 
@@ -34,45 +39,79 @@ class WeatherViewModel : ViewModel() {
 
     fun fetchWeather(lat: Double = 4.6097, lon: Double = -74.0817) {
         viewModelScope.launch {
-            _weatherState.value = WeatherState.Loading
+            val cachedState = loadCachedWeather()
+            if (cachedState != null) {
+                _weatherState.value = cachedState
+            } else {
+                _weatherState.value = WeatherState.Loading
+            }
             repository.getWeatherData(lat, lon)
                 .onSuccess {
                     // Cache successful response
                     appContext?.let { ctx ->
                         val prefs = ctx.getSharedPreferences("weather_cache", android.content.Context.MODE_PRIVATE)
+                        val fetchedAt = System.currentTimeMillis()
                         prefs.edit()
                             .putFloat("temp", it.currentWeather.temperature.toFloat())
+                            .putFloat("windspeed", it.currentWeather.windspeed.toFloat())
                             .putInt("code", it.currentWeather.weatherCode)
+                            .putString("time", it.currentWeather.time)
+                            .putLong("last_updated_millis", fetchedAt)
                             .apply()
+                        _weatherState.value = WeatherState.Success(
+                            data = it,
+                            lastUpdatedMillis = fetchedAt,
+                            isFromCache = false,
+                            showOfflineMessage = false
+                        )
                     }
-                    _weatherState.value = WeatherState.Success(it)
+                    if (appContext == null) {
+                        _weatherState.value = WeatherState.Success(
+                            data = it,
+                            lastUpdatedMillis = System.currentTimeMillis(),
+                            isFromCache = false,
+                            showOfflineMessage = false
+                        )
+                    }
                 }
                 .onFailure {
-                    // Fallback to cache
-                    val context = appContext
-                    if (context != null) {
-                        val prefs = context.getSharedPreferences("weather_cache", android.content.Context.MODE_PRIVATE)
-                        if (prefs.contains("temp") && prefs.contains("code")) {
-                            val cachedTemp = prefs.getFloat("temp", 0f).toDouble()
-                            val cachedCode = prefs.getInt("code", 0)
-                            
-                            val cachedWeather = com.uniandes.sport.models.CurrentWeather(
-                                temperature = cachedTemp,
-                                windspeed = 0.0,
-                                weatherCode = cachedCode,
-                                time = ""
-                            )
-                            val cachedResponse = WeatherResponse(
-                                currentWeather = cachedWeather,
-                                daily = null
-                            )
-                            _weatherState.value = WeatherState.Success(cachedResponse)
-                            return@launch
-                        }
+                    loadCachedWeather(showOfflineMessage = true)?.let { cached ->
+                        _weatherState.value = cached
+                        return@launch
                     }
                     
                     _weatherState.value = WeatherState.Error(it.message ?: "Unknown error")
                 }
         }
+    }
+
+    private fun loadCachedWeather(showOfflineMessage: Boolean = false): WeatherState.Success? {
+        val context = appContext ?: return null
+        val prefs = context.getSharedPreferences("weather_cache", android.content.Context.MODE_PRIVATE)
+        if (!prefs.contains("temp") || !prefs.contains("code")) return null
+
+        val cachedTemp = prefs.getFloat("temp", 0f).toDouble()
+        val cachedWind = prefs.getFloat("windspeed", 0f).toDouble()
+        val cachedCode = prefs.getInt("code", 0)
+        val cachedTime = prefs.getString("time", "") ?: ""
+        val cachedUpdatedAt = prefs.getLong("last_updated_millis", 0L)
+
+        val cachedWeather = com.uniandes.sport.models.CurrentWeather(
+            temperature = cachedTemp,
+            windspeed = cachedWind,
+            weatherCode = cachedCode,
+            time = cachedTime
+        )
+        val cachedResponse = WeatherResponse(
+            currentWeather = cachedWeather,
+            daily = null
+        )
+
+        return WeatherState.Success(
+            data = cachedResponse,
+            lastUpdatedMillis = cachedUpdatedAt,
+            isFromCache = true,
+            showOfflineMessage = showOfflineMessage
+        )
     }
 }

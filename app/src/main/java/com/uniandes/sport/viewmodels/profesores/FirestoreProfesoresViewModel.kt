@@ -3,15 +3,22 @@ package com.uniandes.sport.viewmodels.profesores
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.ktx.messaging
+import com.uniandes.sport.data.local.PendingReviewPayload
+import com.uniandes.sport.data.local.PendingReviewStore
 import com.uniandes.sport.data.local.ProfesoresLocalRepository
 import com.uniandes.sport.models.BookingRequest
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
+import com.uniandes.sport.workers.ReviewSyncWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +47,9 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
     private val _reviews = MutableStateFlow<List<Review>>(emptyList())
     override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
+
+    private val _pendingReviews = MutableStateFlow<List<Review>>(emptyList())
+    override val pendingReviews: StateFlow<List<Review>> = _pendingReviews.asStateFlow()
 
     private val _bookingRequests = MutableStateFlow<List<BookingRequest>>(emptyList())
     override val bookingRequests: StateFlow<List<BookingRequest>> = _bookingRequests.asStateFlow()
@@ -136,12 +146,18 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     override fun refreshProfesores(onComplete: () -> Unit) {
         cachedProfesores = null
         viewModelScope.launch {
-            syncFromServer()
-            onComplete()
+            try {
+                syncFromServer()
+            } finally {
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
+            }
         }
     }
 
     override fun fetchReviews(profesorId: String) {
+        loadPendingReviews(profesorId)
         observeLocalReviews(profesorId)
         reviewsListener?.remove()
         reviewsListener = db.collection("profesores").document(profesorId)
@@ -155,11 +171,27 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
                         }.getOrNull()
                     }
                     _reviews.value = list
+                    appContext?.let { context ->
+                        val pendingForProfesor = PendingReviewStore.getByProfesor(context, profesorId)
+                        pendingForProfesor
+                            .filter { pending -> list.any { review -> review.reviewerId == pending.reviewerId } }
+                            .forEach { syncedPending ->
+                                PendingReviewStore.remove(context, syncedPending.localId)
+                            }
+                        _pendingReviews.value = PendingReviewStore.getByProfesor(context, profesorId)
+                            .map { PendingReviewStore.toReview(it) }
+                    }
                     viewModelScope.launch(Dispatchers.IO) {
                         localRepository?.replaceReviews(profesorId, list)
                     }
                 }
             }
+    }
+
+    override fun loadPendingReviews(profesorId: String) {
+        val context = appContext ?: return
+        _pendingReviews.value = PendingReviewStore.getByProfesor(context, profesorId)
+            .map { PendingReviewStore.toReview(it) }
     }
 
     override fun fetchBookingRequestsBySport(sport: String) {
@@ -225,12 +257,54 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val context = appContext
+                if (context != null && !isNetworkConnected(context)) {
+                    if (review.reviewerId.isBlank()) {
+                        withContext(Dispatchers.Main) {
+                            onFailure(Exception("Login required to publish reviews"))
+                        }
+                        return@launch
+                    }
+
+                    val duplicatePending = PendingReviewStore.getByProfesor(context, profesorId)
+                        .any { it.reviewerId == review.reviewerId }
+                    if (duplicatePending || _reviews.value.any { it.reviewerId == review.reviewerId }) {
+                        withContext(Dispatchers.Main) { onFailure(Exception("Already reviewed")) }
+                        return@launch
+                    }
+
+                    val payload = PendingReviewPayload(
+                        profesorId = profesorId,
+                        reviewerId = review.reviewerId,
+                        estudiante = review.estudiante,
+                        rating = review.rating.coerceIn(1, 5),
+                        comentario = review.comentario,
+                        fecha = review.fecha
+                    )
+
+                    PendingReviewStore.enqueue(context, payload)
+                    _pendingReviews.value = PendingReviewStore.getByProfesor(context, profesorId)
+                        .map { PendingReviewStore.toReview(it) }
+                    enqueueReviewSync(context)
+
+                    withContext(Dispatchers.Main) { onSuccess() }
+                    return@launch
+                }
+
                 val reviewsCollection = db.collection("profesores").document(profesorId).collection("reviews")
-                val existing = reviewsCollection
-                    .whereEqualTo("estudiante", review.estudiante)
-                    .limit(1)
-                    .get()
-                    .await()
+                val existing = if (review.reviewerId.isNotBlank()) {
+                    reviewsCollection
+                        .whereEqualTo("reviewerId", review.reviewerId)
+                        .limit(1)
+                        .get()
+                        .await()
+                } else {
+                    reviewsCollection
+                        .whereEqualTo("estudiante", review.estudiante)
+                        .limit(1)
+                        .get()
+                        .await()
+                }
 
                 if (!existing.isEmpty) {
                     withContext(Dispatchers.Main) { onFailure(Exception("Already reviewed")) }
@@ -255,6 +329,7 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
                 launch(Dispatchers.IO) { syncReviewsCountInternal(profesorId) }
                 localRepository?.upsertReview(profesorId, reviewToSave)
+                _pendingReviews.value = _pendingReviews.value.filterNot { it.reviewerId == review.reviewerId }
 
                 withContext(Dispatchers.Main) { onSuccess() }
             } catch (e: Exception) {
@@ -345,10 +420,8 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         val repo = localRepository ?: return
         profesoresCacheJob = viewModelScope.launch {
             repo.observeProfesores().collect { localList ->
-                if (localList.isNotEmpty()) {
-                    cachedProfesores = localList
-                    _profesores.value = localList
-                }
+                cachedProfesores = localList
+                _profesores.value = localList
             }
         }
     }
@@ -384,5 +457,32 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         profesoresCacheJob?.cancel()
         reviewsCacheJob?.cancel()
         requestsCacheJob?.cancel()
+    }
+
+    private fun enqueueReviewSync(context: android.content.Context) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<ReviewSyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueue(request)
+    }
+
+    private fun isNetworkConnected(context: android.content.Context): Boolean {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as android.net.ConnectivityManager
+
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            @Suppress("DEPRECATION")
+            connectivityManager.activeNetworkInfo?.isConnected == true
+        }
     }
 }

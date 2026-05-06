@@ -1,11 +1,14 @@
 package com.uniandes.sport.ui.screens.tabs
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.*
@@ -13,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +45,7 @@ import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Psychology
+import com.uniandes.sport.data.local.RunningFileStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +56,7 @@ fun HistorialScreen(
     onNavigate: (String) -> Unit,
     onNavigateBack: () -> Unit = { onNavigate("back") }
 ) {
+    val context = LocalContext.current
     val retos by viewModel.retos.collectAsState()
     val finishedEvents by playViewModel.finishedEvents.collectAsState()
     val joinedEventIds by playViewModel.joinedEventIds.collectAsState()
@@ -90,6 +96,41 @@ fun HistorialScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (pastRuns.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val file = RunningFileStorage.exportRunHistory(context, pastRuns)
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context,
+                                        "com.uniandes.sport.fileprovider",
+                                        file
+                                    )
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "Open history with..."))
+                                    Toast.makeText(
+                                        context,
+                                        "History saved: ${file.name}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Could not save history: ${e.message}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Download running history")
+                        }
                     }
                 }
             )

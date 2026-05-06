@@ -21,6 +21,7 @@ data class Profesor(
 
 data class Review(
     var id: String = "",
+    var reviewerId: String = "",
     var estudiante: String = "",
     var rating: Int = 0,
     var comentario: String = "",

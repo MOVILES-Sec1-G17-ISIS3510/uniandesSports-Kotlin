@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +26,10 @@ import com.uniandes.sport.models.DailyForecast
 import com.uniandes.sport.models.getWeatherDescription
 import com.uniandes.sport.viewmodels.weather.WeatherState
 import com.uniandes.sport.viewmodels.weather.WeatherViewModel
+import kotlin.math.roundToInt
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +71,13 @@ fun ClimaScreen(
                     }
                 }
                 is WeatherState.Success -> {
-                    WeatherContent(s.data.currentWeather, s.data.daily)
+                    WeatherContent(
+                        current = s.data.currentWeather,
+                        daily = s.data.daily,
+                        lastUpdatedMillis = s.lastUpdatedMillis,
+                        isFromCache = s.isFromCache,
+                        showOfflineMessage = s.showOfflineMessage
+                    )
                 }
             }
         }
@@ -74,7 +85,24 @@ fun ClimaScreen(
 }
 
 @Composable
-fun WeatherContent(current: CurrentWeather, daily: DailyForecast?) {
+fun WeatherContent(
+    current: CurrentWeather,
+    daily: DailyForecast?,
+    lastUpdatedMillis: Long,
+    isFromCache: Boolean,
+    showOfflineMessage: Boolean
+) {
+    val formattedWindSpeed = remember(current.windspeed) {
+        ((current.windspeed * 10).roundToInt() / 10.0).let { value ->
+            String.format(Locale.getDefault(), "%.1f km/h", value)
+        }
+    }
+    val lastUpdatedLabel = if (lastUpdatedMillis > 0L) {
+        "Last updated at ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(lastUpdatedMillis))}"
+    } else {
+        "Last update unavailable"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -83,6 +111,33 @@ fun WeatherContent(current: CurrentWeather, daily: DailyForecast?) {
     ) {
         Text("BOGOTÁ, CO", fontWeight = FontWeight.Black, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
         Text("Today's Condition", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = if (showOfflineMessage) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(
+                    text = lastUpdatedLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (showOfflineMessage) {
+                    Text(
+                        text = "Showing cached weather because the network is unavailable.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (isFromCache) {
+                    Text(
+                        text = "Refreshing weather...",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -128,7 +183,7 @@ fun WeatherContent(current: CurrentWeather, daily: DailyForecast?) {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Air,
                 label = "WIND",
-                value = "${current.windspeed} km/h"
+                value = formattedWindSpeed
             )
             WeatherDetailCard(
                 modifier = Modifier.weight(1f),

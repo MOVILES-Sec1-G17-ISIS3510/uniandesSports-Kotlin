@@ -125,6 +125,11 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
         cadence: Int
     ): String? {
         try {
+            if (AiConstants.OPENAI_API_KEY.isBlank()) {
+                Log.e("OpenAiStrategy", "Run Session Error: OPENAI_API_KEY is blank.")
+                return null
+            }
+
             val prompt = """
                 You are a professional, highly MOTIVATIONAL running coach. 
                 Analyze the following data from a user's recent run session:
@@ -154,14 +159,21 @@ class OpenAiAnalyzerStrategy : AiAnalyzerStrategy {
             val response = api.analyzeReviewWithOpenAi(authHeader, request)
 
             return if (response.isSuccessful) {
-                response.body()?.choices?.firstOrNull()?.message?.content?.toString()
+                response.body()
+                    ?.choices
+                    ?.firstOrNull()
+                    ?.message
+                    ?.content
+                    ?.toString()
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
             } else {
                 Log.e("OpenAiStrategy", "Run Session Error: ${response.errorBody()?.string()}")
-                "You crushed it today! Keep pushing your limits and stay consistent. Your progress is amazing!"
+                null
             }
         } catch (e: Exception) {
             Log.e("OpenAiStrategy", "Exception in analyzeRunSession", e)
-            return "Great workout! Keep at it and you'll see massive gains soon!"
+            return null
         }
     }
 

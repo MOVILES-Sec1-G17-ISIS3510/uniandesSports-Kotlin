@@ -53,9 +53,12 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import com.google.firebase.Timestamp
+import com.uniandes.sport.models.BookingRequest
 import com.uniandes.sport.models.InsightType
 import com.uniandes.sport.models.CoachInsight
 import com.uniandes.sport.data.local.BecomeCoachDraft
+import com.uniandes.sport.data.local.PendingBookingPayload
 import com.uniandes.sport.data.local.ProfesoresFileStorage
 import com.uniandes.sport.data.local.ProfesoresKeyValueStore
 import com.uniandes.sport.data.preferences.ProfesoresPreferencesRepository
@@ -81,11 +84,15 @@ fun ProfesoresScreen(
     val profesores by profesoresViewModel.profesores.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
     var searchText by remember { mutableStateOf("") }
+    var favoriteCoachIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var onlyFavorites by remember { mutableStateOf(false) }
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
+    var showFiltersSheet by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
 
     val smartInsights by bookClassViewModel.smartCoachInsights.collectAsState()
     val userBookings by bookClassViewModel.userBookings.collectAsState()
+    val pendingOfflineBookings by bookClassViewModel.pendingOfflineBookings.collectAsState()
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
 
@@ -111,6 +118,11 @@ fun ProfesoresScreen(
     LaunchedEffect(Unit) {
         selectedFilter = ProfesoresKeyValueStore.getSelectedFilter(context)
         searchText = ProfesoresKeyValueStore.getSearchQuery(context)
+        favoriteCoachIds = ProfesoresKeyValueStore.getFavoriteCoachIds(context)
+        onlyFavorites = ProfesoresKeyValueStore.getOnlyFavorites(context)
+        if (favoriteCoachIds.isEmpty() && onlyFavorites) {
+            onlyFavorites = false
+        }
         coachDraft = ProfesoresKeyValueStore.getBecomeCoachDraft(context)
         profesoresViewModel.fetchProfesores()
         authViewModel.getUser(
@@ -118,6 +130,7 @@ fun ProfesoresScreen(
                 userUid = user.uid 
                 if (userUid != null) {
                     bookClassViewModel.fetchUserBookings(userUid!!)
+                    bookClassViewModel.loadPendingBookings(userUid!!)
                 }
             },
             onFailure = { /* Not logged in or error */ }
@@ -141,6 +154,18 @@ fun ProfesoresScreen(
         ProfesoresKeyValueStore.saveSearchQuery(context, searchText)
     }
 
+    LaunchedEffect(favoriteCoachIds) {
+        if (favoriteCoachIds.isEmpty()) {
+            ProfesoresKeyValueStore.clearFavoriteCoachIds(context)
+        } else {
+            ProfesoresKeyValueStore.saveFavoriteCoachIds(context, favoriteCoachIds)
+        }
+    }
+
+    LaunchedEffect(onlyFavorites) {
+        ProfesoresKeyValueStore.saveOnlyFavorites(context, onlyFavorites)
+    }
+
     // Connect Coaches context for personalized recommendation
     LaunchedEffect(profesores) {
         if (profesores.isNotEmpty()) {
@@ -150,8 +175,17 @@ fun ProfesoresScreen(
 
     // Bug fix #4: guard against timing race where userUid is still null when profesores loads from cache
     val isCurrentUserCoach = userUid != null && profesores.any { it.id == userUid }
+    val visibleBookingHistory = remember(userBookings, pendingOfflineBookings) {
+        buildList {
+            addAll(userBookings)
+            addAll(pendingOfflineBookings.map { it.toPendingBookingRequest() })
+        }.sortedByDescending { booking ->
+            runCatching { booking.createdAt.toDate().time }.getOrDefault(0L)
+        }
+    }
+    val pendingPublishCount = remember(pendingOfflineBookings) { pendingOfflineBookings.size }
 
-    val filteredProfesores = remember(profesores, selectedFilter, searchText, uiPreferences) {
+    val filteredProfesores = remember(profesores, selectedFilter, searchText, uiPreferences, onlyFavorites, favoriteCoachIds) {
         profesores
             .asSequence()
             .filter { prof ->
@@ -161,7 +195,8 @@ fun ProfesoresScreen(
                     prof.deporte.contains(searchText, ignoreCase = true) ||
                     prof.especialidad.contains(searchText, ignoreCase = true)
                 val matchesVerified = !uiPreferences.onlyVerified || prof.verified
-                matchesFilter && matchesSearch && matchesVerified
+                val matchesFavorite = !onlyFavorites || favoriteCoachIds.isEmpty() || favoriteCoachIds.contains(prof.id)
+                matchesFilter && matchesSearch && matchesVerified && matchesFavorite
             }
             .sortedWith(
                 when (uiPreferences.sortMode) {
@@ -174,6 +209,20 @@ fun ProfesoresScreen(
                 }
             )
             .toList()
+    }
+    val activeFiltersSummary = remember(selectedFilter, uiPreferences, onlyFavorites) {
+        buildList {
+            if (selectedFilter != "All") add(selectedFilter)
+            if (uiPreferences.onlyVerified) add("Verified")
+            if (onlyFavorites) add("Favorites")
+            add(
+                when (uiPreferences.sortMode) {
+                    ProfesoresSortMode.RATING -> "Top rated"
+                    ProfesoresSortMode.NAME -> "A-Z"
+                    ProfesoresSortMode.EXPERIENCE -> "Experience"
+                }
+            )
+        }.joinToString(" • ")
     }
 
     // Effect to log search demand when the user stops typing (debounced log)
@@ -199,124 +248,144 @@ fun ProfesoresScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             // Search Bar (Demand Identification) — funciona offline para filtrar caché local
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = { searchText = it },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text(
-                    "Search sport or specialty",
-                    fontSize = 14.sp
-                ) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
-                trailingIcon = {
-                    if (searchText.isNotEmpty()) {
-                        IconButton(onClick = { searchText = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                        }
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable { showFiltersSheet = true },
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = "Open filters",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                },
-                shape = RoundedCornerShape(16.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                }
+
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 56.dp),
+                    placeholder = { Text(
+                        "Search sport or specialty",
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    ) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
+                    trailingIcon = {
+                        if (searchText.isNotEmpty()) {
+                            IconButton(onClick = { searchText = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
-            )
+            }
 
             // EVC: Banner de conectividad específico para la vista de Profesores
             OfflineConnectivityBanner(
                 offlineMessage = "Showing ${if (filteredProfesores.isNotEmpty()) filteredProfesores.size.toString() + " coaches" else "coaches"} from cache. Booking disabled."
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = uiPreferences.onlyVerified,
-                    onClick = {
-                        coroutineScope.launch {
-                            preferencesRepository.setOnlyVerified(!uiPreferences.onlyVerified)
-                        }
-                    },
-                    label = { Text("Verified only") }
-                )
-                AssistChip(
-                    onClick = {
-                        coroutineScope.launch {
-                            val nextMode = when (uiPreferences.sortMode) {
-                                ProfesoresSortMode.RATING -> ProfesoresSortMode.NAME
-                                ProfesoresSortMode.NAME -> ProfesoresSortMode.EXPERIENCE
-                                ProfesoresSortMode.EXPERIENCE -> ProfesoresSortMode.RATING
-                            }
-                            preferencesRepository.setSortMode(nextMode)
-                        }
-                    },
-                    label = { Text("Sort: ${uiPreferences.sortMode.name.lowercase().replaceFirstChar { it.uppercase() }}") }
-                )
-
+            if (pendingPublishCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFDBEAFE)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF1D4ED8),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (pendingPublishCount == 1) {
+                                "1 class request is pending publish and will sync automatically when internet returns."
+                            } else {
+                                "$pendingPublishCount class requests are pending publish and will sync automatically when internet returns."
+                            },
+                            color = Color(0xFF1E3A8A),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
             }
 
-            // Sport Filter
             LazyRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(deportes) { dep ->
-                    val isSelected = selectedFilter == dep
-                    
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { 
-                            selectedFilter = dep 
-                            logViewModel.log(
-                                screen = "ProfesoresScreen",
-                                action = "FILTER_SELECTED",
-                                params = mapOf("sport" to dep)
-                            )
-                        },
-                        label = { Text(if (dep == "All") "All Coaches" else dep, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium) },
+                items(activeFiltersSummary.split(" • ").filter { it.isNotBlank() }) { filterLabel ->
+                    AssistChip(
+                        onClick = { showFiltersSheet = true },
+                        label = { Text(filterLabel, fontSize = 11.sp) },
                         leadingIcon = {
-                            if (dep == "All") {
-                                Surface(
-                                    modifier = Modifier.size(24.dp),
-                                    shape = CircleShape,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.Sports, 
-                                            contentDescription = null, 
-                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                            } else {
-                                com.uniandes.sport.ui.components.SportIconBox(sport = dep, size = 24.dp)
-                            }
-                        },
-                        shape = CircleShape,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
-                            selectedLabelColor = Color.White,
-                            selectedLeadingIconColor = Color.White,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = Color.Transparent,
-                            selectedBorderColor = MaterialTheme.colorScheme.secondary
-                        )
+                            Icon(
+                                imageVector = when (filterLabel) {
+                                    "Verified" -> Icons.Default.Verified
+                                    "Favorites" -> Icons.Default.Star
+                                    "Top rated" -> Icons.Default.TrendingUp
+                                    "Experience" -> Icons.Default.History
+                                    "A-Z" -> Icons.Default.SortByAlpha
+                                    else -> Icons.Default.Sports
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     )
+                }
+                if (favoriteCoachIds.isNotEmpty()) {
+                    item {
+                        AssistChip(
+                            onClick = { onlyFavorites = !onlyFavorites },
+                            label = {
+                                Text(
+                                    "Favorites",
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color(0xFFF59E0B)
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -367,7 +436,7 @@ fun ProfesoresScreen(
                 }
 
                 // YOUR REQUESTS SECTION (G17 Rubric: User History)
-                if (userBookings.isNotEmpty() && uiPreferences.showRecentRequests) {
+                if (visibleBookingHistory.isNotEmpty() && uiPreferences.showRecentRequests) {
                     item {
                         Text(
                             "YOUR RECENT REQUESTS",
@@ -381,7 +450,10 @@ fun ProfesoresScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(vertical = 4.dp)
                         ) {
-                            items(userBookings.sortedByDescending { it.createdAt }) { booking ->
+                            items(
+                                items = visibleBookingHistory,
+                                key = { booking -> "${booking.id}_${booking.status}_${booking.targetProfesorId}" }
+                            ) { booking ->
                                 BookingHistoryCard(booking = booking, allCoaches = profesores)
                             }
                         }
@@ -405,6 +477,18 @@ fun ProfesoresScreen(
                         CoachCard(
                             profesor = prof,
                             showQuickContact = uiPreferences.showQuickContact,
+                            isFavorite = favoriteCoachIds.contains(prof.id),
+                            onToggleFavorite = {
+                                val removingCurrentFavorite = favoriteCoachIds.contains(prof.id)
+                                favoriteCoachIds = if (removingCurrentFavorite) {
+                                    favoriteCoachIds - prof.id
+                                } else {
+                                    favoriteCoachIds + prof.id
+                                }
+                                if (onlyFavorites && favoriteCoachIds.isEmpty()) {
+                                    onlyFavorites = false
+                                }
+                            },
                             onViewProfile = {
                                 ProfesoresKeyValueStore.saveLastOpenedProfesorId(context, prof.id)
                                 onNavigate(Screen.CoachProfile.route.replace("{profesorId}", prof.id))
@@ -554,12 +638,112 @@ fun ProfesoresScreen(
             }
         )
     }
+
+    if (showFiltersSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showFiltersSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                Text(
+                    "Coach Filters",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Sport",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(deportes) { dep ->
+                            val isSelected = selectedFilter == dep
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedFilter = dep
+                                    logViewModel.log(
+                                        screen = "ProfesoresScreen",
+                                        action = "FILTER_SELECTED",
+                                        params = mapOf("sport" to dep)
+                                    )
+                                },
+                                label = { Text(if (dep == "All") "All Coaches" else dep) }
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Quality",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FilterChip(
+                        selected = uiPreferences.onlyVerified,
+                        onClick = {
+                            coroutineScope.launch {
+                                preferencesRepository.setOnlyVerified(!uiPreferences.onlyVerified)
+                            }
+                        },
+                        label = { Text("Verified coaches only") }
+                    )
+                    FilterChip(
+                        selected = onlyFavorites,
+                        onClick = {
+                            onlyFavorites = !onlyFavorites
+                        },
+                        enabled = favoriteCoachIds.isNotEmpty(),
+                        label = { Text("Only favorites") }
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Sort by",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    listOf(
+                        ProfesoresSortMode.RATING to "Top rated",
+                        ProfesoresSortMode.NAME to "Name A-Z",
+                        ProfesoresSortMode.EXPERIENCE to "Experience"
+                    ).forEach { (mode, label) ->
+                        FilterChip(
+                            selected = uiPreferences.sortMode == mode,
+                            onClick = {
+                                coroutineScope.launch {
+                                    preferencesRepository.setSortMode(mode)
+                                }
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
 }
 
 @Composable
 fun CoachCard(
     profesor: Profesor,
     showQuickContact: Boolean = true,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onViewProfile: () -> Unit
 ) {
     val context = LocalContext.current
@@ -605,7 +789,7 @@ fun CoachCard(
                     }
                 }
                 Spacer(modifier = Modifier.width(16.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     val displayPrice = profesor.precio
                         .replace("$", "")
                         .replace("/hour", "")
@@ -650,6 +834,13 @@ fun CoachCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = "${profesor.totalReviews} reviews", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = if (isFavorite) "Remove favorite coach" else "Save favorite coach",
+                        tint = if (isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -1022,6 +1213,7 @@ fun BookingHistoryCard(
     val context = LocalContext.current
     val statusColor = when(booking.status.lowercase()) {
         "pending" -> Color(0xFFF59E0B) // Amber
+        "pending_publish" -> Color(0xFF2563EB)
         "accepted" -> Color(0xFF10B981) // Emerald
         "completed" -> Color(0xFF6B7280) // Gray
         else -> MaterialTheme.colorScheme.primary
@@ -1092,7 +1284,11 @@ fun BookingHistoryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (booking.targetProfesorId.isBlank()) "Wait for a coach to accept your request" else "Sport: ${booking.sport}",
+                        text = when {
+                            booking.status.equals("pending_publish", ignoreCase = true) -> "Queued offline. It will publish automatically when internet returns."
+                            booking.targetProfesorId.isBlank() -> "Wait for a coach to accept your request"
+                            else -> "Sport: ${booking.sport}"
+                        },
                         fontSize = 10.sp, 
                         lineHeight = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -1112,7 +1308,10 @@ fun BookingHistoryCard(
                     color = statusColor.copy(alpha = 0.1f)
                 ) {
                     Text(
-                        text = booking.status.uppercase(),
+                        text = when (booking.status.lowercase()) {
+                            "pending_publish" -> "PENDING PUBLISH"
+                            else -> booking.status.uppercase()
+                        },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Black,
@@ -1162,5 +1361,21 @@ fun BookingHistoryCard(
             }
         }
     }
+}
+
+private fun PendingBookingPayload.toPendingBookingRequest(): BookingRequest {
+    return BookingRequest(
+        id = localId,
+        userId = userId,
+        studentName = studentName,
+        targetProfesorId = targetProfesorId,
+        targetProfesorName = targetProfesorName,
+        sport = sport,
+        skillLevel = skillLevel,
+        schedule = schedule,
+        notes = notes,
+        status = "pending_publish",
+        createdAt = Timestamp(Date(createdAtMillis))
+    )
 }
 
