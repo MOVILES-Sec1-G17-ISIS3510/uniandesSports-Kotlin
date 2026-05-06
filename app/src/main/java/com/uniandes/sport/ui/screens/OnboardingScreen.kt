@@ -110,34 +110,28 @@ fun OnboardingScreen(
     }
 
     // Persist progress whenever inputs or current step change
-    LaunchedEffect(Unit) {
-        snapshotFlow {
-            listOf(
-                authViewModel.fullName,
-                authViewModel.email,
-                authViewModel.password,
-                authViewModel.program,
-                authViewModel.semester,
-                authViewModel.mainSport,
-                currentStep
+    LaunchedEffect(
+        authViewModel.fullName,
+        authViewModel.email,
+        authViewModel.password,
+        authViewModel.program,
+        authViewModel.semester,
+        authViewModel.mainSport,
+        currentStep
+    ) {
+        try {
+            OnboardingLocalStore.saveProgress(
+                context = context,
+                step = currentStep,
+                fullName = authViewModel.fullName,
+                email = authViewModel.email,
+                password = authViewModel.password,
+                program = authViewModel.program,
+                semester = authViewModel.semester,
+                mainSport = authViewModel.mainSport
             )
-        }.collect { list ->
-            try {
-                OnboardingLocalStore.saveProgress(
-                    context = context,
-                    step = (list.last() as? Int) ?: currentStep,
-                    fullName = list[0] as String,
-                    email = list[1] as String,
-                    password = list[2] as String,
-                    program = list[3] as String,
-                    semester = list[4] as String,
-                    mainSport = list[5] as String
-                )
-                savedProgressExists = true
-            } catch (_: Exception) {
-                // ignore persistence errors
-            }
-        }
+            savedProgressExists = true
+        } catch (_: Exception) {}
     }
 
     // Ensure progress is saved when the composable leaves composition (app closed or navigated away)

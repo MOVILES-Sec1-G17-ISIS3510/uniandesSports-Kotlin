@@ -3,7 +3,7 @@ package com.uniandes.sport.viewmodels.auth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import com.uniandes.sport.models.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -17,8 +17,10 @@ import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import java.text.Normalizer
+import com.uniandes.sport.data.local.OnboardingLocalStore
+import android.content.Context
 
-class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
+class FirebaseAuthViewModel(app: android.app.Application): AuthViewModelInterface, AndroidViewModel(app) {
     private val auth: FirebaseAuth = Firebase.auth
     private val db = FirebaseFirestore.getInstance()
 
@@ -377,6 +379,11 @@ class FirebaseAuthViewModel: AuthViewModelInterface, ViewModel() {
 
     override fun logout(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
         try {
+            // Clear onboarding progress using the application context from AndroidViewModel
+            try {
+                OnboardingLocalStore.clearProgress(getApplication())
+                OnboardingLocalStore.clear(getApplication())
+            } catch (_: Exception) {}
             auth.signOut()
             onSuccess()
         } catch (e: Exception) {

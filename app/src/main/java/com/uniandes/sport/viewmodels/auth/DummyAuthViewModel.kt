@@ -3,13 +3,14 @@ package com.uniandes.sport.viewmodels.auth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.app.Activity
 import com.uniandes.sport.models.User
+import com.uniandes.sport.data.local.OnboardingLocalStore
 import kotlinx.coroutines.*
 
-class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
+class DummyAuthViewModel(app: android.app.Application) : AuthViewModelInterface, AndroidViewModel(app) {
     private var _email: String by mutableStateOf("")
     override var email: String
         get() = _email
@@ -147,6 +148,15 @@ class DummyAuthViewModel : AuthViewModelInterface, ViewModel() {
     }
 
     override fun logout(onSuccess: () -> Unit, onFailure: (exception: Exception) -> Unit) {
-        onSuccess()
+        try {
+            // Clear onboarding progress using the application context from AndroidViewModel
+            try {
+                OnboardingLocalStore.clearProgress(getApplication())
+                OnboardingLocalStore.clear(getApplication())
+            } catch (_: Exception) {}
+            onSuccess()
+        } catch (e: Exception) {
+            onFailure(e)
+        }
     }
 }
