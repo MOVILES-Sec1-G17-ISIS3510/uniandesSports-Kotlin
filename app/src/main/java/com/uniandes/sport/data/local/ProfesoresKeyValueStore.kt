@@ -6,6 +6,8 @@ private const val PREFS_NAME = "profesores_kv_store"
 private const val KEY_SELECTED_FILTER = "selected_filter"
 private const val KEY_SEARCH_QUERY = "search_query"
 private const val KEY_LAST_OPENED_PROFESOR = "last_opened_profesor"
+private const val KEY_FAVORITE_COACH_IDS = "favorite_coach_ids"
+private const val KEY_ONLY_FAVORITES = "only_favorites"
 private const val KEY_DRAFT_SPORT = "draft_sport"
 private const val KEY_DRAFT_PRICE = "draft_price"
 private const val KEY_DRAFT_EXPERIENCE = "draft_experience"
@@ -45,6 +47,28 @@ object ProfesoresKeyValueStore {
 
     fun getLastOpenedProfesorId(context: Context): String =
         prefs(context).getString(KEY_LAST_OPENED_PROFESOR, "") ?: ""
+
+    fun saveFavoriteCoachIds(context: Context, coachIds: Set<String>) {
+        prefs(context).edit().putStringSet(KEY_FAVORITE_COACH_IDS, coachIds).apply()
+    }
+
+    fun getFavoriteCoachIds(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_FAVORITE_COACH_IDS, emptySet()) ?: emptySet()
+
+    fun clearFavoriteCoachIds(context: Context) {
+        prefs(context).edit().remove(KEY_FAVORITE_COACH_IDS).apply()
+    }
+
+    fun saveOnlyFavorites(context: Context, onlyFavorites: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ONLY_FAVORITES, onlyFavorites).apply()
+    }
+
+    fun getOnlyFavorites(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ONLY_FAVORITES, false)
+
+    fun clearOnlyFavorites(context: Context) {
+        prefs(context).edit().remove(KEY_ONLY_FAVORITES).apply()
+    }
 
     fun saveBecomeCoachDraft(context: Context, draft: BecomeCoachDraft) {
         prefs(context).edit()
