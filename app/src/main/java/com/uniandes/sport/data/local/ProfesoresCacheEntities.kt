@@ -73,6 +73,7 @@ fun CachedProfesorEntity.toModel(): Profesor =
 data class CachedReviewEntity(
     val profesorId: String,
     val reviewId: String,
+    val reviewerId: String,
     val estudiante: String,
     val rating: Int,
     val comentario: String,
@@ -84,6 +85,7 @@ fun Review.toEntity(profesorId: String, now: Long = System.currentTimeMillis()):
     CachedReviewEntity(
         profesorId = profesorId,
         reviewId = id,
+        reviewerId = reviewerId,
         estudiante = estudiante,
         rating = rating,
         comentario = comentario,
@@ -94,6 +96,7 @@ fun Review.toEntity(profesorId: String, now: Long = System.currentTimeMillis()):
 fun CachedReviewEntity.toModel(): Review =
     Review(
         id = reviewId,
+        reviewerId = reviewerId,
         estudiante = estudiante,
         rating = rating,
         comentario = comentario,

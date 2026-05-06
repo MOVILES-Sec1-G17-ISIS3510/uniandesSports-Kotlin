@@ -43,6 +43,7 @@ fun CoachProfileScreen(
     val context = LocalContext.current
     val profesores by profesoresViewModel.profesores.collectAsState()
     val reviews by profesoresViewModel.reviews.collectAsState()
+    var currentUser by remember { mutableStateOf<com.uniandes.sport.models.User?>(null) }
     
     val profesor = profesores.find { it.id == profesorId }
     var showReviewDialog by remember { mutableStateOf(false) }
@@ -51,6 +52,10 @@ fun CoachProfileScreen(
         profesoresViewModel.fetchProfesores()
         profesoresViewModel.fetchReviews(profesorId)
         profesoresViewModel.syncReviewsCount(profesorId)
+        authViewModel.getUser(
+            onSuccess = { user -> currentUser = user },
+            onFailure = {}
+        )
     }
 
     Scaffold(
@@ -300,11 +305,10 @@ fun CoachProfileScreen(
 
     if (showReviewDialog && profesor != null) {
         var userEmail by remember { mutableStateOf("Anonymous") }
-        LaunchedEffect(Unit) {
-            authViewModel.getUser(
-                onSuccess = { user -> userEmail = user.fullName.takeIf { it.isNotBlank() } ?: user.email },
-                onFailure = {}
-            )
+        LaunchedEffect(currentUser?.uid) {
+            userEmail = currentUser?.fullName?.takeIf { it.isNotBlank() }
+                ?: currentUser?.email
+                ?: "Anonymous"
         }
 
         AddReviewDialog(
@@ -312,6 +316,7 @@ fun CoachProfileScreen(
             onDismiss = { showReviewDialog = false },
             onSubmit = { rating, comment ->
                 val newReview = Review(
+                    reviewerId = currentUser?.uid.orEmpty(),
                     estudiante = userEmail,
                     rating = rating,
                     comentario = comment,

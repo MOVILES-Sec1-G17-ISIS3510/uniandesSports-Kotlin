@@ -226,11 +226,19 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val reviewsCollection = db.collection("profesores").document(profesorId).collection("reviews")
-                val existing = reviewsCollection
-                    .whereEqualTo("estudiante", review.estudiante)
-                    .limit(1)
-                    .get()
-                    .await()
+                val existing = if (review.reviewerId.isNotBlank()) {
+                    reviewsCollection
+                        .whereEqualTo("reviewerId", review.reviewerId)
+                        .limit(1)
+                        .get()
+                        .await()
+                } else {
+                    reviewsCollection
+                        .whereEqualTo("estudiante", review.estudiante)
+                        .limit(1)
+                        .get()
+                        .await()
+                }
 
                 if (!existing.isEmpty) {
                     withContext(Dispatchers.Main) { onFailure(Exception("Already reviewed")) }
@@ -345,10 +353,8 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
         val repo = localRepository ?: return
         profesoresCacheJob = viewModelScope.launch {
             repo.observeProfesores().collect { localList ->
-                if (localList.isNotEmpty()) {
-                    cachedProfesores = localList
-                    _profesores.value = localList
-                }
+                cachedProfesores = localList
+                _profesores.value = localList
             }
         }
     }

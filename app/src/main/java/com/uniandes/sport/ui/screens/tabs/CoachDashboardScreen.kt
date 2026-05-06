@@ -54,6 +54,11 @@ fun CoachDashboardScreen(
     val profesor = profesores.find { it.id == profesorId }
     val bookingRequests by profesoresViewModel.bookingRequests.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
+    val visibleBookingRequests = remember(bookingRequests, profesorId) {
+        bookingRequests.filter { request ->
+            request.status.equals("pending", ignoreCase = true) || request.targetProfesorId == profesorId
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (profesores.isEmpty()) {
@@ -220,7 +225,7 @@ fun CoachDashboardScreen(
                 letterSpacing = 1.sp
             )
 
-            if (bookingRequests.isEmpty()) {
+            if (visibleBookingRequests.isEmpty()) {
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
@@ -236,7 +241,7 @@ fun CoachDashboardScreen(
                     }
                 }
             } else {
-                bookingRequests.forEach { request ->
+                visibleBookingRequests.forEach { request ->
                     Card(
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -300,9 +305,9 @@ fun CoachDashboardScreen(
                                         shape = RoundedCornerShape(4.dp)
                                     ) {
                                         Text(
-                                            "YOU ACCEPTED THIS", 
+                                            if (request.targetProfesorId == profesorId) "YOU ACCEPTED THIS" else "ASSIGNED TO ANOTHER COACH",
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            color = Color(0xFF10B981),
+                                            color = if (request.targetProfesorId == profesorId) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Black
                                         )
