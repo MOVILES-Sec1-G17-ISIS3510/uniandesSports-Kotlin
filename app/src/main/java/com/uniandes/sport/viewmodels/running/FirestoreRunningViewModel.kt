@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 
 class FirestoreRunningViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
@@ -22,6 +23,7 @@ class FirestoreRunningViewModel : ViewModel() {
     val pastRuns: StateFlow<List<RunSession>> = _pastRuns.asStateFlow()
     
     private var activityListener: ListenerRegistration? = null
+    private var singleRunListener: ListenerRegistration? = null
 
     suspend fun saveRunSession(session: RunSession): String? {
         val userId = auth.currentUser?.uid
@@ -43,6 +45,15 @@ class FirestoreRunningViewModel : ViewModel() {
             Log.e("FirestoreRunning", "Error saving session to Firestore", e)
             null
         }
+    }
+
+    suspend fun updateRunFeedback(runId: String, userId: String, aiFeedback: String) {
+        db.collection("users")
+            .document(userId)
+            .collection("runs")
+            .document(runId)
+            .set(mapOf("aiFeedback" to aiFeedback), SetOptions.merge())
+            .await()
     }
 
     fun fetchPastRuns() {
@@ -75,8 +86,33 @@ class FirestoreRunningViewModel : ViewModel() {
         }
     }
 
+    fun observeRunSession(runId: String, onUpdate: (RunSession) -> Unit) {
+        val userId = auth.currentUser?.uid ?: return
+
+        singleRunListener?.remove()
+        singleRunListener = db.collection("users")
+            .document(userId)
+            .collection("runs")
+            .document(runId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRunning", "Single run listen failed.", error)
+                    return@addSnapshotListener
+                }
+
+                val run = snapshot?.toObject(RunSession::class.java) ?: return@addSnapshotListener
+                onUpdate(run)
+            }
+    }
+
+    fun clearObservedRun() {
+        singleRunListener?.remove()
+        singleRunListener = null
+    }
+
     override fun onCleared() {
         super.onCleared()
         activityListener?.remove()
+        singleRunListener?.remove()
     }
 }

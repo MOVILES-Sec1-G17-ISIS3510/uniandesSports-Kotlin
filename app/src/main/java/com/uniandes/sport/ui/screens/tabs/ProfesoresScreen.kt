@@ -53,9 +53,12 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import com.google.firebase.Timestamp
+import com.uniandes.sport.models.BookingRequest
 import com.uniandes.sport.models.InsightType
 import com.uniandes.sport.models.CoachInsight
 import com.uniandes.sport.data.local.BecomeCoachDraft
+import com.uniandes.sport.data.local.PendingBookingPayload
 import com.uniandes.sport.data.local.ProfesoresFileStorage
 import com.uniandes.sport.data.local.ProfesoresKeyValueStore
 import com.uniandes.sport.data.preferences.ProfesoresPreferencesRepository
@@ -86,6 +89,7 @@ fun ProfesoresScreen(
 
     val smartInsights by bookClassViewModel.smartCoachInsights.collectAsState()
     val userBookings by bookClassViewModel.userBookings.collectAsState()
+    val pendingOfflineBookings by bookClassViewModel.pendingOfflineBookings.collectAsState()
 
     val deportes = listOf("All", "Soccer", "Tennis", "Basketball", "Swimming", "Running")
 
@@ -118,6 +122,7 @@ fun ProfesoresScreen(
                 userUid = user.uid 
                 if (userUid != null) {
                     bookClassViewModel.fetchUserBookings(userUid!!)
+                    bookClassViewModel.loadPendingBookings(userUid!!)
                 }
             },
             onFailure = { /* Not logged in or error */ }
@@ -150,6 +155,14 @@ fun ProfesoresScreen(
 
     // Bug fix #4: guard against timing race where userUid is still null when profesores loads from cache
     val isCurrentUserCoach = userUid != null && profesores.any { it.id == userUid }
+    val visibleBookingHistory = remember(userBookings, pendingOfflineBookings) {
+        buildList {
+            addAll(userBookings)
+            addAll(pendingOfflineBookings.map { it.toPendingBookingRequest() })
+        }.sortedByDescending { booking ->
+            runCatching { booking.createdAt.toDate().time }.getOrDefault(0L)
+        }
+    }
 
     val filteredProfesores = remember(profesores, selectedFilter, searchText, uiPreferences) {
         profesores
@@ -367,7 +380,7 @@ fun ProfesoresScreen(
                 }
 
                 // YOUR REQUESTS SECTION (G17 Rubric: User History)
-                if (userBookings.isNotEmpty() && uiPreferences.showRecentRequests) {
+                if (visibleBookingHistory.isNotEmpty() && uiPreferences.showRecentRequests) {
                     item {
                         Text(
                             "YOUR RECENT REQUESTS",
@@ -381,7 +394,10 @@ fun ProfesoresScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(vertical = 4.dp)
                         ) {
-                            items(userBookings.sortedByDescending { it.createdAt }) { booking ->
+                            items(
+                                items = visibleBookingHistory,
+                                key = { booking -> "${booking.id}_${booking.status}_${booking.targetProfesorId}" }
+                            ) { booking ->
                                 BookingHistoryCard(booking = booking, allCoaches = profesores)
                             }
                         }
@@ -1022,6 +1038,7 @@ fun BookingHistoryCard(
     val context = LocalContext.current
     val statusColor = when(booking.status.lowercase()) {
         "pending" -> Color(0xFFF59E0B) // Amber
+        "pending_publish" -> Color(0xFF2563EB)
         "accepted" -> Color(0xFF10B981) // Emerald
         "completed" -> Color(0xFF6B7280) // Gray
         else -> MaterialTheme.colorScheme.primary
@@ -1092,7 +1109,11 @@ fun BookingHistoryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (booking.targetProfesorId.isBlank()) "Wait for a coach to accept your request" else "Sport: ${booking.sport}",
+                        text = when {
+                            booking.status.equals("pending_publish", ignoreCase = true) -> "Queued offline. It will publish automatically when internet returns."
+                            booking.targetProfesorId.isBlank() -> "Wait for a coach to accept your request"
+                            else -> "Sport: ${booking.sport}"
+                        },
                         fontSize = 10.sp, 
                         lineHeight = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -1112,7 +1133,10 @@ fun BookingHistoryCard(
                     color = statusColor.copy(alpha = 0.1f)
                 ) {
                     Text(
-                        text = booking.status.uppercase(),
+                        text = when (booking.status.lowercase()) {
+                            "pending_publish" -> "PENDING PUBLISH"
+                            else -> booking.status.uppercase()
+                        },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Black,
@@ -1162,5 +1186,21 @@ fun BookingHistoryCard(
             }
         }
     }
+}
+
+private fun PendingBookingPayload.toPendingBookingRequest(): BookingRequest {
+    return BookingRequest(
+        id = localId,
+        userId = userId,
+        studentName = studentName,
+        targetProfesorId = targetProfesorId,
+        targetProfesorName = targetProfesorName,
+        sport = sport,
+        skillLevel = skillLevel,
+        schedule = schedule,
+        notes = notes,
+        status = "pending_publish",
+        createdAt = Timestamp(Date(createdAtMillis))
+    )
 }
 

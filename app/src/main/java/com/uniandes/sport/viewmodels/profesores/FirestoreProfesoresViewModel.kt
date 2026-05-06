@@ -136,8 +136,13 @@ class FirestoreProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     override fun refreshProfesores(onComplete: () -> Unit) {
         cachedProfesores = null
         viewModelScope.launch {
-            syncFromServer()
-            onComplete()
+            try {
+                syncFromServer()
+            } finally {
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
+            }
         }
     }
 

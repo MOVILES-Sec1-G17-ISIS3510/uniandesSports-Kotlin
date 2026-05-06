@@ -25,6 +25,7 @@ import com.uniandes.sport.ui.theme.ArchivoFamily
 @Composable
 fun RunSummaryDialog(
     session: RunSession,
+    isOfflineMode: Boolean = false,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -136,6 +137,22 @@ fun RunSummaryDialog(
                         }
                         
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        if (isOfflineMode && session.aiFeedback.contains("queued", ignoreCase = true)) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Offline mode: your AI coach request is queued and will sync automatically when internet returns.",
+                                    modifier = Modifier.padding(12.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         
                         if (session.aiFeedback.isBlank()) {
                             CircularProgressIndicator(

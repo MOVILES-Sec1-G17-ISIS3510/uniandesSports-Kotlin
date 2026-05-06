@@ -51,6 +51,9 @@ class BookClassViewModel : ViewModel() {
     private val _userBookings = MutableStateFlow<List<BookingRequest>>(emptyList())
     val userBookings: StateFlow<List<BookingRequest>> = _userBookings.asStateFlow()
 
+    private val _pendingOfflineBookings = MutableStateFlow<List<PendingBookingPayload>>(emptyList())
+    val pendingOfflineBookings: StateFlow<List<PendingBookingPayload>> = _pendingOfflineBookings.asStateFlow()
+
     private val _smartCoachInsights = MutableStateFlow<List<CoachInsight>>(
         listOf(CoachInsight("Checking context for personalized tips...", InsightType.WELCOME))
     )
@@ -58,6 +61,7 @@ class BookClassViewModel : ViewModel() {
 
     fun fetchUserBookings(userId: String) {
         if (userId.isBlank()) return
+        loadPendingBookings(userId)
         db.collection("coach_requests")
             .whereEqualTo("userId", userId)
             .addSnapshotListener { snapshot, e ->
@@ -69,8 +73,16 @@ class BookClassViewModel : ViewModel() {
                     val bookings = snapshot.toObjects(BookingRequest::class.java)
                     _userBookings.value = bookings
                     generateSmartInsight(bookings)
+                    loadPendingBookings(userId)
                 }
             }
+    }
+
+    fun loadPendingBookings(userId: String) {
+        val context = appContext ?: return
+        _pendingOfflineBookings.value = PendingBookingStore.getAll(context)
+            .filter { it.userId == userId }
+            .sortedByDescending { it.createdAtMillis }
     }
 
     private var mWeatherCode: Int? = null
@@ -204,6 +216,7 @@ class BookClassViewModel : ViewModel() {
             )
 
             PendingBookingStore.enqueue(context, pending)
+            loadPendingBookings(studentId)
             
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)

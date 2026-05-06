@@ -15,6 +15,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.viewmodels.sensors.RunningSessionViewModel
 import java.util.Locale
@@ -31,8 +33,10 @@ fun LiveRunScreen(
     val isRunning by runViewModel.isRunning.collectAsState()
     val summary by runViewModel.lastSessionSummary.collectAsState()
     val isAnalyzing by runViewModel.isAnalyzing.collectAsState()
+    val isOfflineMode by runViewModel.isOfflineMode.collectAsState()
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnline = rememberIsOnline()
 
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
@@ -72,6 +76,19 @@ fun LiveRunScreen(
             ),
             modifier = Modifier.padding(top = 24.dp, bottom = 32.dp)
         )
+
+        OfflineConnectivityBanner(
+            offlineMessage = "You are offline. The run will be saved locally and AI coaching will sync automatically when internet returns."
+        )
+
+        if (!isOnline || isOfflineMode) {
+            AssistChip(
+                onClick = {},
+                label = { Text("Offline mode active") },
+                leadingIcon = { Icon(Icons.Default.CloudOff, contentDescription = null) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // Metrics Grid
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -132,6 +149,7 @@ fun LiveRunScreen(
     summary?.let { session ->
         RunSummaryDialog(
             session = session,
+            isOfflineMode = isOfflineMode,
             onDismiss = {
                 runViewModel.clearSummary()
                 onNavigateBack()
