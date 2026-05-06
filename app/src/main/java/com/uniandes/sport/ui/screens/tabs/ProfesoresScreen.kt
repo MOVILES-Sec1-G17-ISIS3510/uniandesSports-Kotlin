@@ -163,6 +163,7 @@ fun ProfesoresScreen(
             runCatching { booking.createdAt.toDate().time }.getOrDefault(0L)
         }
     }
+    val pendingPublishCount = remember(pendingOfflineBookings) { pendingOfflineBookings.size }
 
     val filteredProfesores = remember(profesores, selectedFilter, searchText, uiPreferences) {
         profesores
@@ -244,6 +245,40 @@ fun ProfesoresScreen(
             OfflineConnectivityBanner(
                 offlineMessage = "Showing ${if (filteredProfesores.isNotEmpty()) filteredProfesores.size.toString() + " coaches" else "coaches"} from cache. Booking disabled."
             )
+
+            if (pendingPublishCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFDBEAFE)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF1D4ED8),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (pendingPublishCount == 1) {
+                                "1 class request is pending publish and will sync automatically when internet returns."
+                            } else {
+                                "$pendingPublishCount class requests are pending publish and will sync automatically when internet returns."
+                            },
+                            color = Color(0xFF1E3A8A),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier

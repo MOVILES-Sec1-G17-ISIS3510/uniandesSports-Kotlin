@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.models.Review
 import com.uniandes.sport.data.local.ProfesoresFileStorage
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.profesores.ProfesoresViewModelInterface
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,7 +45,9 @@ fun CoachProfileScreen(
     val context = LocalContext.current
     val profesores by profesoresViewModel.profesores.collectAsState()
     val reviews by profesoresViewModel.reviews.collectAsState()
+    val pendingReviews by profesoresViewModel.pendingReviews.collectAsState()
     var currentUser by remember { mutableStateOf<com.uniandes.sport.models.User?>(null) }
+    val isOnline = rememberIsOnline()
     
     val profesor = profesores.find { it.id == profesorId }
     var showReviewDialog by remember { mutableStateOf(false) }
@@ -51,11 +55,18 @@ fun CoachProfileScreen(
     LaunchedEffect(profesorId) {
         profesoresViewModel.fetchProfesores()
         profesoresViewModel.fetchReviews(profesorId)
+        profesoresViewModel.loadPendingReviews(profesorId)
         profesoresViewModel.syncReviewsCount(profesorId)
         authViewModel.getUser(
             onSuccess = { user -> currentUser = user },
             onFailure = {}
         )
+    }
+    val visibleReviews = remember(reviews, pendingReviews) {
+        buildList {
+            addAll(pendingReviews)
+            addAll(reviews.filterNot { review -> pendingReviews.any { it.reviewerId == review.reviewerId } })
+        }
     }
 
     Scaffold(
@@ -154,6 +165,16 @@ fun CoachProfileScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                item {
+                    OfflineConnectivityBanner(
+                        offlineMessage = if (reviews.isNotEmpty()) {
+                            "Showing cached reviews. New reviews can still be queued offline and will publish automatically later."
+                        } else {
+                            "You are offline. Reviews can be read from cache and new reviews will queue automatically."
+                        }
+                    )
+                }
+
                 // Header Profile
                 item {
                     Column(
@@ -264,10 +285,14 @@ fun CoachProfileScreen(
                             letterSpacing = 1.sp
                         )
                         Button(
-                            onClick = { showReviewDialog = true },
+                            onClick = {
+                                showReviewDialog = true
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.height(36.dp),
@@ -280,7 +305,7 @@ fun CoachProfileScreen(
                     }
                 }
 
-                if (reviews.isEmpty()) {
+                if (visibleReviews.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -292,8 +317,8 @@ fun CoachProfileScreen(
                         }
                     }
                 } else {
-                    items(reviews) { review ->
-                        ReviewCard(review)
+                    items(visibleReviews) { review ->
+                        ReviewCard(review, isPending = review.id.startsWith("pending_"))
                     }
                 }
                 
@@ -323,7 +348,15 @@ fun CoachProfileScreen(
                     fecha = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date())
                 )
                 profesoresViewModel.addReview(profesor.id, newReview,
-                    onSuccess = { showReviewDialog = false },
+                    onSuccess = {
+                        showReviewDialog = false
+                        val message = if (isOnline) {
+                            "Review submitted successfully."
+                        } else {
+                            "Review queued offline. It will publish automatically when internet returns."
+                        }
+                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                    },
                     onFailure = { e ->
                         android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                     }
@@ -373,7 +406,7 @@ fun ProfileInfoItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label
 }
 
 @Composable
-fun ReviewCard(review: Review) {
+fun ReviewCard(review: Review, isPending: Boolean = false) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -386,14 +419,40 @@ fun ReviewCard(review: Review) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(review.estudiante, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(review.estudiante, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    if (isPending) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFDBEAFE),
+                            modifier = Modifier.padding(top = 6.dp)
+                        ) {
+                            Text(
+                                "PENDING PUBLISH",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = Color(0xFF1D4ED8),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     repeat(review.rating) {
                         Icon(Icons.Default.Star, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(14.dp))
                     }
                 }
             }
-            Text(review.fecha, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+            Text(
+                if (isPending) {
+                    "${review.fecha} • Queued offline. It will publish automatically."
+                } else {
+                    review.fecha
+                },
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
             Spacer(Modifier.height(8.dp))
             Text(review.comentario, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
         }

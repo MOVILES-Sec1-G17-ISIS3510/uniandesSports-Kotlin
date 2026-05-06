@@ -18,6 +18,9 @@ class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
     private val _reviews = MutableStateFlow<List<Review>>(emptyList())
     override val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
 
+    private val _pendingReviews = MutableStateFlow<List<Review>>(emptyList())
+    override val pendingReviews: StateFlow<List<Review>> = _pendingReviews.asStateFlow()
+
     private val _bookingRequests = MutableStateFlow<List<com.uniandes.sport.models.BookingRequest>>(emptyList())
     override val bookingRequests: StateFlow<List<com.uniandes.sport.models.BookingRequest>> = _bookingRequests.asStateFlow()
 
@@ -35,6 +38,10 @@ class DummyProfesoresViewModel : ViewModel(), ProfesoresViewModelInterface {
 
     override fun fetchReviews(profesorId: String) {
         _reviews.value = _reviewsMap[profesorId] ?: emptyList()
+    }
+
+    override fun loadPendingReviews(profesorId: String) {
+        _pendingReviews.value = emptyList()
     }
 
     override fun fetchBookingRequestsBySport(sport: String) {
