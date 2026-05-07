@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uniandes.sport.R
 import com.uniandes.sport.Routes
+import com.uniandes.sport.data.local.PendingOnboardingStore
+import com.uniandes.sport.ui.screens.hasOnboardingDraft
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import kotlinx.coroutines.delay
 
@@ -32,6 +35,7 @@ fun SplashScreen(
     authViewModel: AuthViewModelInterface
 ) {
     val scale = remember { Animatable(0f) }
+    val context = LocalContext.current
     
     // Animation for the logo
     LaunchedEffect(key1 = true) {
@@ -48,6 +52,8 @@ fun SplashScreen(
         authViewModel.isUserLoggedIn(
             onSuccess = { isLogged, isNewUser ->
                 val destination = when {
+                    PendingOnboardingStore.hasPending(context) -> Routes.ONBOARDING_PENDING_SCREEN
+                    !isLogged && hasOnboardingDraft(context) -> Routes.ONBOARDING_SCREEN
                     !isLogged -> Routes.AUTH_SCREEN
                     isNewUser -> Routes.ONBOARDING_SCREEN
                     else -> Routes.MAIN_TABS
@@ -57,7 +63,14 @@ fun SplashScreen(
                 }
             },
             onFailure = {
-                navController.navigate(Routes.AUTH_SCREEN) {
+                val destination = if (PendingOnboardingStore.hasPending(context)) {
+                    Routes.ONBOARDING_PENDING_SCREEN
+                } else if (hasOnboardingDraft(context)) {
+                    Routes.ONBOARDING_SCREEN
+                } else {
+                    Routes.AUTH_SCREEN
+                }
+                navController.navigate(destination) {
                     popUpTo(Routes.SPLASH_SCREEN) { inclusive = true }
                 }
             }

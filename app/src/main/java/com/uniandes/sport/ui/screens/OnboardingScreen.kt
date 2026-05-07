@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,11 +32,22 @@ import androidx.compose.animation.with
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.uniandes.sport.data.local.PendingOnboardingPayload
+import com.uniandes.sport.data.local.PendingOnboardingStore
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.components.ThemeModeToggle
 import com.uniandes.sport.ui.theme.ThemeMode
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
+import com.uniandes.sport.workers.OnboardingSyncWorker
 import java.text.Normalizer
+import java.net.UnknownHostException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -45,6 +57,7 @@ fun OnboardingScreen(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     onFinishOnboarding: () -> Unit,
+    onPendingOnboarding: () -> Unit,
     onBackToLogin: () -> Unit
 ) {
     val screenName = "OnboardingScreen"
@@ -55,9 +68,27 @@ fun OnboardingScreen(
     var showDialog by remember { mutableStateOf(false) }
     var dialogMessage by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    val isOnline = rememberIsOnline()
 
     val isStep1Valid = authViewModel.program.isNotBlank() && authViewModel.semester.isNotBlank()
     val isStep2Valid = authViewModel.mainSport.isNotBlank()
+
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        restoreSignupDraft(context) { fullName, email, password ->
+            authViewModel.fullName = fullName
+            authViewModel.email = email
+            authViewModel.password = password
+        }
+
+        restoreOnboardingProgress(context) { savedStep, savedProgram, savedSemester, savedSports ->
+            currentStep = savedStep
+            if (savedProgram.isNotBlank()) authViewModel.program = savedProgram
+            if (savedSemester.isNotBlank()) authViewModel.semester = savedSemester
+            if (savedSports.isNotBlank()) authViewModel.mainSport = savedSports
+        }
+    }
 
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
@@ -120,6 +151,8 @@ fun OnboardingScreen(
                 color = colorScheme.onBackground,
                 textAlign = TextAlign.Center
             )
+
+            Spacer(modifier = Modifier.height(18.dp))
             
             Text(
                 text = when(currentStep) {
@@ -160,20 +193,47 @@ fun OnboardingScreen(
                                 1 -> {
                                     ProgramSearchField(
                                         value = authViewModel.program,
-                                        onValueChange = { authViewModel.program = it },
+                                        onValueChange = {
+                                            authViewModel.program = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = it,
+                                                semester = authViewModel.semester,
+                                                mainSport = authViewModel.mainSport
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     SemesterStepperField(
                                         semesterValue = authViewModel.semester,
-                                        onSemesterChange = { authViewModel.semester = it },
+                                        onSemesterChange = {
+                                            authViewModel.semester = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = authViewModel.program,
+                                                semester = it,
+                                                mainSport = authViewModel.mainSport
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                 }
                                 2 -> {
                                     MainSportLabelsField(
                                         selectedSportsCsv = authViewModel.mainSport,
-                                        onSelectionChange = { authViewModel.mainSport = it },
+                                        onSelectionChange = {
+                                            authViewModel.mainSport = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = authViewModel.program,
+                                                semester = authViewModel.semester,
+                                                mainSport = it
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                 }
@@ -196,21 +256,44 @@ fun OnboardingScreen(
                         onClick = {
                             if (currentStep < totalSteps) {
                                 currentStep++
-                            } else {
-                                isLoading = true
-                                authViewModel.saveOnboardingData(
-                                    onSuccess = {
-                                        isLoading = false
-                                        logViewModel.log(screenName, "ONBOARDING_COMPLETED")
-                                        onFinishOnboarding()
-                                    },
-                                    onFailure = { exception ->
-                                        isLoading = false
-                                        dialogMessage = exception.message.toString()
-                                        showDialog = true
-                                        logViewModel.crash(screenName, exception)
-                                    }
+                                saveOnboardingProgress(
+                                    context = context,
+                                    currentStep = currentStep,
+                                    program = authViewModel.program,
+                                    semester = authViewModel.semester,
+                                    mainSport = authViewModel.mainSport
                                 )
+                            } else {
+                                if (!isOnline) {
+                                    queuePendingOnboarding(context, authViewModel)
+                                    clearOnboardingDraft(context)
+                                    logViewModel.log(screenName, "ONBOARDING_QUEUED_OFFLINE")
+                                    onPendingOnboarding()
+                                } else {
+                                    isLoading = true
+                                    authViewModel.saveOnboardingData(
+                                        onSuccess = {
+                                            isLoading = false
+                                            clearOnboardingDraft(context)
+                                            PendingOnboardingStore.clear(context)
+                                            logViewModel.log(screenName, "ONBOARDING_COMPLETED")
+                                            onFinishOnboarding()
+                                        },
+                                        onFailure = { exception ->
+                                            isLoading = false
+                                            if (isConnectivityFailure(exception, isOnline)) {
+                                                queuePendingOnboarding(context, authViewModel)
+                                                clearOnboardingDraft(context)
+                                                logViewModel.log(screenName, "ONBOARDING_QUEUED_AFTER_NETWORK_DROP")
+                                                onPendingOnboarding()
+                                            } else {
+                                                dialogMessage = exception.message.toString()
+                                                showDialog = true
+                                                logViewModel.crash(screenName, exception)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier
@@ -223,19 +306,37 @@ fun OnboardingScreen(
                             else -> true
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = colorScheme.primary,
-                            contentColor = colorScheme.onPrimary
+                            containerColor = if (currentStep < totalSteps || isOnline) {
+                                colorScheme.primary
+                            } else {
+                                Color(0xFFFBBF24)
+                            },
+                            contentColor = if (currentStep < totalSteps || isOnline) {
+                                colorScheme.onPrimary
+                            } else {
+                                Color.Black
+                            }
                         )
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorScheme.onPrimary, strokeWidth = 2.dp)
                         } else {
                             Text(
-                                text = if (currentStep < totalSteps) "Next Step" else "Complete Profile",
+                                text = if (currentStep < totalSteps) "Next Step" else "Create Account",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    if (currentStep == totalSteps && !isOnline) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No connection: When you tap Create Account, your account will be queued and created automatically when internet returns. We'll notify you when it's ready.",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
                     }
 
                     if (currentStep > 1) {
@@ -255,6 +356,14 @@ fun OnboardingScreen(
                             Text("Back to Login", color = colorScheme.onSurfaceVariant)
                         }
                     }
+
+                    if (!isOnline) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OfflineConnectivityBanner(
+                            offlineMessage = "No connection. Your information is saved locally and will be processed when internet returns.",
+                            messageFontSize = 11.sp
+                        )
+                    }
                 }
             }
         }
@@ -267,6 +376,45 @@ fun OnboardingScreen(
                 .padding(top = 16.dp, end = 16.dp)
         )
     }
+}
+
+private fun queuePendingOnboarding(
+    context: android.content.Context,
+    authViewModel: AuthViewModelInterface
+) {
+    val pending = PendingOnboardingPayload(
+        fullName = authViewModel.fullName,
+        email = authViewModel.email,
+        password = authViewModel.password,
+        program = authViewModel.program,
+        semester = authViewModel.semester,
+        mainSport = authViewModel.mainSport
+    )
+
+    PendingOnboardingStore.save(context, pending)
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val request = OneTimeWorkRequestBuilder<OnboardingSyncWorker>()
+        .setConstraints(constraints)
+        .build()
+
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "pending_onboarding_sync",
+        ExistingWorkPolicy.REPLACE,
+        request
+    )
+}
+
+private fun isConnectivityFailure(exception: Exception, isOnline: Boolean): Boolean {
+    val message = exception.message.orEmpty().lowercase()
+    return !isOnline ||
+        exception is UnknownHostException ||
+        message.contains("network") ||
+        message.contains("internet") ||
+        message.contains("timeout")
 }
 
 @Composable

@@ -43,6 +43,9 @@ import com.google.android.gms.common.api.CommonStatusCodes
 import com.uniandes.sport.R
 import com.uniandes.sport.Routes
 import com.uniandes.sport.ui.components.ThemeModeToggle
+import com.uniandes.sport.ui.screens.clearOnboardingDraft
+import com.uniandes.sport.ui.screens.restoreSignupDraft
+import com.uniandes.sport.ui.screens.saveSignupDraft
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.ui.theme.ThemeMode
@@ -97,6 +100,15 @@ fun AuthScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        restoreSignupDraft(context) { fullName, email, password ->
+            authViewModel.fullName = fullName
+            authViewModel.email = email
+            authViewModel.password = password
+            isLoginMode = false
+        }
+    }
+
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -118,11 +130,26 @@ fun AuthScreen(
             // displayName can be null for some account types, but account.displayName is always set.
             if (account.displayName?.isNotBlank() == true) authViewModel.fullName = account.displayName!!
             if (account.email?.isNotBlank() == true) authViewModel.email = account.email!!
+            saveSignupDraft(
+                context = context,
+                fullName = authViewModel.fullName,
+                email = authViewModel.email
+            )
 
             authViewModel.loginWithGoogleIdToken(
                 idToken = idToken,
                 onSuccess = { _, isNewUser ->
                     isGoogleLoading = false
+                    if (isNewUser) {
+                        saveSignupDraft(
+                            context = context,
+                            fullName = authViewModel.fullName,
+                            email = authViewModel.email,
+                            password = authViewModel.password
+                        )
+                    } else {
+                        clearOnboardingDraft(context)
+                    }
                     logViewModel.log(screenName, "USER_GOOGLE_LOGGED_IN")
                     onLoginSuccess(isNewUser)
                 },
@@ -272,7 +299,10 @@ fun AuthScreen(
                         if (!isLoginMode) {
                             CustomOutlinedTextField(
                                 value = authViewModel.fullName,
-                                onValueChange = { authViewModel.fullName = it },
+                                onValueChange = {
+                                    authViewModel.fullName = it
+                                    saveSignupDraft(context, fullName = it)
+                                },
                                 label = "Full Name",
                                 icon = Icons.Default.Person
                             )
@@ -280,7 +310,10 @@ fun AuthScreen(
 
                         CustomOutlinedTextField(
                             value = authViewModel.email,
-                            onValueChange = { authViewModel.email = it },
+                            onValueChange = {
+                                authViewModel.email = it
+                                if (!isLoginMode) saveSignupDraft(context, email = it)
+                            },
                             label = "Email Address",
                             icon = Icons.Default.Email,
                             keyboardType = KeyboardType.Email
@@ -288,7 +321,10 @@ fun AuthScreen(
 
                         CustomOutlinedTextField(
                             value = authViewModel.password,
-                            onValueChange = { authViewModel.password = it },
+                            onValueChange = {
+                                authViewModel.password = it
+                                if (!isLoginMode) saveSignupDraft(context, password = it)
+                            },
                             label = "Password",
                             icon = Icons.Default.Lock,
                             keyboardType = KeyboardType.Password,
@@ -355,6 +391,16 @@ fun AuthScreen(
 
                                     authViewModel.login(
                                         onSuccess = { _, isNewUser ->
+                                            if (isNewUser) {
+                                                saveSignupDraft(
+                                                    context = context,
+                                                    fullName = authViewModel.fullName,
+                                                    email = authViewModel.email,
+                                                    password = authViewModel.password
+                                                )
+                                            } else {
+                                                clearOnboardingDraft(context)
+                                            }
                                             logViewModel.log(screenName, "USER_LOGGED_IN")
                                             onLoginSuccess(isNewUser)
                                         },
@@ -377,6 +423,13 @@ fun AuthScreen(
                                         showDialog = true
                                         return@Button
                                     }
+
+                                    saveSignupDraft(
+                                        context = context,
+                                        fullName = authViewModel.fullName,
+                                        email = authViewModel.email,
+                                        password = authViewModel.password
+                                    )
 
                                     authViewModel.register(
                                         onSuccess = { _ ->
@@ -501,6 +554,16 @@ fun AuthScreen(
                                             activity = activity,
                                             onSuccess = { _, isNewUser ->
                                                 isMicrosoftLoading = false
+                                                if (isNewUser) {
+                                                    saveSignupDraft(
+                                                        context = context,
+                                                        fullName = authViewModel.fullName,
+                                                        email = authViewModel.email,
+                                                        password = authViewModel.password
+                                                    )
+                                                } else {
+                                                    clearOnboardingDraft(context)
+                                                }
                                                 logViewModel.log(
                                                     screenName,
                                                     "USER_MICROSOFT_LOGGED_IN"
