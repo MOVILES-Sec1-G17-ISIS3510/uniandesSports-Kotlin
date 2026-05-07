@@ -152,10 +152,6 @@ fun OnboardingScreen(
                 textAlign = TextAlign.Center
             )
 
-            OfflineConnectivityBanner(
-                offlineMessage = "No tienes conexión. Tus datos se guardan en el dispositivo hasta que vuelva internet."
-            )
-
             Spacer(modifier = Modifier.height(18.dp))
             
             Text(
@@ -326,7 +322,7 @@ fun OnboardingScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = colorScheme.onPrimary, strokeWidth = 2.dp)
                         } else {
                             Text(
-                                text = if (currentStep < totalSteps) "Next Step" else "Crear cuenta",
+                                text = if (currentStep < totalSteps) "Next Step" else "Create Account",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -336,7 +332,7 @@ fun OnboardingScreen(
                     if (currentStep == totalSteps && !isOnline) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Sin conexión: al presionar Crear cuenta, la cuenta quedará en espera y se creará automáticamente cuando vuelva internet. Te notificaremos al terminar.",
+                            text = "No connection: When you tap Create Account, your account will be queued and created automatically when internet returns. We'll notify you when it's ready.",
                             fontSize = 13.sp,
                             color = colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -359,6 +355,14 @@ fun OnboardingScreen(
                         ) {
                             Text("Back to Login", color = colorScheme.onSurfaceVariant)
                         }
+                    }
+
+                    if (!isOnline) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OfflineConnectivityBanner(
+                            offlineMessage = "No connection. Your information is saved locally and will be processed when internet returns.",
+                            messageFontSize = 11.sp
+                        )
                     }
                 }
             }

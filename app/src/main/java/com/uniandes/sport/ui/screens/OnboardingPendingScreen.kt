@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -50,18 +48,21 @@ fun OnboardingPendingScreen(
     val isOnline = rememberIsOnline()
     var wasPending by remember { mutableStateOf(pending.value != null) }
 
+    // Check completion once when connectivity changes
     LaunchedEffect(isOnline) {
-        while (pending.value != null) {
-            delay(1500)
-            pending.value = PendingOnboardingStore.get(context)
-            if (pending.value == null) {
+        if (isOnline && pending.value != null) {
+            // Wait a moment for WorkManager to process
+            delay(2000)
+            val updated = PendingOnboardingStore.get(context)
+            if (updated == null) {
+                // Silently navigate when sync completes
                 navController.navigate(Routes.MAIN_TABS) {
                     popUpTo(Routes.ONBOARDING_PENDING_SCREEN) { inclusive = true }
                 }
-                break
+            } else {
+                pending.value = updated
             }
         }
-        wasPending = pending.value != null
     }
 
     Box(
@@ -84,7 +85,7 @@ fun OnboardingPendingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OfflineConnectivityBanner(
-                offlineMessage = "No tienes conexión. Tus datos quedaron guardados y la cuenta se creará cuando vuelva internet."
+                offlineMessage = "No connection. Your information is saved and will be processed when internet returns."
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -100,7 +101,7 @@ fun OnboardingPendingScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "En espera de conexión",
+                        text = "Account Setup Pending",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -108,29 +109,16 @@ fun OnboardingPendingScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Tu onboarding quedó guardado. Cuando vuelva la conexión, se creará la cuenta y recibirás una notificación.",
+                        text = "Your profile information is saved. Your account will be created when your connection returns, and you'll receive a notification.",
                         fontSize = 15.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(
-                        onClick = { pending.value = PendingOnboardingStore.get(context) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isOnline) MaterialTheme.colorScheme.primary else Color(0xFFFBBF24),
-                            contentColor = if (isOnline) MaterialTheme.colorScheme.onPrimary else Color.Black
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (isOnline) "Revisar estado" else "Sin conexión")
-                    }
-
                     if (wasPending && isOnline) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Hay conexión. Estamos terminando de sincronizar tu cuenta.",
+                            text = "Connected. Finalizing your account creation in the background.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center

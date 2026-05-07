@@ -93,8 +93,8 @@ class OnboardingSyncWorker(
 
         val notification = NotificationCompat.Builder(applicationContext, ONBOARDING_SYNC_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Cuenta creada")
-            .setContentText("Tu cuenta se creó cuando volvió la conexión. Ya puedes entrar.")
+            .setContentTitle("Account created")
+            .setContentText("Your account was created after the connection returned. You can sign in now.")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

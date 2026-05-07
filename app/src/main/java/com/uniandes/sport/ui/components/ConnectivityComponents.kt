@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -17,14 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.utils.observeConnectivityAsFlow
-import kotlinx.coroutines.delay
 
 /**
  * EVC (Eventual Connectivity) — Componente reutilizable de banner de conectividad.
@@ -35,25 +31,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun OfflineConnectivityBanner(
     modifier: Modifier = Modifier,
-    offlineMessage: String = "Showing cached items only"
+    offlineMessage: String = "Showing cached items only",
+    messageFontSize: androidx.compose.ui.unit.TextUnit = 14.sp
 ) {
     val context = LocalContext.current
     val isOnline by context.observeConnectivityAsFlow()
         .collectAsState(initial = isOnlineNow(context))
-
-    var showBackOnline by remember { mutableStateOf(false) }
-    var wasOffline by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isOnline) {
-        if (!isOnline) {
-            wasOffline = true
-        } else if (wasOffline && isOnline) {
-            showBackOnline = true
-            delay(3000)
-            showBackOnline = false
-            wasOffline = false
-        }
-    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         AnimatedVisibility(
@@ -82,41 +65,15 @@ fun OfflineConnectivityBanner(
                         Text(
                             text = offlineMessage,
                             color = MaterialTheme.colorScheme.onErrorContainer,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = messageFontSize
                         )
                     }
                 }
             }
         }
 
-        // Banner de RECONEXIÓN (verde clásico para confirmar)
-        AnimatedVisibility(
-            visible = showBackOnline,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF15803D)) // green-700
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Sync,
-                    contentDescription = "Back online",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Back online! Data syncing...",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
-            }
-        }
+        // Silent background sync - no "back online" banner shown for non-invasive UX
     }
 }
 
