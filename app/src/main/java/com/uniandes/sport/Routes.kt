@@ -6,4 +6,5 @@ object Routes {
     const val WALL_SCREEN = "tweets_screen"
     const val MAIN_TABS = "main_tabs"
     const val ONBOARDING_SCREEN = "onboarding_screen"
+    const val ONBOARDING_PENDING_SCREEN = "onboarding_pending_screen"
 }

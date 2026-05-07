@@ -80,7 +80,7 @@ fun OfflineConnectivityBanner(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "No connection",
+                            text = offlineMessage,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             fontWeight = FontWeight.Bold
                         )

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uniandes.sport.R
 import com.uniandes.sport.Routes
+import com.uniandes.sport.data.local.PendingOnboardingStore
 import com.uniandes.sport.ui.screens.hasOnboardingDraft
 import com.uniandes.sport.viewmodels.auth.AuthViewModelInterface
 import kotlinx.coroutines.delay
@@ -51,6 +52,7 @@ fun SplashScreen(
         authViewModel.isUserLoggedIn(
             onSuccess = { isLogged, isNewUser ->
                 val destination = when {
+                    PendingOnboardingStore.hasPending(context) -> Routes.ONBOARDING_PENDING_SCREEN
                     !isLogged && hasOnboardingDraft(context) -> Routes.ONBOARDING_SCREEN
                     !isLogged -> Routes.AUTH_SCREEN
                     isNewUser -> Routes.ONBOARDING_SCREEN
@@ -61,7 +63,9 @@ fun SplashScreen(
                 }
             },
             onFailure = {
-                val destination = if (hasOnboardingDraft(context)) {
+                val destination = if (PendingOnboardingStore.hasPending(context)) {
+                    Routes.ONBOARDING_PENDING_SCREEN
+                } else if (hasOnboardingDraft(context)) {
                     Routes.ONBOARDING_SCREEN
                 } else {
                     Routes.AUTH_SCREEN

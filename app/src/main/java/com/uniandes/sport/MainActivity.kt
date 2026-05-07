@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.ui.screens.AuthScreen
+import com.uniandes.sport.ui.screens.OnboardingPendingScreen
 import com.uniandes.sport.ui.screens.OnboardingScreen
 import com.uniandes.sport.ui.screens.SplashScreen
 import com.uniandes.sport.ui.screens.wallscreen.WallScreen
@@ -40,6 +41,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.content.Context
+import com.uniandes.sport.data.local.PendingOnboardingStore
 
 class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var firebaseAnalytics: FirebaseAnalytics
@@ -150,6 +152,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                     popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
                                 }
                             },
+                            onPendingOnboarding = {
+                                navController.navigate(Routes.ONBOARDING_PENDING_SCREEN) {
+                                    popUpTo(Routes.ONBOARDING_SCREEN) { inclusive = true }
+                                }
+                            },
                             onBackToLogin = {
                                 authViewModel.logout(
                                     onSuccess = {
@@ -163,6 +170,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                         }
                                     }
                                 )
+                            }
+                        )
+                    }
+                    composable(Routes.ONBOARDING_PENDING_SCREEN) {
+                        OnboardingPendingScreen(
+                            navController = navController,
+                            themeMode = themeModeState.value,
+                            onThemeChange = {
+                                themeModeState.value = it
+                                saveThemeMode(it)
                             }
                         )
                     }
