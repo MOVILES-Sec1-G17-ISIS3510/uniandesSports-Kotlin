@@ -18,6 +18,7 @@ import com.uniandes.sport.workers.MessageSyncWorker
 import com.uniandes.sport.workers.PostSyncWorker
 import com.uniandes.sport.data.local.CachedMembershipEntity
 import com.uniandes.sport.models.MessageStatus
+import com.uniandes.sport.cache.MessageLRUCache
 import com.uniandes.sport.data.local.PendingMessageEntity
 import com.uniandes.sport.data.local.PendingPostEntity
 import java.util.UUID
@@ -28,6 +29,7 @@ import com.uniandes.sport.models.Channel
 import com.uniandes.sport.models.ChannelMessage
 import com.uniandes.sport.models.Community
 import com.uniandes.sport.models.CommunityMember
+import com.uniandes.sport.models.MessageSource
 import com.uniandes.sport.models.Post
 import com.uniandes.sport.models.PostComment
 import com.uniandes.sport.utils.observeConnectivityAsFlow
@@ -96,6 +98,25 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private var activeChannelId: String? = null
     private var oldestLoadedMessageSnapshot: DocumentSnapshot? = null
     private var channelMessagesListener: ListenerRegistration? = null
+    
+    // LRU Cache for channel messages (max 1000 messages across all channels)
+    private val messageCache = MessageLRUCache(maxMessages = 1000)
+    
+    // Cache statistics for UI debugging
+    private val _cacheHitCount = MutableStateFlow(0)
+    val cacheHitCount: StateFlow<Int> = _cacheHitCount.asStateFlow()
+    
+    private val _cacheMissCount = MutableStateFlow(0)
+    val cacheMissCount: StateFlow<Int> = _cacheMissCount.asStateFlow()
+    
+    private val _cacheEvictionCount = MutableStateFlow(0)
+    val cacheEvictionCount: StateFlow<Int> = _cacheEvictionCount.asStateFlow()
+    
+    private val _cachedMessageCount = MutableStateFlow(0)
+    val cachedMessageCount: StateFlow<Int> = _cachedMessageCount.asStateFlow()
+    
+    private val _showCacheStats = MutableStateFlow(false)
+    val showCacheStats: StateFlow<Boolean> = _showCacheStats.asStateFlow()
 
     init {
         // A: corrutina con dispatcher.
@@ -620,27 +641,41 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     override fun loadChannelMessages(communityId: String, channelId: String) {
         viewModelScope.launch {
             try {
+                val cacheKey = "$communityId:$channelId"
                 val isDifferentChannel = communityId != activeCommunityId || channelId != activeChannelId
                 activeCommunityId = communityId
                 activeChannelId = channelId
 
-                // Clear the previous conversation immediately so a different community/channel never shows stale messages.
-                _channelMessages.value = emptyList()
-                _hasMoreOldChannelMessages.value = false
-                _isLoadingOlderChannelMessages.value = false
-
                 if (isDifferentChannel) {
                     oldestLoadedMessageSnapshot = null
+                    _hasMoreOldChannelMessages.value = false
+                    _isLoadingOlderChannelMessages.value = false
                 }
 
                 channelMessagesListener?.remove()
                 channelMessagesListener = null
 
-                // 1. Emit Room cache immediately
-                val cached = loadCachedRecentMessages(communityId, channelId)
-                if (cached.isNotEmpty()) _channelMessages.value = cached
+                // 1. Try LRU cache FIRST (fast path, ~5ms)
+                val cachedMessages = messageCache.get(cacheKey)
+                if (cachedMessages != null) {
+                    Log.d("FirestoreCommunities", "HIT: Loaded ${cachedMessages.size} messages from LRU cache: $cacheKey")
+                    // Mark all as LRU_CACHE source
+                    _channelMessages.value = cachedMessages.map { it.copy(source = MessageSource.LRU_CACHE) }
+                    updateCacheStats()
+                } else {
+                    // Cache miss: show empty while loading
+                    _channelMessages.value = emptyList()
+                    // Try Room cache as fallback
+                    val roomCached = loadCachedRecentMessages(communityId, channelId)
+                    if (roomCached.isNotEmpty()) {
+                        Log.d("FirestoreCommunities", "Room cache fallback: ${roomCached.size} messages")
+                        // Mark all as ROOM_CACHE source
+                        _channelMessages.value = roomCached.map { it.copy(source = MessageSource.ROOM_CACHE) }
+                    }
+                    updateCacheStats()
+                }
 
-                // 2. Keep latest messages in real time
+                // 2. Keep latest messages in real time (Firestore listener)
                 channelMessagesListener = db.collection("communities").document(communityId)
                     .collection("channels").document(channelId)
                     .collection("messages")
@@ -657,9 +692,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                         oldestLoadedMessageSnapshot = snapshot.documents.lastOrNull()
                         _hasMoreOldChannelMessages.value = snapshot.size() >= 20
 
+                        // Mark Firebase messages with their source
                         val latestMessages = snapshot.documents.mapNotNull { doc ->
                             val m = doc.toObject(ChannelMessage::class.java)
-                            m?.copy(id = doc.id)
+                            m?.copy(id = doc.id, source = MessageSource.FIREBASE)
                         }.reversed()
 
                         // 1. Filter out any optimistic messages that have a matching server-side message
@@ -677,12 +713,26 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                             }
                         }
 
-                        // 2. Merge with the latest server messages
+                        // 2. Merge with the latest server messages (prefer Firebase source)
                         val merged = (filteredCurrent + latestMessages)
                             .distinctBy { it.id }
                             .sortedBy { it.createdAt }
+                            .map { msg ->
+                                // If message exists in Firebase, mark as FIREBASE; otherwise keep original source
+                                if (latestMessages.any { it.id == msg.id }) {
+                                    msg.copy(source = MessageSource.FIREBASE)
+                                } else {
+                                    msg
+                                }
+                            }
 
                         _channelMessages.value = merged
+                        Log.d("FirestoreCommunities", "Firebase listener: ${latestMessages.size} new messages")
+
+                        //  Store in LRU cache for future visits to this channel
+                        messageCache.put(cacheKey, merged)
+                        updateCacheStats()
+                        Log.d("FirestoreCommunities", "Stored ${merged.size} messages in LRU cache: $cacheKey (${messageCache.getStats()})")
 
                         viewModelScope.launch {
                             cacheRecentMessages(communityId, channelId, merged)
@@ -698,6 +748,23 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 oldestLoadedMessageSnapshot = null
             }
         }
+    }
+    
+    /**
+     * Updates UI StateFlows with current cache statistics
+     */
+    private fun updateCacheStats() {
+        _cacheHitCount.value = messageCache.hitCount
+        _cacheMissCount.value = messageCache.missCount
+        _cacheEvictionCount.value = messageCache.evictionCount
+    }
+    
+    /**
+     * Toggles visibility of cache stats panel
+     */
+    fun toggleCacheStats() {
+        _showCacheStats.value = !_showCacheStats.value
+        Log.d("FirestoreCommunities", if (_showCacheStats.value) "📊 Cache stats visible" else "📊 Cache stats hidden")
     }
 
     override fun loadOlderChannelMessages() {
@@ -991,6 +1058,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     override fun onCleared() {
         channelMessagesListener?.remove()
         channelMessagesListener = null
+        messageCache.clear()
         super.onCleared()
     }
 }

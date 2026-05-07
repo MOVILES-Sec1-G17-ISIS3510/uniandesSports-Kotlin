@@ -44,6 +44,13 @@ enum class MessageStatus {
     ERROR
 }
 
+enum class MessageSource {
+    LRU_CACHE,      // Desde LRU in-memory cache
+    ROOM_CACHE,     // Desde Room database
+    FIREBASE,       // Desde Firestore remoto
+    UNKNOWN         // Origen desconocido (legacy/sin tracking)
+}
+
 data class ChannelMessage(
     val id: String = "",
     val authorId: String = "",
@@ -52,7 +59,8 @@ data class ChannelMessage(
     val createdAt: Long = 0L,
     val reactions: Map<String, Long> = emptyMap(),
     val userReactions: Map<String, String> = emptyMap(),
-    val status: MessageStatus = MessageStatus.SENT
+    val status: MessageStatus = MessageStatus.SENT,
+    val source: MessageSource = MessageSource.UNKNOWN  // Debug: tracking de origen
 )
 
 data class PostComment(
