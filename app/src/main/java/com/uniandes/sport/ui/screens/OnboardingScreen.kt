@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,6 +59,23 @@ fun OnboardingScreen(
 
     val isStep1Valid = authViewModel.program.isNotBlank() && authViewModel.semester.isNotBlank()
     val isStep2Valid = authViewModel.mainSport.isNotBlank()
+
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        restoreSignupDraft(context) { fullName, email, password ->
+            authViewModel.fullName = fullName
+            authViewModel.email = email
+            authViewModel.password = password
+        }
+
+        restoreOnboardingProgress(context) { savedStep, savedProgram, savedSemester, savedSports ->
+            currentStep = savedStep
+            if (savedProgram.isNotBlank()) authViewModel.program = savedProgram
+            if (savedSemester.isNotBlank()) authViewModel.semester = savedSemester
+            if (savedSports.isNotBlank()) authViewModel.mainSport = savedSports
+        }
+    }
 
     LaunchedEffect(authViewModel.semester) {
         if (authViewModel.semester.toIntOrNull() == null) {
@@ -160,20 +178,47 @@ fun OnboardingScreen(
                                 1 -> {
                                     ProgramSearchField(
                                         value = authViewModel.program,
-                                        onValueChange = { authViewModel.program = it },
+                                        onValueChange = {
+                                            authViewModel.program = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = it,
+                                                semester = authViewModel.semester,
+                                                mainSport = authViewModel.mainSport
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     SemesterStepperField(
                                         semesterValue = authViewModel.semester,
-                                        onSemesterChange = { authViewModel.semester = it },
+                                        onSemesterChange = {
+                                            authViewModel.semester = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = authViewModel.program,
+                                                semester = it,
+                                                mainSport = authViewModel.mainSport
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                 }
                                 2 -> {
                                     MainSportLabelsField(
                                         selectedSportsCsv = authViewModel.mainSport,
-                                        onSelectionChange = { authViewModel.mainSport = it },
+                                        onSelectionChange = {
+                                            authViewModel.mainSport = it
+                                            saveOnboardingProgress(
+                                                context = context,
+                                                currentStep = currentStep,
+                                                program = authViewModel.program,
+                                                semester = authViewModel.semester,
+                                                mainSport = it
+                                            )
+                                        },
                                         enabled = !isLoading
                                     )
                                 }
@@ -196,11 +241,19 @@ fun OnboardingScreen(
                         onClick = {
                             if (currentStep < totalSteps) {
                                 currentStep++
+                                saveOnboardingProgress(
+                                    context = context,
+                                    currentStep = currentStep,
+                                    program = authViewModel.program,
+                                    semester = authViewModel.semester,
+                                    mainSport = authViewModel.mainSport
+                                )
                             } else {
                                 isLoading = true
                                 authViewModel.saveOnboardingData(
                                     onSuccess = {
                                         isLoading = false
+                                        clearOnboardingDraft(context)
                                         logViewModel.log(screenName, "ONBOARDING_COMPLETED")
                                         onFinishOnboarding()
                                     },
