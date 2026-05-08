@@ -31,8 +31,18 @@ data class OpenMatchLocationSuggestion(
 
 object OpenMatchLocationCache {
     private const val MAX_ENTRIES = 24
-    private const val RECENT_LIMIT = 3
-    private const val POPULAR_LIMIT = 3
+    
+    //  Dynamic limits based on memory pressure
+    private const val MIN_RECENT_LIMIT = 1
+    private const val MAX_RECENT_LIMIT = 5
+    private const val MIN_POPULAR_LIMIT = 1
+    private const val MAX_POPULAR_LIMIT = 5
+    
+    //  Memory pressure thresholds (% of max heap used)
+    private const val MEMORY_PRESSURE_LOW = 60f        // < 60%: show max suggestions
+    private const val MEMORY_PRESSURE_MEDIUM = 75f     // 60-75%: show medium suggestions
+    private const val MEMORY_PRESSURE_HIGH = 85f       // 75-85%: show fewer suggestions
+    private const val MEMORY_PRESSURE_CRITICAL = 95f   // > 85%: show minimal suggestions
 
     private val cache = object : LinkedHashMap<String, List<OpenMatchLocationSuggestion>>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<OpenMatchLocationSuggestion>>?): Boolean {
@@ -45,6 +55,60 @@ object OpenMatchLocationCache {
 
     var missCount = 0
         private set
+    
+    /**
+     * Calcula los límites de ubicaciones dinámicamente basado en presión de memoria
+     * 
+     * **Decisiones de implementación:**
+     * - Usa Runtime.getRuntime() para obtener stats de memoria del proceso
+     * - Calcula memory_pressure = (totalMemory - freeMemory) / maxMemory * 100%
+     * - Escala RECENT_LIMIT y POPULAR_LIMIT según presión
+     * 
+     * **Rangos de memory pressure:**
+     * - LOW (<60%): 5 recientes + 5 populares = 10 sugerencias (ideal)
+     * - MEDIUM (60-75%): 3 recientes + 3 populares = 6 sugerencias (equilibrio)
+     * - HIGH (75-85%): 2 recientes + 2 populares = 4 sugerencias (constrained)
+     * - CRITICAL (>85%): 1 reciente + 1 popular = 2 sugerencias (emergency mode)
+     * 
+     * @return Pair<recentLimit, popularLimit>
+     */
+    private fun calculateDynamicLimits(): Pair<Int, Int> {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val totalMemory = runtime.totalMemory()
+        val freeMemory = runtime.freeMemory()
+        
+        // Memoria en uso (en bytes)
+        val usedMemory = totalMemory - freeMemory
+        
+        // Porcentaje de presión = (usedMemory / maxMemory) * 100
+        val memoryPressure = (usedMemory.toFloat() / maxMemory.toFloat()) * 100f
+        
+        val (recentLimit, popularLimit) = when {
+            memoryPressure < MEMORY_PRESSURE_LOW -> {
+                //  Mucha memoria disponible
+                Pair(MAX_RECENT_LIMIT, MAX_POPULAR_LIMIT)  // 5 + 5
+            }
+            memoryPressure < MEMORY_PRESSURE_MEDIUM -> {
+                //  Memoria moderada
+                Pair(3, 3)  // Valores por defecto
+            }
+            memoryPressure < MEMORY_PRESSURE_HIGH -> {
+                //  Memoria baja
+                Pair(2, 2)
+            }
+            memoryPressure < MEMORY_PRESSURE_CRITICAL -> {
+                //  Memoria crítica
+                Pair(MIN_RECENT_LIMIT, MIN_POPULAR_LIMIT)  // 1 + 1
+            }
+            else -> {
+                //  Emergency: solo 1 + 1
+                Pair(MIN_RECENT_LIMIT, MIN_POPULAR_LIMIT)
+            }
+        }
+        
+        return recentLimit to popularLimit
+    }
 
     fun getSuggestions(
         userId: String?,
@@ -73,13 +137,19 @@ object OpenMatchLocationCache {
         historyEvents: List<Event>,
         allEvents: List<Event>
     ): List<OpenMatchLocationSuggestion> {
-        val recent = buildRecentSuggestions(historyEvents)
+        // 🔧 Calcular límites dinámicos según memoria
+        val (recentLimit, popularLimit) = calculateDynamicLimits()
+        
+        val recent = buildRecentSuggestions(historyEvents, recentLimit)
         val recentKeys = recent.mapTo(mutableSetOf()) { it.stableKey }
-        val popular = buildPopularSuggestions(allEvents, recentKeys)
-        return (recent + popular).take(RECENT_LIMIT + POPULAR_LIMIT)
+        val popular = buildPopularSuggestions(allEvents, recentKeys, popularLimit)
+        return (recent + popular)
     }
 
-    private fun buildRecentSuggestions(historyEvents: List<Event>): List<OpenMatchLocationSuggestion> {
+    private fun buildRecentSuggestions(
+        historyEvents: List<Event>,
+        limit: Int
+    ): List<OpenMatchLocationSuggestion> {
         val seen = LinkedHashMap<String, OpenMatchLocationSuggestion>()
 
         historyEvents
@@ -92,12 +162,13 @@ object OpenMatchLocationCache {
                 }
             }
 
-        return seen.values.take(RECENT_LIMIT)
+        return seen.values.take(limit)
     }
 
     private fun buildPopularSuggestions(
         allEvents: List<Event>,
-        excludedKeys: Set<String>
+        excludedKeys: Set<String>,
+        limit: Int
     ): List<OpenMatchLocationSuggestion> {
         val aggregates = LinkedHashMap<String, LocationAggregate>()
 
@@ -140,7 +211,7 @@ object OpenMatchLocationCache {
                     .thenByDescending { it.eventCount }
                     .thenByDescending { it.latestMillis }
             )
-            .take(POPULAR_LIMIT)
+            .take(limit)
             .map {
                 OpenMatchLocationSuggestion(
                     locationString = it.locationString,
