@@ -4,8 +4,12 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.graphics.Bitmap
+import com.google.firebase.FirebaseApp
 import com.uniandes.sport.ai.AiAnalyzerStrategy
 import com.uniandes.sport.data.cache.AiResultCache
+import com.uniandes.sport.data.local.AiHistoryEntry
+import com.uniandes.sport.data.local.AiHistoryStore
 import com.uniandes.sport.models.Reto
 import kotlinx.coroutines.launch
 
@@ -25,6 +29,9 @@ class AiReviewViewModel(
 
     private val _uiState = mutableStateOf<AiReviewState>(AiReviewState.Idle)
     val uiState: State<AiReviewState> = _uiState
+
+    private val appContext
+        get() = try { FirebaseApp.getInstance().applicationContext } catch (_: Exception) { null }
 
     /**
      * Resetea el progreso de todos los retos asociados a un evento específico.
@@ -111,7 +118,23 @@ class AiReviewViewModel(
 
                 // cachear el resultado del analisis para acceso futuro sin llamar a la api
                 val cacheKey = AiResultCache.trackKey(eventId, uid)
-                AiResultCache.put(cacheKey, "advanced=$advancedCount, challenges=${newProgressMap.keys.joinToString()}")
+                val resultSummary = if (advancedCount > 0)
+                    "Advanced in $advancedCount challenges: ${newProgressMap.keys.joinToString()}"
+                else
+                    "Activity recorded. No challenge progress applied."
+                AiResultCache.put(cacheKey, resultSummary)
+
+                // guardar en historial local persistente
+                val ctx = appContext
+                if (ctx != null) {
+                    AiHistoryStore.addEntry(ctx, AiHistoryEntry(
+                        id = "track_${eventId}_${System.currentTimeMillis()}",
+                        type = "track",
+                        eventId = eventId,
+                        feedback = resultSummary,
+                        imagePath = ""
+                    ))
+                }
 
                 if (advancedCount > 0) {
                     _uiState.value = AiReviewState.Success(
@@ -136,7 +159,8 @@ class AiReviewViewModel(
     // directamente sin llamar a la api (cache hit). si no, se llama a la api
     // y se guarda el resultado en el cache para futuras consultas (cache miss).
     // el eventid es opcional para asociar el resultado a un evento especifico
-    fun analyzeCalisthenicsPose(base64Image: String, eventId: String = "standalone", userId: String = "") {
+    // bitmap opcional para guardar la foto en el historial local (se carga despues con coil)
+    fun analyzeCalisthenicsPose(base64Image: String, eventId: String = "standalone", userId: String = "", photoBitmap: Bitmap? = null) {
         val cacheKey = AiResultCache.poseKey(eventId, userId)
 
         // buscar en cache lru antes de llamar a la api (evitar llamadas repetidas)
@@ -154,6 +178,25 @@ class AiReviewViewModel(
                 if (feedback != null) {
                     // guardar resultado en cache lru para acceso futuro
                     AiResultCache.put(cacheKey, feedback)
+
+                    // guardar en historial local persistente para la seccion "your ai history".
+                    // la foto se guarda como archivo jpg (para cargar con coil) y el
+                    // feedback se guarda en sharedpreferences
+                    val ctx = appContext
+                    if (ctx != null) {
+                        val entryId = "pose_${eventId}_${System.currentTimeMillis()}"
+                        val imagePath = if (photoBitmap != null) {
+                            AiHistoryStore.saveImage(ctx, photoBitmap, entryId)
+                        } else ""
+                        AiHistoryStore.addEntry(ctx, AiHistoryEntry(
+                            id = entryId,
+                            type = "pose",
+                            eventId = eventId,
+                            feedback = feedback,
+                            imagePath = imagePath
+                        ))
+                    }
+
                     _uiState.value = AiReviewState.PoseFeedback(feedback)
                 } else {
                     _uiState.value = AiReviewState.Error("No se pudo obtener feedback de la IA.")

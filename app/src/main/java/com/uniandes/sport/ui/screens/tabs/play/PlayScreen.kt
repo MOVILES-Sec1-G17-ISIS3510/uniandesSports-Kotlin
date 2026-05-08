@@ -42,6 +42,10 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 import com.uniandes.sport.ui.components.SmartMatchCard
 import com.uniandes.sport.ui.components.rememberCurrentLocationState
 import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
+import androidx.compose.foundation.lazy.LazyRow
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.uniandes.sport.data.local.AiHistoryStore
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
@@ -538,8 +542,100 @@ fun PlayScreen(
                     )
                 }
             }
+
+            // seccion "your ai history": muestra los analisis de ia recientes (poses y tracks).
+            // las fotos se cargan con coil desde archivos locales (cache de imagenes).
+            // los textos de feedback vienen del aihistorystore (sharedpreferences).
+            // esta seccion es visible offline porque todo esta en almacenamiento local
+            item {
+                val aiHistoryContext = androidx.compose.ui.platform.LocalContext.current
+                val aiHistory = remember(myTracksByEventId) {
+                    AiHistoryStore.getRecent(aiHistoryContext, 10)
+                }
+
+                if (aiHistory.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "YOUR AI HISTORY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(aiHistory.size) { index ->
+                            val entry = aiHistory[index]
+                            Surface(
+                                modifier = Modifier
+                                    .width(220.dp)
+                                    .height(180.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (entry.type == "pose")
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else
+                                    MaterialTheme.colorScheme.secondaryContainer,
+                                tonalElevation = 2.dp
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (entry.type == "pose") Icons.Default.CameraAlt else Icons.Default.TrackChanges,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (entry.type == "pose") "POSE ANALYSIS" else "TRACK ANALYSIS",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+
+                                    // foto del analisis de pose cargada con coil desde archivo local.
+                                    // coil cachea automaticamente en memoria (lru) y en disco,
+                                    // lo que permite cargar la imagen sin acceder al filesystem cada vez
+                                    if (entry.imagePath.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(aiHistoryContext)
+                                                .data(java.io.File(entry.imagePath))
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Pose photo",
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(70.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = entry.feedback.take(80) + if (entry.feedback.length > 80) "..." else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        maxLines = if (entry.imagePath.isNotBlank()) 2 else 4
+                                    )
+
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
+                                            .format(java.util.Date(entry.createdAtMillis)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        
+
         // Modals management
         when (activeModal) {
             PlayModalType.MY_SCHEDULE -> {

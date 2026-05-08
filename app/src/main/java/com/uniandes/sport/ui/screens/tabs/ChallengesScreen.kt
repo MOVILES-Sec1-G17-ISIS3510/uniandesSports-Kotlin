@@ -42,7 +42,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 
 import kotlinx.coroutines.delay
+import com.uniandes.sport.data.local.PendingRetoActionStore
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +91,18 @@ fun ChallengesScreen(
     
     val creationStatus by viewModel.creationStatus.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnline = rememberIsOnline()
+
+    // contar acciones pendientes de sincronizar (join/leave offline)
+    // se recalcula cada vez que cambian los retos (el snapshotlistener limpia las pendientes)
+    val pendingActions = remember(activeChallenges, exploreChallenges) {
+        PendingRetoActionStore.getPendingForUser(context, currentUserId)
+    }
+    val pendingCount = pendingActions.size
+    // mapa retoid -> accion pendiente para mostrar badge en las cards
+    val pendingByRetoId = remember(pendingActions) {
+        pendingActions.associateBy { it.retoId }
+    }
 
     LaunchedEffect(creationStatus) {
         if (creationStatus.startsWith("ERROR:")) {
@@ -111,6 +125,45 @@ fun ChallengesScreen(
                 OfflineConnectivityBanner(
                     offlineMessage = "You're offline. Showing cached challenges. Changes will sync when connection returns."
                 )
+            }
+
+            // banner de acciones pendientes (join/leave offline).
+            // resuelve antipatron #5 "non-existent result notification":
+            // el usuario sabe cuantas acciones estan esperando sincronizacion.
+            // patron identico al banner azul de "pending publish" en profesores
+            if (pendingCount > 0) {
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFDBEAFE)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = Color(0xFF1E3A8A),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (pendingCount == 1) {
+                                    "1 challenge action is pending and will sync automatically when internet returns."
+                                } else {
+                                    "$pendingCount challenge actions are pending and will sync automatically when internet returns."
+                                },
+                                color = Color(0xFF1E3A8A),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
 
             // --- SECTION: ACTIVE CHALLENGES ---
@@ -165,13 +218,22 @@ fun ChallengesScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         ExploreChallengeCard(
                             reto = reto,
-                            onJoin = { 
+                            pendingAction = pendingByRetoId[reto.id]?.action,
+                            onJoin = {
                                 viewModel.joinReto(reto.id, currentUserId)
                                 logViewModel.log(
                                     screen = "ChallengesScreen",
                                     action = "join_sport_event",
                                     params = mapOf("sport_category" to reto.sport)
                                 )
+                                // feedback inmediato al usuario cuando esta offline
+                                if (!isOnline) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Queued offline. Will sync when internet returns.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             },
                             onClick = { 
                                 logViewModel.log(
@@ -255,12 +317,18 @@ fun ChallengesScreen(
             reto = selectedReto,
             currentUserId = currentUserId,
             onDismiss = { selectedReto = null },
-            onJoin = { 
+            onJoin = {
                 selectedReto?.let { viewModel.joinReto(it.id, currentUserId) }
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                }
             },
             onLeave = {
-                selectedReto?.let { 
+                selectedReto?.let {
                     viewModel.leaveReto(it.id, currentUserId)
+                }
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 selectedReto = null
             }
@@ -313,6 +381,9 @@ fun ChallengesScreen(
                 Button(
                     onClick = {
                         retoToLeave?.let { viewModel.leaveReto(it.id, currentUserId) }
+                        if (!isOnline) {
+                            android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                        }
                         retoToLeave = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)

@@ -208,7 +208,12 @@ fun PoseAnalysisDialog(
                     Button(
                         onClick = {
                             val base64 = bitmapToBase64(selectedBitmap!!)
-                            viewModel.analyzeCalisthenicsPose(base64)
+                            // pasar el bitmap para que se guarde en el historial local
+                            // y se pueda mostrar despues con coil en "your ai history"
+                            viewModel.analyzeCalisthenicsPose(
+                                base64Image = base64,
+                                photoBitmap = selectedBitmap
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),

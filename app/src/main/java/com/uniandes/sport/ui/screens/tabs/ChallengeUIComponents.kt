@@ -103,7 +103,7 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
 
 
 @Composable
-fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
+fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit, pendingAction: String? = null) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
@@ -111,11 +111,33 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+        // badge de accion pendiente cuando hay un join/leave encolado offline
+        if (pendingAction != null) {
+            Surface(
+                color = Color(0xFFDBEAFE),
+                shape = RoundedCornerShape(bottomStart = 0.dp, bottomEnd = 0.dp, topStart = 16.dp, topEnd = 16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A), modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "PENDING ${pendingAction.uppercase()} — will sync when online",
+                        color = Color(0xFF1E3A8A),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             SportIconBox(reto.sport, size = 48.dp)
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(reto.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -125,16 +147,21 @@ fun ExploreChallengeCard(reto: Reto, onJoin: () -> Unit, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
                 DetailItemSmall(Icons.Default.TrackChanges, reto.goalLabel)
             }
-            
+
             Button(
-                onClick = { 
-                    onJoin() 
-                },
+                onClick = { onJoin() },
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                enabled = pendingAction == null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (pendingAction != null) Color(0xFF93C5FD) else MaterialTheme.colorScheme.primary
+                )
             ) {
-                Text("JOIN", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(
+                    if (pendingAction != null) "PENDING" else "JOIN",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
             }
         }
     }
