@@ -109,7 +109,7 @@ fun ChallengesScreen(
             // banner de conectividad: muestra que los datos vienen de cache cuando no hay red
             item {
                 OfflineConnectivityBanner(
-                    offlineMessage = "Showing ${if (activeChallenges.isNotEmpty() || exploreChallenges.isNotEmpty()) (activeChallenges.size + exploreChallenges.size).toString() + " challenges" else "challenges"} from cache. Join disabled."
+                    offlineMessage = "You're offline. Showing cached challenges. Changes will sync when connection returns."
                 )
             }
 
