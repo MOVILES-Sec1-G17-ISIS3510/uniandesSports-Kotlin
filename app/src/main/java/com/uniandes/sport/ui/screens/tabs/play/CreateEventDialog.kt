@@ -74,7 +74,7 @@ fun CreateEventDialog(
     onDismiss: () -> Unit,
     initialEvent: com.uniandes.sport.models.Event? = null,
     myEvents: List<Event> = emptyList(),
-    onFinish: (sport: String, title: String, location: String, description: String, date: java.util.Date, endDate: java.util.Date?, skillLevel: String, maxParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
+    onFinish: (sport: String, title: String, location: String, description: String, date: java.util.Date, endDate: java.util.Date?, skillLevel: String, maxParticipants: Long, minParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf(initialEvent?.title ?: "") }
     var selectedSport by remember { mutableStateOf<String?>(initialEvent?.sport ?: sport) }
@@ -93,6 +93,7 @@ fun CreateEventDialog(
     var description by remember { mutableStateOf(initialEvent?.description ?: "") }
     var skillLevel by remember { mutableStateOf(initialEvent?.metadata?.get("skillLevel") as? String ?: "Open (any level)") }
     var maxParticipants by remember { mutableStateOf(initialEvent?.maxParticipants?.toString() ?: "10") }
+    var minParticipants by remember { mutableStateOf(initialEvent?.minParticipants?.toString() ?: "2") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var shouldJoin by remember { mutableStateOf(initialEvent == null) } // Only auto-join for new events
@@ -773,47 +774,91 @@ fun CreateEventDialog(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Max Players
-                FormLabel("Max Players")
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    color = Color.Transparent,
-                    modifier = Modifier.width(160.dp).height(56.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        IconButton(
-                            onClick = { 
-                                val current = maxParticipants.toIntOrNull() ?: 10
-                                if (current > 1) maxParticipants = (current - 1).toString()
-                            },
-                            modifier = Modifier.size(36.dp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        FormLabel("Max Players")
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
                         ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        val current = maxParticipants.toIntOrNull() ?: 10
+                                        val min = minParticipants.toIntOrNull() ?: 2
+                                        if (current > min) maxParticipants = (current - 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                                Text(
+                                    text = maxParticipants,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val current = maxParticipants.toIntOrNull() ?: 10
+                                        if (current < 99) maxParticipants = (current + 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
-                        
-                        Text(
-                            text = maxParticipants,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        
-                        IconButton(
-                            onClick = { 
-                                val current = maxParticipants.toIntOrNull() ?: 10
-                                if (current < 99) maxParticipants = (current + 1).toString()
-                            },
-                            modifier = Modifier.size(36.dp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        FormLabel("Min Players")
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        val current = minParticipants.toIntOrNull() ?: 2
+                                        if (current > 2) minParticipants = (current - 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                                Text(
+                                    text = minParticipants,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val current = minParticipants.toIntOrNull() ?: 2
+                                        val max = maxParticipants.toIntOrNull() ?: 10
+                                        if (current < max) minParticipants = (current + 1).toString()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 
@@ -1161,13 +1206,14 @@ fun CreateEventDialog(
 
                         onFinish(
                             finalSport,
-                            title, 
-                            finalLocation, 
-                            description, 
-                            startDate, 
+                            title,
+                            finalLocation,
+                            description,
+                            startDate,
                             endDate,
-                            skillLevel, 
+                            skillLevel,
                             maxParticipants.toLongOrNull() ?: 10L,
+                            minParticipants.toLongOrNull() ?: 2L,
                             shouldJoin,
                             { 
                                 isLoading = false

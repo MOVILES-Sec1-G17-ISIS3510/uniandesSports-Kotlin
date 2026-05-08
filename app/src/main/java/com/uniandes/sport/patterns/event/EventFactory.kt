@@ -19,6 +19,7 @@ object EventFactory {
         sport: String,
         modality: String,
         maxParticipants: Long,
+        minParticipants: Long = 2,
         scheduledAt: Date,
         finishedAt: Date? = null,
         metadata: Map<String, Any> = emptyMap()
@@ -31,6 +32,7 @@ object EventFactory {
             description = description,
             location = location,
             maxParticipants = maxParticipants,
+            minParticipants = minParticipants,
             metadata = metadata,
             modality = modality,
             membersCount = 1,

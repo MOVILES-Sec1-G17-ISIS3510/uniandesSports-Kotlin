@@ -338,7 +338,7 @@ fun PlayScreen(
             modality = selectedMode!!,
             onDismiss = { showCreateDialog = false },
             myEvents = myAppEvents,
-            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
+            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, minParticipants, shouldJoin, dialogOnSuccess, dialogOnError ->
                 viewModel.createEvent(
                     title = title,
                     description = description,
@@ -349,6 +349,7 @@ fun PlayScreen(
                     finishedAt = endDate,
                     skillLevel = skillLevel,
                     maxParticipants = maxParticipants,
+                    minParticipants = minParticipants,
                     shouldJoin = shouldJoin,
                     onSuccess = { 
                         dialogOnSuccess()
@@ -372,7 +373,7 @@ fun PlayScreen(
             initialEvent = editingEventLocal,
             onDismiss = { editingEvent = null },
             myEvents = myAppEvents,
-            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, _, dialogOnSuccess, dialogOnError ->
+            onFinish = { finalSport, title, location, description, date, endDate, skillLevel, maxParticipants, _, _, dialogOnSuccess, dialogOnError ->
                 viewModel.updateEvent(
                     eventId = editingEventLocal.id,
                     title = title,

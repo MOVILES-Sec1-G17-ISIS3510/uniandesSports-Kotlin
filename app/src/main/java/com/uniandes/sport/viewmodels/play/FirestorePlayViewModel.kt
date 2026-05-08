@@ -67,6 +67,8 @@ class FirestorePlayViewModel(
     private val _myTracksByEventId = MutableStateFlow<Map<String, Track>>(emptyMap())
     override val myTracksByEventId: StateFlow<Map<String, Track>> = _myTracksByEventId.asStateFlow()
 
+    private val _quorumCheckedEventIds = mutableSetOf<String>()
+
     private var joinedEventsListener: ListenerRegistration? = null
 
     override val currentUserId: String?
@@ -81,6 +83,7 @@ class FirestorePlayViewModel(
                 applyCurrentStrategy()
                 updateInProgressEvents()
                 updateFinishedEvents()
+                checkQuorumNotReached(list)
             }
         }
         viewModelScope.launch {
@@ -370,12 +373,17 @@ class FirestorePlayViewModel(
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         val displayName = currentUser?.email ?: "User ${userId.take(5)}"
 
+        var quorumJustReached = false
+        var quorumEventParams: Map<String, String> = emptyMap()
+
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
             val membersCount = snapshot.getLong("membersCount") ?: 0L
             val max = snapshot.getLong("maxParticipants") ?: 0L
-            
-            // Check if member already exists in subcollection
+            val min = snapshot.getLong("minParticipants") ?: 2L
+            val eventCreatedBy = snapshot.getString("createdBy") ?: ""
+            val eventSport = snapshot.getString("sport") ?: ""
+
             val memberSnapshot = transaction.get(memberRef)
             if (memberSnapshot.exists()) {
                 Log.d("PlayVM", "User $userId already joined subcollection. returning success.")
@@ -392,14 +400,33 @@ class FirestorePlayViewModel(
                 transaction.set(memberRef, newMember)
                 transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
+
+                val newCount = membersCount + 1
+                if (eventCreatedBy.isNotBlank() && newCount >= min && membersCount < min) {
+                    quorumJustReached = true
+                    quorumEventParams = mapOf(
+                        "event_id" to eventId,
+                        "created_by" to eventCreatedBy,
+                        "members_count" to newCount.toString(),
+                        "min_participants" to min.toString(),
+                        "sport" to eventSport
+                    )
+                }
             } else {
                 Log.w("PlayVM", "Transaction: Match is full ($max)")
                 throw Exception("Match is full")
             }
         }.addOnSuccessListener {
             Log.d("PlayVM", "User $userId successfully JOINED event $eventId")
-            
-            // Log telemetry
+
+            if (quorumJustReached) {
+                logViewModel?.log(
+                    screen = "PlayScreen",
+                    action = "match_quorum_reached",
+                    params = quorumEventParams
+                )
+            }
+
             logViewModel?.log(
                 screen = "PlayScreen",
                 action = "join_sport_event",
@@ -442,6 +469,7 @@ class FirestorePlayViewModel(
         finishedAt: java.util.Date?,
         skillLevel: String,
         maxParticipants: Long,
+        minParticipants: Long,
         shouldJoin: Boolean,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
@@ -464,6 +492,7 @@ class FirestorePlayViewModel(
                 finishedAt = finishedAt,
                 skillLevel = skillLevel,
                 maxParticipants = maxParticipants,
+                minParticipants = minParticipants,
                 shouldJoin = shouldJoin,
                 onSuccess = onSuccess,
                 onError = onError
@@ -481,6 +510,7 @@ class FirestorePlayViewModel(
                 sport = sport,
                 modality = modality,
                 maxParticipants = maxParticipants,
+                minParticipants = minParticipants,
                 scheduledAt = scheduledAt,
                 finishedAt = finishedAt,
                 metadata = mapOf("skillLevel" to skillLevel)
@@ -542,6 +572,7 @@ class FirestorePlayViewModel(
                             finishedAt = finishedAt,
                             skillLevel = skillLevel,
                             maxParticipants = maxParticipants,
+                            minParticipants = minParticipants,
                             shouldJoin = shouldJoin,
                             onSuccess = onSuccess,
                             onError = onError
@@ -636,6 +667,30 @@ class FirestorePlayViewModel(
             }
     }
 
+    private fun checkQuorumNotReached(events: List<Event>) {
+        val now = com.google.firebase.Timestamp.now()
+        events.forEach { event ->
+            if (event.id in _quorumCheckedEventIds) return@forEach
+            if (event.createdBy.isBlank()) return@forEach
+            val scheduledAt = event.scheduledAt ?: return@forEach
+            if (scheduledAt > now) return@forEach
+            if (event.membersCount >= event.minParticipants) return@forEach
+
+            _quorumCheckedEventIds.add(event.id)
+            logViewModel?.log(
+                screen = "PlayScreen",
+                action = "match_quorum_not_reached",
+                params = mapOf(
+                    "event_id" to event.id,
+                    "created_by" to event.createdBy,
+                    "members_count" to event.membersCount.toString(),
+                    "min_participants" to event.minParticipants.toString(),
+                    "sport" to event.sport
+                )
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         joinedEventsListener?.remove()
@@ -652,6 +707,7 @@ class FirestorePlayViewModel(
         finishedAt: java.util.Date?,
         skillLevel: String,
         maxParticipants: Long,
+        minParticipants: Long,
         shouldJoin: Boolean,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
@@ -674,6 +730,7 @@ class FirestorePlayViewModel(
                 finishedAtMillis = finishedAt?.time,
                 skillLevel = skillLevel,
                 maxParticipants = maxParticipants,
+                minParticipants = minParticipants,
                 shouldJoin = shouldJoin,
                 createdBy = uid
             )
