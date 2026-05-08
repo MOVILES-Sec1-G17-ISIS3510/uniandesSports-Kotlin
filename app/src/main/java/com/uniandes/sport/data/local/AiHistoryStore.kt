@@ -81,6 +81,25 @@ object AiHistoryStore {
         return getAll(context).take(limit)
     }
 
+    // reemplazar una entrada pending por el resultado real del analisis.
+    // busca por eventid y tipo, y reemplaza el feedback
+    fun replacePendingForEvent(context: Context, eventId: String, type: String, realFeedback: String) {
+        val items = getAll(context).toMutableList()
+        val index = items.indexOfFirst {
+            it.eventId == eventId && it.type == type && it.feedback.startsWith("Pending")
+        }
+        if (index >= 0) {
+            items[index] = items[index].copy(feedback = realFeedback)
+            saveAll(context, items)
+        }
+    }
+
+    // eliminar todas las entradas pending (util al volver internet)
+    fun clearPendingEntries(context: Context) {
+        val items = getAll(context).filterNot { it.feedback.startsWith("Pending") }
+        saveAll(context, items)
+    }
+
     private fun saveAll(context: Context, items: List<AiHistoryEntry>) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val array = JSONArray()

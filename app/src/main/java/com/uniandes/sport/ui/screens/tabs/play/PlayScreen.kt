@@ -105,6 +105,16 @@ fun PlayScreen(
     var aiHistoryRefreshTrigger by remember { mutableStateOf(0) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val isOnline = rememberIsOnline()
+
+    // cuando vuelve internet, limpiar entradas pending del historial de ia
+    // porque el usuario puede ahora re-ejecutar el analisis manualmente
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
+            AiHistoryStore.clearPendingEntries(context)
+            aiHistoryRefreshTrigger++
+        }
+    }
+
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
