@@ -375,6 +375,7 @@ fun ChallengesScreen(
     if (showLeaveDialog) {
         LeaveChallengeDialog(
             activeChallenges = activeChallenges,
+            pendingByRetoId = pendingByRetoId.mapValues { it.value.action },
             onDismiss = { showLeaveDialog = false },
             onLeaveClicked = { reto ->
                 retoToLeave = reto
@@ -959,6 +960,7 @@ fun ReadOnlyTextField(
 @Composable
 fun LeaveChallengeDialog(
     activeChallenges: List<Reto>,
+    pendingByRetoId: Map<String, String> = emptyMap(),
     onDismiss: () -> Unit,
     onLeaveClicked: (Reto) -> Unit
 ) {
@@ -1026,13 +1028,14 @@ fun LeaveChallengeDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         activeChallenges.forEach { reto ->
+                            val hasPending = pendingByRetoId.containsKey(reto.id)
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onLeaveClicked(reto) },
+                                    .clickable(enabled = !hasPending) { onLeaveClicked(reto) },
                                 shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                color = if (hasPending) Color(0xFFDBEAFE).copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPending) Color(0xFF93C5FD) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(16.dp),
@@ -1040,14 +1043,27 @@ fun LeaveChallengeDialog(
                                 ) {
                                     com.uniandes.sport.ui.components.SportIconBox(sport = reto.sport, size = 32.dp)
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        reto.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outline)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            reto.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (hasPending) {
+                                            Text(
+                                                "PENDING ${pendingByRetoId[reto.id]?.uppercase()} — waiting sync",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1E3A8A)
+                                            )
+                                        }
+                                    }
+                                    if (hasPending) {
+                                        Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A))
+                                    } else {
+                                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outline)
+                                    }
                                 }
                             }
                         }
