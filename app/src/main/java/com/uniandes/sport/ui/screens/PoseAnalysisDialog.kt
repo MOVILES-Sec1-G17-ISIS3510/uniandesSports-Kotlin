@@ -34,10 +34,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.retos.AiReviewState
 import com.uniandes.sport.viewmodels.retos.AiReviewViewModel
+import com.uniandes.sport.workers.PoseAnalysisSyncWorker
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
@@ -236,7 +241,16 @@ fun PoseAnalysisDialog(
                                     feedback = "Pending AI analysis. Photo saved locally. Analyze when internet returns.",
                                     imagePath = imagePath
                                 ))
-                                android.widget.Toast.makeText(ctx, "Photo saved. AI analysis will be available when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                                // encolar worker para que analice la foto cuando vuelva internet
+                                val constraints = Constraints.Builder()
+                                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                                    .build()
+                                WorkManager.getInstance(ctx).enqueue(
+                                    OneTimeWorkRequestBuilder<PoseAnalysisSyncWorker>()
+                                        .setConstraints(constraints)
+                                        .build()
+                                )
+                                android.widget.Toast.makeText(ctx, "Photo saved. AI will analyze automatically when internet returns.", android.widget.Toast.LENGTH_LONG).show()
                                 selectedBitmap = null
                             },
                             modifier = Modifier.fillMaxWidth(),

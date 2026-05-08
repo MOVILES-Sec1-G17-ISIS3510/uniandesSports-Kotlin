@@ -45,9 +45,14 @@ import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
 import androidx.compose.foundation.lazy.LazyRow
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.uniandes.sport.data.local.AiHistoryStore
 import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
+import com.uniandes.sport.workers.TrackAnalysisSyncWorker
 
 import com.uniandes.sport.ui.components.FabMenuItem
 import androidx.compose.animation.core.animateFloatAsState
@@ -113,7 +118,9 @@ fun PlayScreen(
     // porque el usuario puede ahora re-ejecutar el analisis manualmente
     LaunchedEffect(isOnline) {
         if (isOnline) {
-            AiHistoryStore.clearPendingEntries(context)
+            // los workers (TrackAnalysisSyncWorker y PoseAnalysisSyncWorker)
+            // se encargan de procesar los pendientes cuando vuelve internet.
+            // aqui solo refrescamos la ui para reflejar cambios
             aiHistoryRefreshTrigger++
         }
     }
@@ -353,14 +360,27 @@ fun PlayScreen(
                         } else {
                             android.widget.Toast.makeText(context, "Track saved offline. AI analysis will run when internet returns.", android.widget.Toast.LENGTH_LONG).show()
                             // guardar en historial local como pendiente para que aparezca en ai history
+                            val oldAnalysisMap = existingTrack?.aiAnalysis ?: emptyMap()
+                            val oldAnalysisStr = org.json.JSONObject(oldAnalysisMap.mapValues { it.value }).toString()
                             AiHistoryStore.addEntry(context, com.uniandes.sport.data.local.AiHistoryEntry(
                                 id = "track_${trackEventLocal.id}_${System.currentTimeMillis()}",
                                 type = "track",
                                 eventId = trackEventLocal.id,
                                 feedback = "Pending AI analysis. Will process when internet returns.",
-                                imagePath = ""
+                                imagePath = "",
+                                trackText = text,
+                                oldAnalysisJson = oldAnalysisStr
                             ))
                             aiHistoryRefreshTrigger++
+                            // encolar worker para procesar con ia cuando vuelva internet
+                            val constraints = Constraints.Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .build()
+                            WorkManager.getInstance(context).enqueue(
+                                OneTimeWorkRequestBuilder<TrackAnalysisSyncWorker>()
+                                    .setConstraints(constraints)
+                                    .build()
+                            )
                         }
                         onDone(true)
                     },
