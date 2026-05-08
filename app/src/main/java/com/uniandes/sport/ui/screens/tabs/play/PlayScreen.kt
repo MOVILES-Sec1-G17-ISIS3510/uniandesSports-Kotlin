@@ -91,6 +91,7 @@ fun PlayScreen(
     var hasTriedDirectOpenById by remember(openEventId) { mutableStateOf(false) }
     
     var selectedEventUIModel by remember { mutableStateOf<com.uniandes.sport.patterns.event.EventUIModel?>(null) }
+    var selectedEventIsBestMatchRecommendation by remember { mutableStateOf(false) }
     var trackEvent by remember { mutableStateOf<Event?>(null) }
     var aiTrackTextToAnalyze by remember { mutableStateOf<String?>(null) }
     var aiTrackEventId by remember { mutableStateOf<String?>(null) }
@@ -192,7 +193,7 @@ fun PlayScreen(
         )
     }
 
-    val onEventSelected: (com.uniandes.sport.models.Event) -> Unit = { event ->
+    val onEventSelected: (com.uniandes.sport.models.Event, Boolean) -> Unit = { event, isBestMatchRecommendation ->
         logViewModel.log(
             screen = "PlayScreen",
             action = "MATCH_VIEWED",
@@ -203,6 +204,7 @@ fun PlayScreen(
             )
         )
         selectedEventUIModel = EventUIAdapter.toUIModel(event)
+        selectedEventIsBestMatchRecommendation = isBestMatchRecommendation
     }
 
     val pullRefreshState = rememberPullRefreshState(
@@ -238,6 +240,7 @@ fun PlayScreen(
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
+            selectedEventIsBestMatchRecommendation = false
             onOpenEventConsumed()
             hasTriedDirectOpenById = false
         } else if (!hasTriedDirectOpenById) {
@@ -247,6 +250,7 @@ fun PlayScreen(
                 onSuccess = { directEvent ->
                     if (directEvent != null) {
                         selectedEventUIModel = EventUIAdapter.toUIModel(directEvent)
+                        selectedEventIsBestMatchRecommendation = false
                         onOpenEventConsumed()
                     }
                 }
@@ -263,11 +267,13 @@ fun PlayScreen(
         EventDetailModal(
             uiModel = selectedEventUIModel!!,
             viewModel = viewModel,
+            isBestMatchRecommendation = selectedEventIsBestMatchRecommendation,
             onEditClick = { editingEvent = selectedEventUIModel?.rawEvent },
             onReviewClick = { trackEvent = selectedEventUIModel?.rawEvent },
             onPoseAnalysisClick = { showPoseDialog = true },
             onDismiss = {
                 selectedEventUIModel = null
+                selectedEventIsBestMatchRecommendation = false
                 viewModel.refreshEvents()
             }
         )
@@ -486,7 +492,7 @@ fun PlayScreen(
                                 modifier = Modifier.width(280.dp),
                                 uiModel = uiModel,
                                 badgeText = "IN PROGRESS",
-                                onClick = { onEventSelected(event) }
+                                onClick = { onEventSelected(event, false) }
                             )
                         }
                     }
@@ -538,7 +544,7 @@ fun PlayScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     SmartMatchCard(
                         recommendation = featuredRecommendation,
-                        onClick = { onEventSelected(featuredRecommendation.event) }
+                            onClick = { onEventSelected(featuredRecommendation.event, true) }
                     )
                 }
             }
@@ -568,7 +574,7 @@ fun PlayScreen(
                                     uiModel = EventUIAdapter.toUIModel(event),
                                     onClick = { 
                                         activeModal = null
-                                        onEventSelected(event) 
+                                        onEventSelected(event, false)
                                     }
                                 )
                             }
@@ -600,7 +606,7 @@ fun PlayScreen(
                                     rankedEvent = rankedEvent,
                                     onClick = { 
                                         activeModal = null
-                                        onEventSelected(rankedEvent.event) 
+                                        onEventSelected(rankedEvent.event, false)
                                     }
                                 )
                             }
@@ -636,7 +642,7 @@ fun PlayScreen(
                                     },
                                     onClick = { 
                                         activeModal = null
-                                        onEventSelected(event) 
+                                        onEventSelected(event, false)
                                     }
                                 )
                             }

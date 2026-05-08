@@ -26,6 +26,7 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 fun EventDetailModal(
     uiModel: EventUIModel,
     viewModel: PlayViewModelInterface,
+    isBestMatchRecommendation: Boolean = false,
     onEditClick: (() -> Unit)? = null,
     onReviewClick: (() -> Unit)? = null,
     onPoseAnalysisClick: (() -> Unit)? = null,
@@ -300,7 +301,11 @@ fun EventDetailModal(
                             onClick = {
                                 if (currentUserId != null) {
                                     isLoading = true
-                                    viewModel.joinEvent(event.id, currentUserId, event.sport,
+                                    viewModel.joinEvent(
+                                        event.id,
+                                        currentUserId,
+                                        event.sport,
+                                        joinedFromBestMatchRecommendation = isBestMatchRecommendation,
                                         onSuccess = { isLoading = false; onDismiss() },
                                         onError = { isLoading = false }
                                     )

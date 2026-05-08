@@ -30,7 +30,14 @@ interface PlayViewModelInterface {
     fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchEventByIdOnce(eventId: String, onSuccess: (Event?) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
-    fun joinEvent(eventId: String, userId: String, sport: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
+    fun joinEvent(
+        eventId: String,
+        userId: String,
+        sport: String,
+        joinedFromBestMatchRecommendation: Boolean = false,
+        onSuccess: () -> Unit = {},
+        onError: (Exception) -> Unit = {}
+    )
     fun leaveEvent(eventId: String, userId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun cancelEvent(eventId: String, onSuccess: () -> Unit = {}, onError: (Exception) -> Unit = {})
     fun createEvent(title: String, description: String, location: String, sport: String, modality: String, scheduledAt: java.util.Date, finishedAt: java.util.Date?, skillLevel: String, maxParticipants: Long, minParticipants: Long = 2, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit)

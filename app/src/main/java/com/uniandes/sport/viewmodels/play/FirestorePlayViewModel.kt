@@ -13,6 +13,7 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.data.local.PendingOpenMatchPayload
@@ -367,9 +368,18 @@ class FirestorePlayViewModel(
             }
     }
 
-    override fun joinEvent(eventId: String, userId: String, sport: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    override fun joinEvent(
+        eventId: String,
+        userId: String,
+        sport: String,
+        joinedFromBestMatchRecommendation: Boolean,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
         val docRef = db.collection("events").document(eventId)
         val memberRef = docRef.collection("members").document(userId)
+        val recommendationUsageRef = db.collection("bq3_use_of_best_match_recomendation")
+            .document("${eventId}_$userId")
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         val displayName = currentUser?.email ?: "User ${userId.take(5)}"
 
@@ -400,6 +410,25 @@ class FirestorePlayViewModel(
                 transaction.set(memberRef, newMember)
                 transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
+
+                if (joinedFromBestMatchRecommendation) {
+                    transaction.set(
+                        recommendationUsageRef,
+                        mapOf(
+                            "userId" to userId,
+                            "eventId" to eventId,
+                            "eventTitle" to (snapshot.getString("title") ?: ""),
+                            "sport" to eventSport,
+                            "modality" to (snapshot.getString("modality") ?: ""),
+                            "location" to (snapshot.getString("location") ?: ""),
+                            "joinedAt" to FieldValue.serverTimestamp(),
+                            "source" to "best_match_for_you",
+                            "membersCountBeforeJoin" to membersCount,
+                            "maxParticipants" to max,
+                            "createdBy" to eventCreatedBy
+                        )
+                    )
+                }
 
                 val newCount = membersCount + 1
                 if (eventCreatedBy.isNotBlank() && newCount >= min && membersCount < min) {
