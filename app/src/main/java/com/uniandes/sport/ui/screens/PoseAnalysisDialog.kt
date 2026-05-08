@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.retos.AiReviewState
 import com.uniandes.sport.viewmodels.retos.AiReviewViewModel
 import java.io.ByteArrayOutputStream
@@ -46,6 +48,7 @@ fun PoseAnalysisDialog(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState
+    val isOnline = rememberIsOnline()
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     // Launcher para Galería
@@ -123,7 +126,15 @@ fun PoseAnalysisDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // banner de conectividad: la ui permite tomar fotos offline,
+                // pero el analisis de ia requiere internet
+                OfflineConnectivityBanner(
+                    offlineMessage = "You're offline. You can take photos, but AI analysis requires internet."
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Image Preview Area
                 Box(
@@ -194,18 +205,48 @@ fun PoseAnalysisDialog(
 
                 if (selectedBitmap != null && uiState !is AiReviewState.Loading) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val base64 = bitmapToBase64(selectedBitmap!!)
-                            viewModel.analyzeCalisthenicsPose(base64)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("ANALYZE POSE WITH AI", fontWeight = FontWeight.Black)
+                    if (isOnline) {
+                        Button(
+                            onClick = {
+                                val base64 = bitmapToBase64(selectedBitmap!!)
+                                viewModel.analyzeCalisthenicsPose(
+                                    base64Image = base64,
+                                    photoBitmap = selectedBitmap
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("ANALYZE POSE WITH AI", fontWeight = FontWeight.Black)
+                        }
+                    } else {
+                        // offline: guardar foto como pending y notificar al usuario
+                        Button(
+                            onClick = {
+                                val ctx = context
+                                val entryId = "pose_pending_${System.currentTimeMillis()}"
+                                val imagePath = com.uniandes.sport.data.local.AiHistoryStore.saveImage(ctx, selectedBitmap!!, entryId)
+                                com.uniandes.sport.data.local.AiHistoryStore.addEntry(ctx, com.uniandes.sport.data.local.AiHistoryEntry(
+                                    id = entryId,
+                                    type = "pose",
+                                    eventId = "standalone",
+                                    feedback = "Pending AI analysis. Photo saved locally. Analyze when internet returns.",
+                                    imagePath = imagePath
+                                ))
+                                android.widget.Toast.makeText(ctx, "Photo saved. AI analysis will be available when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                                selectedBitmap = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                        ) {
+                            Icon(Icons.Default.SaveAlt, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("SAVE PHOTO FOR LATER", fontWeight = FontWeight.Black)
+                        }
                     }
                 }
 

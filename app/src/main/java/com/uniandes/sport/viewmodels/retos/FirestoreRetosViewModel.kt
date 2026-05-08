@@ -13,9 +13,16 @@ import kotlinx.coroutines.flow.*
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.uniandes.sport.data.local.PendingRetoActionPayload
+import com.uniandes.sport.data.local.PendingRetoActionStore
 import com.uniandes.sport.data.local.RetosFileStorage
 import com.uniandes.sport.data.local.RetosKeyValueStore
 import com.uniandes.sport.data.local.RetosLocalRepository
+import com.uniandes.sport.workers.RetoActionSyncWorker
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -238,10 +245,11 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // unirse a un reto usando corrutinas con dispatchers.
-    // patron: viewmodelscope.launch(dispatchers.io) para la transaccion de firestore,
-    // launch(dispatchers.io) anidado para verificacion en background (fire and forget),
-    // y withcontext(dispatchers.main) para notificar a la ui
+    // unirse a un reto con soporte offline (eventual connectivity).
+    // si hay internet, ejecuta la transaccion directamente en firestore.
+    // si no hay internet, encola la accion en pendingretoactionstore
+    // y programa un retoactionsyncworker que se ejecutara cuando vuelva la red.
+    // resuelve antipatrones #1 (blocked app) y #5 (non-existent result notification)
     override fun joinReto(
         retoId: String,
         userId: String,
@@ -250,6 +258,25 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val context = appContext
+
+                // verificar conectividad antes de intentar la operacion de red
+                if (context != null && !isNetworkConnected(context)) {
+                    // modo offline: encolar la accion para sincronizar despues
+                    val payload = PendingRetoActionPayload(
+                        localId = "join_${retoId}_${userId}_${System.currentTimeMillis()}",
+                        retoId = retoId,
+                        userId = userId,
+                        action = "join"
+                    )
+                    PendingRetoActionStore.enqueue(context, payload)
+                    enqueueRetoActionSync(context)
+                    Log.d("RetosVM", "join encolado offline para reto $retoId")
+                    withContext(Dispatchers.Main) { onSuccess() }
+                    return@launch
+                }
+
+                // modo online: transaccion directa en firestore
                 val docRef = db.collection("challenges").document(retoId)
 
                 db.runTransaction { transaction ->
@@ -285,7 +312,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // abandonar un reto con la misma estrategia de multithreading que joinreto
+    // abandonar un reto con soporte offline, misma estrategia que joinreto
     override fun leaveReto(
         retoId: String,
         userId: String,
@@ -294,6 +321,24 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val context = appContext
+
+                // modo offline: encolar la accion leave
+                if (context != null && !isNetworkConnected(context)) {
+                    val payload = PendingRetoActionPayload(
+                        localId = "leave_${retoId}_${userId}_${System.currentTimeMillis()}",
+                        retoId = retoId,
+                        userId = userId,
+                        action = "leave"
+                    )
+                    PendingRetoActionStore.enqueue(context, payload)
+                    enqueueRetoActionSync(context)
+                    Log.d("RetosVM", "leave encolado offline para reto $retoId")
+                    withContext(Dispatchers.Main) { onSuccess() }
+                    return@launch
+                }
+
+                // modo online: transaccion directa
                 val docRef = db.collection("challenges").document(retoId)
 
                 db.runTransaction { transaction ->
@@ -359,30 +404,33 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
 
         _creationStatus.value = "IDLE"
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val docRef = db.collection("challenges").document()
-                docRef.set(data).await()
+        // firestore.set() encola escrituras offline automaticamente.
+        // usamos actualizacion optimista: notificamos exito inmediatamente
+        // y firestore sincroniza cuando vuelva internet.
+        // no usamos .await() porque no se resuelve offline
+        val docRef = db.collection("challenges").document()
 
-                Log.d("RetosVM", "reto creado con exito, id: ${docRef.id}")
-
-                // limpiar el draft de sharedpreferences despues de crear exitosamente
-                appContext?.let { RetosKeyValueStore.clearNewRetoDraft(it) }
-
-                launch(Dispatchers.IO) {
-                    verifyRetoCreation(docRef.id)
-                }
-
-                withContext(Dispatchers.Main) {
-                    _creationStatus.value = "SUCCESS"
-                }
-            } catch (e: Exception) {
+        docRef.set(data)
+            .addOnFailureListener { e ->
                 Log.e("RetosVM", "error al guardar reto en firestore", e)
-                withContext(Dispatchers.Main) {
-                    _creationStatus.value = "ERROR: ${e.message}"
-                }
             }
+
+        Log.d("RetosVM", "reto encolado, id: ${docRef.id}")
+        appContext?.let { RetosKeyValueStore.clearNewRetoDraft(it) }
+
+        val context = appContext
+        if (context != null && !isNetworkConnected(context)) {
+            // guardar como accion pendiente para mostrar en la ui
+            PendingRetoActionStore.enqueue(context, PendingRetoActionPayload(
+                localId = "create_${docRef.id}_${System.currentTimeMillis()}",
+                retoId = docRef.id,
+                userId = uid,
+                action = "create"
+            ))
+            enqueueRetoActionSync(context)
         }
+
+        _creationStatus.value = "SUCCESS"
     }
 
     // sincronizar progreso de un reto usando multiples corrutinas con dispatchers
@@ -528,6 +576,38 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         } catch (e: Exception) {
             Log.e("RetosVM", "error recalculando progreso global para $retoId", e)
         }
+    }
+
+    // verificar si hay conexion a internet.
+    // usa connectivitymanager para revisar capacidades de red.
+    // patron identico al de firestoreprofesoresviewmodel
+    private fun isNetworkConnected(context: android.content.Context): Boolean {
+        val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as android.net.ConnectivityManager
+
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            @Suppress("DEPRECATION")
+            cm.activeNetworkInfo?.isConnected == true
+        }
+    }
+
+    // encolar el worker de sincronizacion de acciones pendientes.
+    // el worker solo se ejecuta cuando hay conexion (networktype.connected)
+    private fun enqueueRetoActionSync(context: android.content.Context) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<RetoActionSyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueue(request)
     }
 
     // limpieza de recursos: remover listener de firestore y cancelar job de room.

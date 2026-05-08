@@ -42,7 +42,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 
 import kotlinx.coroutines.delay
+import com.uniandes.sport.data.local.PendingRetoActionStore
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +91,21 @@ fun ChallengesScreen(
     
     val creationStatus by viewModel.creationStatus.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnline = rememberIsOnline()
+
+    // contador que se incrementa cada vez que el usuario hace join/leave offline.
+    // esto fuerza a remember a recalcular las acciones pendientes
+    var pendingRefreshTrigger by remember { mutableStateOf(0) }
+
+    // contar acciones pendientes de sincronizar (join/leave offline)
+    val pendingActions = remember(activeChallenges, exploreChallenges, pendingRefreshTrigger) {
+        PendingRetoActionStore.getPendingForUser(context, currentUserId)
+    }
+    val pendingCount = pendingActions.size
+    // mapa retoid -> accion pendiente para mostrar badge en las cards
+    val pendingByRetoId = remember(pendingActions) {
+        pendingActions.associateBy { it.retoId }
+    }
 
     LaunchedEffect(creationStatus) {
         if (creationStatus.startsWith("ERROR:")) {
@@ -113,6 +130,45 @@ fun ChallengesScreen(
                 )
             }
 
+            // banner de acciones pendientes (join/leave offline).
+            // resuelve antipatron #5 "non-existent result notification":
+            // el usuario sabe cuantas acciones estan esperando sincronizacion.
+            // patron identico al banner azul de "pending publish" en profesores
+            if (pendingCount > 0) {
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFDBEAFE)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = Color(0xFF1E3A8A),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (pendingCount == 1) {
+                                    "1 challenge action is pending and will sync automatically when internet returns."
+                                } else {
+                                    "$pendingCount challenge actions are pending and will sync automatically when internet returns."
+                                },
+                                color = Color(0xFF1E3A8A),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
             // --- SECTION: ACTIVE CHALLENGES ---
             if (activeChallenges.isNotEmpty()) {
                 item {
@@ -128,7 +184,8 @@ fun ChallengesScreen(
                             CircularChallengeItem(
                                 reto = reto,
                                 currentUserId = currentUserId,
-                                onClick = { 
+                                pendingAction = pendingByRetoId[reto.id]?.action,
+                                onClick = {
                                     logViewModel.log(
                                         screen = "ChallengesScreen",
                                         action = "MATCH_VIEWED",
@@ -165,13 +222,23 @@ fun ChallengesScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         ExploreChallengeCard(
                             reto = reto,
-                            onJoin = { 
+                            pendingAction = pendingByRetoId[reto.id]?.action,
+                            onJoin = {
                                 viewModel.joinReto(reto.id, currentUserId)
                                 logViewModel.log(
                                     screen = "ChallengesScreen",
                                     action = "join_sport_event",
                                     params = mapOf("sport_category" to reto.sport)
                                 )
+                                // feedback inmediato al usuario cuando esta offline
+                                if (!isOnline) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Queued offline. Will sync when internet returns.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    pendingRefreshTrigger++
+                                }
                             },
                             onClick = { 
                                 logViewModel.log(
@@ -254,13 +321,22 @@ fun ChallengesScreen(
         ChallengeDetailModal(
             reto = selectedReto,
             currentUserId = currentUserId,
+            pendingAction = selectedReto?.let { pendingByRetoId[it.id]?.action },
             onDismiss = { selectedReto = null },
-            onJoin = { 
+            onJoin = {
                 selectedReto?.let { viewModel.joinReto(it.id, currentUserId) }
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                    pendingRefreshTrigger++
+                }
             },
             onLeave = {
-                selectedReto?.let { 
+                selectedReto?.let {
                     viewModel.leaveReto(it.id, currentUserId)
+                }
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                        pendingRefreshTrigger++
                 }
                 selectedReto = null
             }
@@ -279,6 +355,10 @@ fun ChallengesScreen(
                     action = "join_sport_event",
                     params = mapOf("type" to newReto.type, "sport_category" to newReto.sport)
                 )
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Challenge created offline. Will sync when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                    pendingRefreshTrigger++
+                }
                 showDialog = false
             },
             currentUserId = currentUserId
@@ -295,6 +375,7 @@ fun ChallengesScreen(
     if (showLeaveDialog) {
         LeaveChallengeDialog(
             activeChallenges = activeChallenges,
+            pendingByRetoId = pendingByRetoId.mapValues { it.value.action },
             onDismiss = { showLeaveDialog = false },
             onLeaveClicked = { reto ->
                 retoToLeave = reto
@@ -313,6 +394,10 @@ fun ChallengesScreen(
                 Button(
                     onClick = {
                         retoToLeave?.let { viewModel.leaveReto(it.id, currentUserId) }
+                        if (!isOnline) {
+                            android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                        pendingRefreshTrigger++
+                        }
                         retoToLeave = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -875,6 +960,7 @@ fun ReadOnlyTextField(
 @Composable
 fun LeaveChallengeDialog(
     activeChallenges: List<Reto>,
+    pendingByRetoId: Map<String, String> = emptyMap(),
     onDismiss: () -> Unit,
     onLeaveClicked: (Reto) -> Unit
 ) {
@@ -942,13 +1028,14 @@ fun LeaveChallengeDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         activeChallenges.forEach { reto ->
+                            val hasPending = pendingByRetoId.containsKey(reto.id)
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onLeaveClicked(reto) },
+                                    .clickable(enabled = !hasPending) { onLeaveClicked(reto) },
                                 shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                color = if (hasPending) Color(0xFFDBEAFE).copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPending) Color(0xFF93C5FD) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(16.dp),
@@ -956,14 +1043,27 @@ fun LeaveChallengeDialog(
                                 ) {
                                     com.uniandes.sport.ui.components.SportIconBox(sport = reto.sport, size = 32.dp)
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        reto.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outline)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            reto.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (hasPending) {
+                                            Text(
+                                                "PENDING ${pendingByRetoId[reto.id]?.uppercase()} — waiting sync",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1E3A8A)
+                                            )
+                                        }
+                                    }
+                                    if (hasPending) {
+                                        Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A))
+                                    } else {
+                                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outline)
+                                    }
                                 }
                             }
                         }

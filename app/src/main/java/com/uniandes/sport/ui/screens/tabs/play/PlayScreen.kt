@@ -42,6 +42,11 @@ import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
 import com.uniandes.sport.ui.components.SmartMatchCard
 import com.uniandes.sport.ui.components.rememberCurrentLocationState
 import com.uniandes.sport.ui.components.rememberPhoneCalendarEventsState
+import androidx.compose.foundation.lazy.LazyRow
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.uniandes.sport.data.local.AiHistoryStore
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
@@ -99,7 +104,31 @@ fun PlayScreen(
     var aiTrackOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     var showPoseDialog by remember { mutableStateOf(false) }
+    var aiHistoryRefreshTrigger by remember { mutableStateOf(0) }
+    var selectedAiHistoryEntry by remember { mutableStateOf<com.uniandes.sport.data.local.AiHistoryEntry?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnline = rememberIsOnline()
+
+    // cuando vuelve internet, limpiar entradas pending del historial de ia
+    // porque el usuario puede ahora re-ejecutar el analisis manualmente
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
+            // cuando vuelve internet, actualizar las entradas pending para indicar
+            // que el usuario puede re-trackear y obtener el analisis de ia
+            val allEntries = AiHistoryStore.getAll(context)
+            val hasPending = allEntries.any { it.feedback.startsWith("Pending") }
+            if (hasPending) {
+                allEntries.filter { it.feedback.startsWith("Pending") }.forEach { entry ->
+                    AiHistoryStore.replacePendingForEvent(
+                        context, entry.eventId, entry.type,
+                        "Track saved. Open the event and re-submit to get AI analysis."
+                    )
+                }
+                aiHistoryRefreshTrigger++
+            }
+        }
+    }
+
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -322,14 +351,27 @@ fun PlayScreen(
                     participated = participated,
                     source = source,
                     onSuccess = {
-                        android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
-                        if (participated && text.isNotBlank()) {
-                            aiTrackEventId = trackEventLocal.id
-                            aiTrackTextToAnalyze = text
-                            aiTrackOldAnalysis = existingTrack?.aiAnalysis ?: emptyMap()
-                        } else if (!participated && existingTrack?.aiAnalysis?.isNotEmpty() == true) {
-                            // Si marcó que NO asistió pero antes tenía progreso, reseteamos el progreso en los retos
-                            aiViewModel.resetProgressForEvent(trackEventLocal.id, existingTrack.aiAnalysis)
+                        if (isOnline) {
+                            android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
+                            // solo correr analisis de ia si hay internet
+                            if (participated && text.isNotBlank()) {
+                                aiTrackEventId = trackEventLocal.id
+                                aiTrackTextToAnalyze = text
+                                aiTrackOldAnalysis = existingTrack?.aiAnalysis ?: emptyMap()
+                            } else if (!participated && existingTrack?.aiAnalysis?.isNotEmpty() == true) {
+                                aiViewModel.resetProgressForEvent(trackEventLocal.id, existingTrack.aiAnalysis)
+                            }
+                        } else {
+                            android.widget.Toast.makeText(context, "Track saved offline. AI analysis will run when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                            // guardar en historial local como pendiente para que aparezca en ai history
+                            AiHistoryStore.addEntry(context, com.uniandes.sport.data.local.AiHistoryEntry(
+                                id = "track_${trackEventLocal.id}_${System.currentTimeMillis()}",
+                                type = "track",
+                                eventId = trackEventLocal.id,
+                                feedback = "Pending AI analysis. Will process when internet returns.",
+                                imagePath = ""
+                            ))
+                            aiHistoryRefreshTrigger++
                         }
                         onDone(true)
                     },
@@ -568,8 +610,253 @@ fun PlayScreen(
                     )
                 }
             }
+
+            // seccion "your ai history": muestra los analisis de ia recientes (poses y tracks).
+            // las fotos se cargan con coil desde archivos locales (cache de imagenes).
+            // los textos de feedback vienen del aihistorystore (sharedpreferences).
+            // esta seccion es visible offline porque todo esta en almacenamiento local
+            item {
+                val aiHistoryContext = androidx.compose.ui.platform.LocalContext.current
+                val aiHistory = remember(myTracksByEventId, aiHistoryRefreshTrigger) {
+                    AiHistoryStore.getRecent(aiHistoryContext, 10)
+                }
+
+                if (aiHistory.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "YOUR AI HISTORY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // banner de estado offline para la seccion de historial
+                    if (!isOnline) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            color = Color(0xFFDBEAFE),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Recent analyses shown from local cache. New results will appear when online.",
+                                    color = Color(0xFF1E3A8A),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(aiHistory.size) { index ->
+                            val entry = aiHistory[index]
+                            Surface(
+                                onClick = { selectedAiHistoryEntry = entry },
+                                modifier = Modifier
+                                    .width(220.dp)
+                                    .height(180.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (entry.type == "pose")
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else
+                                    MaterialTheme.colorScheme.secondaryContainer,
+                                tonalElevation = 2.dp
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (entry.type == "pose") Icons.Default.CameraAlt else Icons.Default.TrackChanges,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (entry.type == "pose") "POSE ANALYSIS" else "TRACK ANALYSIS",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+
+                                    // foto del analisis de pose cargada con coil desde archivo local.
+                                    // coil cachea automaticamente en memoria (lru) y en disco,
+                                    // lo que permite cargar la imagen sin acceder al filesystem cada vez
+                                    if (entry.imagePath.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(aiHistoryContext)
+                                                .data(java.io.File(entry.imagePath))
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Pose photo",
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(70.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = entry.feedback.take(80) + if (entry.feedback.length > 80) "..." else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        maxLines = if (entry.imagePath.isNotBlank()) 2 else 4
+                                    )
+
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
+                                                .format(java.util.Date(entry.createdAtMillis)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                        // badge de estado segun si es pending, cached u online
+                                        val isPending = entry.feedback.startsWith("Pending")
+                                        Surface(
+                                            color = if (isPending) Color(0xFFFEF3C7)
+                                                else if (isOnline) Color(0xFFD1FAE5)
+                                                else Color(0xFFDBEAFE),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isPending) "PENDING"
+                                                    else if (isOnline) "SYNCED"
+                                                    else "CACHED",
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (isPending) Color(0xFF92400E)
+                                                    else if (isOnline) Color(0xFF065F46)
+                                                    else Color(0xFF1E3A8A),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        
+
+        // dialog de detalle de ai history
+        selectedAiHistoryEntry?.let { entry ->
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { selectedAiHistoryEntry = null }
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (entry.type == "pose") Icons.Default.CameraAlt else Icons.Default.TrackChanges,
+                                    null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (entry.type == "pose") "POSE ANALYSIS" else "TRACK ANALYSIS",
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            IconButton(onClick = { selectedAiHistoryEntry = null }) {
+                                Icon(Icons.Default.Close, "Close")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            java.text.SimpleDateFormat("MMMM d, yyyy 'at' HH:mm", Locale.getDefault())
+                                .format(java.util.Date(entry.createdAtMillis)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (entry.imagePath.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(java.io.File(entry.imagePath))
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Pose photo",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(250.dp)
+                                    .clip(RoundedCornerShape(16.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val isPending = entry.feedback.startsWith("Pending")
+                        if (isPending) {
+                            Surface(
+                                color = Color(0xFFFEF3C7),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Schedule, null, tint = Color(0xFF92400E), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(entry.feedback, color = Color(0xFF92400E), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        } else {
+                            Text("AI FEEDBACK", fontWeight = FontWeight.Black, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(entry.feedback, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = { selectedAiHistoryEntry = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("CLOSE", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
         // Modals management
         when (activeModal) {
             PlayModalType.MY_SCHEDULE -> {
@@ -1160,6 +1447,11 @@ private fun TrackDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // banner de conectividad para track dialog
+                com.uniandes.sport.ui.components.OfflineConnectivityBanner(
+                    offlineMessage = "You're offline. Track will be saved locally and synced when connection returns."
+                )
+
                 // Header Segment
                 Box(
                     modifier = Modifier
