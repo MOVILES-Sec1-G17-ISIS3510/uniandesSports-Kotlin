@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -51,6 +52,7 @@ import kotlinx.coroutines.withContext
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.CameraPositionState
@@ -1731,12 +1733,29 @@ private fun LocationPickerDialog(
                             val markerState = remember(suggestion.stableKey) {
                                 MarkerState(position = LatLng(suggestion.latitude, suggestion.longitude))
                             }
+                            
+                            val (markerTitle, markerSnippet, markerHue) = when (suggestion.type) {
+                                OpenMatchLocationSuggestionType.RECENT -> {
+                                    val title = "📍 ${suggestion.label}"
+                                    val snippet = "Recent • Where you played before"
+                                    Triple(title, snippet, BitmapDescriptorFactory.HUE_BLUE)  // Azul para reciente
+                                }
+                                OpenMatchLocationSuggestionType.POPULAR -> {
+                                    val title = "👥 ${suggestion.label}"
+                                    val crowdPercent = (suggestion.score * 100).toInt()
+                                    val snippet = "Popular • ${crowdPercent}% full • ${suggestion.eventCount} events"
+                                    Triple(title, snippet, BitmapDescriptorFactory.HUE_ORANGE)  // Naranja para popular
+                                }
+                            }
+                            
                             Marker(
                                 state = markerState,
-                                title = suggestion.label,
-                                snippet = when (suggestion.type) {
-                                    OpenMatchLocationSuggestionType.RECENT -> "Recent place"
-                                    OpenMatchLocationSuggestionType.POPULAR -> "Busy place"
+                                title = markerTitle,
+                                snippet = markerSnippet,
+                                icon = BitmapDescriptorFactory.defaultMarker(markerHue),
+                                onClick = {
+                                    selectedSuggestionKey = suggestion.stableKey
+                                    true
                                 }
                             )
                         }
@@ -1750,6 +1769,44 @@ private fun LocationPickerDialog(
                             .align(Alignment.Center)
                             .size(36.dp)
                     )
+                }
+
+                // 📖 Leyenda visual de los marcadores
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Canvas(modifier = Modifier.size(12.dp)) {
+                            drawCircle(color = Color(0xFF2196F3))  // 🔵 Azul
+                        }
+                        Text(
+                            text = "Blue markers: Places where you've played",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Canvas(modifier = Modifier.size(12.dp)) {
+                            drawCircle(color = Color(0xFFFF9800))  // 🟠 Naranja
+                        }
+                        Text(
+                            text = "Orange markers: Popular places with high attendance",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Row(
