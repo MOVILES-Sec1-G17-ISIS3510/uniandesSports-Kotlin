@@ -325,14 +325,15 @@ class FirestorePlayViewModel(
             .collection("tracks")
             .document(uid)
 
-        db.runTransaction { transaction ->
-            val existing = transaction.get(trackRef)
-            val data = payload.toMutableMap()
-            if (!existing.exists()) {
-                data["createdAt"] = com.google.firebase.firestore.FieldValue.serverTimestamp()
-            }
-            transaction.set(trackRef, data, com.google.firebase.firestore.SetOptions.merge())
-        }
+        // usamos set con merge en vez de runTransaction para que firestore
+        // pueda encolar la escritura offline automaticamente.
+        // las transacciones requieren conexion al servidor, pero set() no —
+        // firestore guarda el write en su cache local y lo sincroniza cuando
+        // vuelve internet (eventual connectivity)
+        val data = payload.toMutableMap()
+        data["createdAt"] = com.google.firebase.firestore.FieldValue.serverTimestamp()
+
+        trackRef.set(data, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
                 val existingAnalysis = _myTracksByEventId.value[eventId]?.aiAnalysis ?: emptyMap()
                 _myTracksByEventId.value = _myTracksByEventId.value + (
@@ -344,7 +345,7 @@ class FirestorePlayViewModel(
                         rating = rating,
                         participated = participated,
                         source = source,
-                        aiAnalysis = existingAnalysis // Preservamos el pasado para el Sistema de Deltas
+                        aiAnalysis = existingAnalysis
                     )
                 )
                 onSuccess()

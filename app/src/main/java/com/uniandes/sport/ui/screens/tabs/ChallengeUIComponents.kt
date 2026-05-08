@@ -47,10 +47,12 @@ fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit) {
+fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit, pendingAction: String? = null) {
     val progressRaw = reto.progressByUser[currentUserId] ?: 0.0
     val progressPercent = progressRaw.toInt()
-    val indicatorColor = if (progressPercent >= 100) Color(0xFF4CAF50) else MaterialTheme.colorScheme.secondary // Teal
+    val indicatorColor = if (pendingAction != null) Color(0xFF93C5FD)
+        else if (progressPercent >= 100) Color(0xFF4CAF50)
+        else MaterialTheme.colorScheme.secondary
 
     Column(
         modifier = Modifier
@@ -98,6 +100,23 @@ fun CircularChallengeItem(reto: Reto, currentUserId: String, onClick: () -> Unit
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface
         )
+
+        // badge de accion pendiente offline (ej: leave encolado)
+        if (pendingAction != null) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Surface(
+                color = Color(0xFFDBEAFE),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = "PENDING",
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF1E3A8A),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                )
+            }
+        }
     }
 }
 

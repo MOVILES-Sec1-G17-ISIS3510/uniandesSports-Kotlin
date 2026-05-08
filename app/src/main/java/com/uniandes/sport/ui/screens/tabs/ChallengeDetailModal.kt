@@ -32,12 +32,14 @@ fun ChallengeDetailModal(
     currentUserId: String,
     onDismiss: () -> Unit,
     onJoin: () -> Unit,
-    onLeave: () -> Unit
+    onLeave: () -> Unit,
+    pendingAction: String? = null
 ) {
     if (reto == null) return
 
     var showConfirmLeave by remember { mutableStateOf(false) }
     val isJoined = reto.participants.contains(currentUserId)
+    val hasPending = pendingAction != null
     val context = androidx.compose.ui.platform.LocalContext.current
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.US) }
 
@@ -92,6 +94,28 @@ fun ChallengeDetailModal(
                     }
                 }
 
+                // banner de accion pendiente offline
+                if (hasPending) {
+                    Surface(
+                        color = Color(0xFFDBEAFE),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "PENDING ${pendingAction!!.uppercase()} — will sync when online",
+                                color = Color(0xFF1E3A8A),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // CONTENIDO
                 Column(
                     modifier = Modifier
@@ -135,7 +159,23 @@ fun ChallengeDetailModal(
                         .fillMaxWidth()
                         .padding(24.dp)
                 ) {
-                    if (isJoined) {
+                    if (hasPending) {
+                        // boton bloqueado cuando hay accion pendiente
+                        Button(
+                            onClick = { },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = false,
+                            colors = ButtonDefaults.buttonColors(
+                                disabledContainerColor = Color(0xFF93C5FD),
+                                disabledContentColor = Color.White
+                            )
+                        ) {
+                            Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("PENDING ${pendingAction!!.uppercase()} — WAITING SYNC", fontWeight = FontWeight.Black)
+                        }
+                    } else if (isJoined) {
                         Button(
                             onClick = { showConfirmLeave = true },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -146,10 +186,9 @@ fun ChallengeDetailModal(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("LEAVE CHALLENGE", fontWeight = FontWeight.Black)
                         }
-
                     } else {
                         Button(
-                            onClick = { 
+                            onClick = {
                                 onJoin()
                                 onDismiss()
                             },

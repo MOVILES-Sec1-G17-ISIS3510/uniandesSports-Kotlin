@@ -93,9 +93,12 @@ fun ChallengesScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val isOnline = rememberIsOnline()
 
+    // contador que se incrementa cada vez que el usuario hace join/leave offline.
+    // esto fuerza a remember a recalcular las acciones pendientes
+    var pendingRefreshTrigger by remember { mutableStateOf(0) }
+
     // contar acciones pendientes de sincronizar (join/leave offline)
-    // se recalcula cada vez que cambian los retos (el snapshotlistener limpia las pendientes)
-    val pendingActions = remember(activeChallenges, exploreChallenges) {
+    val pendingActions = remember(activeChallenges, exploreChallenges, pendingRefreshTrigger) {
         PendingRetoActionStore.getPendingForUser(context, currentUserId)
     }
     val pendingCount = pendingActions.size
@@ -181,7 +184,8 @@ fun ChallengesScreen(
                             CircularChallengeItem(
                                 reto = reto,
                                 currentUserId = currentUserId,
-                                onClick = { 
+                                pendingAction = pendingByRetoId[reto.id]?.action,
+                                onClick = {
                                     logViewModel.log(
                                         screen = "ChallengesScreen",
                                         action = "MATCH_VIEWED",
@@ -233,6 +237,7 @@ fun ChallengesScreen(
                                         "Queued offline. Will sync when internet returns.",
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
+                                    pendingRefreshTrigger++
                                 }
                             },
                             onClick = { 
@@ -316,11 +321,13 @@ fun ChallengesScreen(
         ChallengeDetailModal(
             reto = selectedReto,
             currentUserId = currentUserId,
+            pendingAction = selectedReto?.let { pendingByRetoId[it.id]?.action },
             onDismiss = { selectedReto = null },
             onJoin = {
                 selectedReto?.let { viewModel.joinReto(it.id, currentUserId) }
                 if (!isOnline) {
                     android.widget.Toast.makeText(context, "Queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                    pendingRefreshTrigger++
                 }
             },
             onLeave = {
@@ -329,6 +336,7 @@ fun ChallengesScreen(
                 }
                 if (!isOnline) {
                     android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                        pendingRefreshTrigger++
                 }
                 selectedReto = null
             }
@@ -383,6 +391,7 @@ fun ChallengesScreen(
                         retoToLeave?.let { viewModel.leaveReto(it.id, currentUserId) }
                         if (!isOnline) {
                             android.widget.Toast.makeText(context, "Leave queued offline. Will sync when internet returns.", android.widget.Toast.LENGTH_SHORT).show()
+                        pendingRefreshTrigger++
                         }
                         retoToLeave = null
                     },
