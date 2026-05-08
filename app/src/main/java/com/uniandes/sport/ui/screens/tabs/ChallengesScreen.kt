@@ -355,6 +355,10 @@ fun ChallengesScreen(
                     action = "join_sport_event",
                     params = mapOf("type" to newReto.type, "sport_category" to newReto.sport)
                 )
+                if (!isOnline) {
+                    android.widget.Toast.makeText(context, "Challenge created offline. Will sync when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                    pendingRefreshTrigger++
+                }
                 showDialog = false
             },
             currentUserId = currentUserId

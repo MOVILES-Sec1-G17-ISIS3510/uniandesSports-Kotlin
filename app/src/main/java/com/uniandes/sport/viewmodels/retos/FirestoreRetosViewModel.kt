@@ -404,30 +404,32 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
 
         _creationStatus.value = "IDLE"
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val docRef = db.collection("challenges").document()
-                docRef.set(data).await()
+        // firestore.set() encola escrituras offline automaticamente.
+        // usamos actualizacion optimista: notificamos exito inmediatamente
+        // y firestore sincroniza cuando vuelva internet.
+        // no usamos .await() porque no se resuelve offline
+        val docRef = db.collection("challenges").document()
 
-                Log.d("RetosVM", "reto creado con exito, id: ${docRef.id}")
-
-                // limpiar el draft de sharedpreferences despues de crear exitosamente
-                appContext?.let { RetosKeyValueStore.clearNewRetoDraft(it) }
-
-                launch(Dispatchers.IO) {
-                    verifyRetoCreation(docRef.id)
-                }
-
-                withContext(Dispatchers.Main) {
-                    _creationStatus.value = "SUCCESS"
-                }
-            } catch (e: Exception) {
+        docRef.set(data)
+            .addOnFailureListener { e ->
                 Log.e("RetosVM", "error al guardar reto en firestore", e)
-                withContext(Dispatchers.Main) {
-                    _creationStatus.value = "ERROR: ${e.message}"
-                }
             }
+
+        Log.d("RetosVM", "reto encolado, id: ${docRef.id}")
+        appContext?.let { RetosKeyValueStore.clearNewRetoDraft(it) }
+
+        val context = appContext
+        if (context != null && !isNetworkConnected(context)) {
+            // guardar como accion pendiente para mostrar en la ui
+            PendingRetoActionStore.enqueue(context, PendingRetoActionPayload(
+                localId = "create_${docRef.id}_${System.currentTimeMillis()}",
+                retoId = docRef.id,
+                userId = uid,
+                action = "create"
+            ))
         }
+
+        _creationStatus.value = "SUCCESS"
     }
 
     // sincronizar progreso de un reto usando multiples corrutinas con dispatchers
