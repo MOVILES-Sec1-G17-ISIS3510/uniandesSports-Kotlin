@@ -18,6 +18,7 @@ data class PendingOpenMatchPayload(
     val finishedAtMillis: Long?,
     val skillLevel: String,
     val maxParticipants: Long,
+    val minParticipants: Long = 2,
     val shouldJoin: Boolean,
     val createdBy: String,
     val createdAtMillis: Long = System.currentTimeMillis()
@@ -70,6 +71,7 @@ object PendingOpenMatchStore {
             put("finishedAtMillis", finishedAtMillis ?: JSONObject.NULL)
             put("skillLevel", skillLevel)
             put("maxParticipants", maxParticipants)
+            put("minParticipants", minParticipants)
             put("shouldJoin", shouldJoin)
             put("createdBy", createdBy)
             put("createdAtMillis", createdAtMillis)
@@ -90,6 +92,7 @@ object PendingOpenMatchStore {
             finishedAtMillis = finishedAt,
             skillLevel = getString("skillLevel"),
             maxParticipants = getLong("maxParticipants"),
+            minParticipants = optLong("minParticipants", 2),
             shouldJoin = getBoolean("shouldJoin"),
             createdBy = getString("createdBy"),
             createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis())

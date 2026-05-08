@@ -55,6 +55,7 @@ class OpenMatchSyncWorker(
                     sport = pending.sport,
                     modality = pending.modality,
                     maxParticipants = pending.maxParticipants,
+                    minParticipants = pending.minParticipants,
                     scheduledAt = Date(pending.scheduledAtMillis),
                     finishedAt = pending.finishedAtMillis?.let { Date(it) },
                     metadata = mapOf("skillLevel" to pending.skillLevel)

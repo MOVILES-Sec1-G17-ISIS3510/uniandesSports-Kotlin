@@ -9,6 +9,7 @@ data class Event(
     var description: String = "",
     var location: String = "",
     var maxParticipants: Long = 0,
+    var minParticipants: Long = 2,
     var metadata: Map<String, Any> = emptyMap(),
     var modality: String = "",
     var membersCount: Long = 0,
