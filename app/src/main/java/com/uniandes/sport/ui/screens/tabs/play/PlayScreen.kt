@@ -46,6 +46,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.uniandes.sport.data.local.AiHistoryStore
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.auth.FirebaseAuthViewModel
 
 import com.uniandes.sport.ui.components.FabMenuItem
@@ -102,6 +103,7 @@ fun PlayScreen(
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     var showPoseDialog by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnline = rememberIsOnline()
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -300,7 +302,11 @@ fun PlayScreen(
                     participated = participated,
                     source = source,
                     onSuccess = {
-                        android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
+                        if (isOnline) {
+                            android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, "Track saved offline. Will sync when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                        }
                         if (participated && text.isNotBlank()) {
                             aiTrackEventId = trackEventLocal.id
                             aiTrackTextToAnalyze = text
@@ -561,6 +567,31 @@ fun PlayScreen(
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary
                     )
+
+                    // banner de estado offline para la seccion de historial
+                    if (!isOnline) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            color = Color(0xFFDBEAFE),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Schedule, null, tint = Color(0xFF1E3A8A), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Recent analyses shown from local cache. New results will appear when online.",
+                                    color = Color(0xFF1E3A8A),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     LazyRow(
@@ -622,12 +653,31 @@ fun PlayScreen(
                                     )
 
                                     Spacer(modifier = Modifier.weight(1f))
-                                    Text(
-                                        text = java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
-                                            .format(java.util.Date(entry.createdAtMillis)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
+                                                .format(java.util.Date(entry.createdAtMillis)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                        // badge de estado: cached (local) o synced (ya sincronizado)
+                                        Surface(
+                                            color = if (isOnline) Color(0xFFD1FAE5) else Color(0xFFDBEAFE),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isOnline) "SYNCED" else "CACHED",
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (isOnline) Color(0xFF065F46) else Color(0xFF1E3A8A),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
