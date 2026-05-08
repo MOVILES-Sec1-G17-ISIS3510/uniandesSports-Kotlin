@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.viewmodels.retos.AiReviewState
 import com.uniandes.sport.viewmodels.retos.AiReviewViewModel
 import java.io.ByteArrayOutputStream
@@ -46,6 +48,7 @@ fun PoseAnalysisDialog(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState
+    val isOnline = rememberIsOnline()
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     // Launcher para Galería
@@ -123,7 +126,15 @@ fun PoseAnalysisDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // banner de conectividad: la ui permite tomar fotos offline,
+                // pero el analisis de ia requiere internet
+                OfflineConnectivityBanner(
+                    offlineMessage = "You're offline. You can take photos, but AI analysis requires internet."
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Image Preview Area
                 Box(
@@ -201,11 +212,13 @@ fun PoseAnalysisDialog(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
+                        // deshabilitado sin internet: la api de ia requiere conexion
+                        enabled = isOnline,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("ANALYZE POSE WITH AI", fontWeight = FontWeight.Black)
+                        Text(if (isOnline) "ANALYZE POSE WITH AI" else "WAITING FOR CONNECTION...", fontWeight = FontWeight.Black)
                     }
                 }
 

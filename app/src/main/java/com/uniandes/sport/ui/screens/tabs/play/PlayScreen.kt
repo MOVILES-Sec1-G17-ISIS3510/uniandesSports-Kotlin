@@ -1130,6 +1130,11 @@ private fun TrackDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // banner de conectividad para track dialog
+                com.uniandes.sport.ui.components.OfflineConnectivityBanner(
+                    offlineMessage = "You're offline. Track will be saved locally and synced when connection returns."
+                )
+
                 // Header Segment
                 Box(
                     modifier = Modifier

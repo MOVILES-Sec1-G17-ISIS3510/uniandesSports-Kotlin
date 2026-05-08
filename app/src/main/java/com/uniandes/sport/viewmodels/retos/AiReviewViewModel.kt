@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.uniandes.sport.ai.AiAnalyzerStrategy
+import com.uniandes.sport.data.cache.AiResultCache
 import com.uniandes.sport.models.Reto
 import kotlinx.coroutines.launch
 
@@ -52,14 +53,17 @@ class AiReviewViewModel(
         }
     }
 
+    // analizar track/sesion con cache lru.
+    // si ya existe un resultado cacheado para este evento y usuario, se retorna
+    // sin llamar a la api. util cuando el usuario vuelve a abrir el detalle del evento
     fun analyzeTrack(trackText: String, eventId: String, oldAnalysis: Map<String, Double> = emptyMap()) {
         _uiState.value = AiReviewState.Loading
-        
+
         viewModelScope.launch {
             val allRetos = firestoreRetosViewModel.retos.value
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
             val activeChallenges = allRetos.filter { it.participants.contains(uid) && it.status == "active" }
-            
+
             android.util.Log.d("AiReviewVM", "Starting analyzeTrack. Found ${activeChallenges.size} active challenges.")
 
             if (activeChallenges.isEmpty()) {
@@ -104,7 +108,11 @@ class AiReviewViewModel(
                     userId = uid,
                     analysis = newProgressMap
                 )
-                
+
+                // cachear el resultado del analisis para acceso futuro sin llamar a la api
+                val cacheKey = AiResultCache.trackKey(eventId, uid)
+                AiResultCache.put(cacheKey, "advanced=$advancedCount, challenges=${newProgressMap.keys.joinToString()}")
+
                 if (advancedCount > 0) {
                     _uiState.value = AiReviewState.Success(
                         advancedCount, 
@@ -123,12 +131,29 @@ class AiReviewViewModel(
         }
     }
     
-    fun analyzeCalisthenicsPose(base64Image: String) {
+    // analizar pose de calistenia con cache lru.
+    // si ya existe un resultado cacheado para este evento y usuario, se retorna
+    // directamente sin llamar a la api (cache hit). si no, se llama a la api
+    // y se guarda el resultado en el cache para futuras consultas (cache miss).
+    // el eventid es opcional para asociar el resultado a un evento especifico
+    fun analyzeCalisthenicsPose(base64Image: String, eventId: String = "standalone", userId: String = "") {
+        val cacheKey = AiResultCache.poseKey(eventId, userId)
+
+        // buscar en cache lru antes de llamar a la api (evitar llamadas repetidas)
+        val cached = AiResultCache.get(cacheKey)
+        if (cached != null && userId.isNotBlank()) {
+            android.util.Log.d("AiReviewVM", "pose feedback desde cache lru: $cacheKey")
+            _uiState.value = AiReviewState.PoseFeedback(cached)
+            return
+        }
+
         _uiState.value = AiReviewState.Loading
         viewModelScope.launch {
             try {
                 val feedback = analyzerStrategy.analyzePose(base64Image)
                 if (feedback != null) {
+                    // guardar resultado en cache lru para acceso futuro
+                    AiResultCache.put(cacheKey, feedback)
                     _uiState.value = AiReviewState.PoseFeedback(feedback)
                 } else {
                     _uiState.value = AiReviewState.Error("No se pudo obtener feedback de la IA.")
