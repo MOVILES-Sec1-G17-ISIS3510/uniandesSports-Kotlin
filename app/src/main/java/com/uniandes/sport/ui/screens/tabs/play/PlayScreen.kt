@@ -111,8 +111,19 @@ fun PlayScreen(
     // porque el usuario puede ahora re-ejecutar el analisis manualmente
     LaunchedEffect(isOnline) {
         if (isOnline) {
-            AiHistoryStore.clearPendingEntries(context)
-            aiHistoryRefreshTrigger++
+            // cuando vuelve internet, actualizar las entradas pending para indicar
+            // que el usuario puede re-trackear y obtener el analisis de ia
+            val allEntries = AiHistoryStore.getAll(context)
+            val hasPending = allEntries.any { it.feedback.startsWith("Pending") }
+            if (hasPending) {
+                allEntries.filter { it.feedback.startsWith("Pending") }.forEach { entry ->
+                    AiHistoryStore.replacePendingForEvent(
+                        context, entry.eventId, entry.type,
+                        "Track saved. Open the event and re-submit to get AI analysis."
+                    )
+                }
+                aiHistoryRefreshTrigger++
+            }
         }
     }
 
