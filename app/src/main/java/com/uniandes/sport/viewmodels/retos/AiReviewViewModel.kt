@@ -116,15 +116,28 @@ class AiReviewViewModel(
                     analysis = newProgressMap
                 )
 
-                // cachear el resultado del analisis para acceso futuro sin llamar a la api
+                // solo guardar en historial los challenges que realmente avanzaron
+                val advancedChallenges = allRelevantChallengeIds.filter { retoId ->
+                    val newVal = newProgressMap[retoId] ?: 0.0
+                    val oldVal = oldAnalysis[retoId] ?: 0.0
+                    newVal > 0 && Math.abs(newVal - oldVal) > 0.01
+                }
+
+                // buscar los nombres de los challenges que avanzaron para el feedback
+                val advancedNames = advancedChallenges.mapNotNull { retoId ->
+                    allRetos.find { it.id == retoId }?.let { reto ->
+                        val newVal = newProgressMap[retoId] ?: 0.0
+                        "${reto.title}: +${String.format("%.0f", newVal)}%"
+                    }
+                }
+
                 val cacheKey = AiResultCache.trackKey(eventId, uid)
-                val resultSummary = if (advancedCount > 0)
-                    "Advanced in $advancedCount challenges: ${newProgressMap.keys.joinToString()}"
+                val resultSummary = if (advancedNames.isNotEmpty())
+                    "Progress updated in ${advancedNames.size} challenge(s):\n${advancedNames.joinToString("\n")}"
                 else
                     "Activity recorded. No challenge progress applied."
                 AiResultCache.put(cacheKey, resultSummary)
 
-                // guardar en historial local persistente
                 val ctx = appContext
                 if (ctx != null) {
                     AiHistoryStore.addEntry(ctx, AiHistoryEntry(
