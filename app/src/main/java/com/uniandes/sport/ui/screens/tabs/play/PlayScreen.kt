@@ -103,6 +103,7 @@ fun PlayScreen(
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     var showPoseDialog by remember { mutableStateOf(false) }
     var aiHistoryRefreshTrigger by remember { mutableStateOf(0) }
+    var selectedAiHistoryEntry by remember { mutableStateOf<com.uniandes.sport.data.local.AiHistoryEntry?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val isOnline = rememberIsOnline()
 
@@ -560,23 +561,6 @@ fun PlayScreen(
                     }
                 }
 
-                // boton de ai history en el dashboard para acceso rapido
-                val aiHistoryPreview = remember(myTracksByEventId, aiHistoryRefreshTrigger) {
-                    AiHistoryStore.getRecent(context, 10)
-                }
-                if (aiHistoryPreview.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    val pendingAnalyses = aiHistoryPreview.count { it.feedback.startsWith("Pending") }
-                    ActionCard(
-                        title = "AI Reviews",
-                        subtitle = if (pendingAnalyses > 0) "$pendingAnalyses pending analysis" else "${aiHistoryPreview.size} recent analyses",
-                        icon = Icons.Default.AutoAwesome,
-                        badgeCount = if (pendingAnalyses > 0) pendingAnalyses else null,
-                        color = if (pendingAnalyses > 0) Color(0xFF2563EB) else Color(0xFF7C3AED),
-                        onClick = { }
-                    )
-                }
-
                 if (featuredRecommendation != null) {
                     Spacer(modifier = Modifier.height(12.dp))
                     SmartMatchCard(
@@ -637,6 +621,7 @@ fun PlayScreen(
                         items(aiHistory.size) { index ->
                             val entry = aiHistory[index]
                             Surface(
+                                onClick = { selectedAiHistoryEntry = entry },
                                 modifier = Modifier
                                     .width(220.dp)
                                     .height(180.dp),
@@ -724,6 +709,107 @@ fun PlayScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // dialog de detalle de ai history
+        selectedAiHistoryEntry?.let { entry ->
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { selectedAiHistoryEntry = null }
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (entry.type == "pose") Icons.Default.CameraAlt else Icons.Default.TrackChanges,
+                                    null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (entry.type == "pose") "POSE ANALYSIS" else "TRACK ANALYSIS",
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            IconButton(onClick = { selectedAiHistoryEntry = null }) {
+                                Icon(Icons.Default.Close, "Close")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            java.text.SimpleDateFormat("MMMM d, yyyy 'at' HH:mm", Locale.getDefault())
+                                .format(java.util.Date(entry.createdAtMillis)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (entry.imagePath.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(java.io.File(entry.imagePath))
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Pose photo",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(250.dp)
+                                    .clip(RoundedCornerShape(16.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val isPending = entry.feedback.startsWith("Pending")
+                        if (isPending) {
+                            Surface(
+                                color = Color(0xFFFEF3C7),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Schedule, null, tint = Color(0xFF92400E), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(entry.feedback, color = Color(0xFF92400E), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        } else {
+                            Text("AI FEEDBACK", fontWeight = FontWeight.Black, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(entry.feedback, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = { selectedAiHistoryEntry = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("CLOSE", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
