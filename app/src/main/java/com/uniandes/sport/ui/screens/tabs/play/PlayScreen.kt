@@ -102,6 +102,7 @@ fun PlayScreen(
     var aiTrackOldAnalysis by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var editingEvent by remember { mutableStateOf<Event?>(null) }
     var showPoseDialog by remember { mutableStateOf(false) }
+    var aiHistoryRefreshTrigger by remember { mutableStateOf(0) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val isOnline = rememberIsOnline()
     val nowMillis by produceState(initialValue = System.currentTimeMillis()) {
@@ -322,6 +323,7 @@ fun PlayScreen(
                                 feedback = "Pending AI analysis. Will process when internet returns.",
                                 imagePath = ""
                             ))
+                            aiHistoryRefreshTrigger++
                         }
                         onDone(true)
                     },
@@ -549,7 +551,7 @@ fun PlayScreen(
                 }
 
                 // boton de ai history en el dashboard para acceso rapido
-                val aiHistoryPreview = remember(myTracksByEventId) {
+                val aiHistoryPreview = remember(myTracksByEventId, aiHistoryRefreshTrigger) {
                     AiHistoryStore.getRecent(context, 10)
                 }
                 if (aiHistoryPreview.isNotEmpty()) {
@@ -580,7 +582,7 @@ fun PlayScreen(
             // esta seccion es visible offline porque todo esta en almacenamiento local
             item {
                 val aiHistoryContext = androidx.compose.ui.platform.LocalContext.current
-                val aiHistory = remember(myTracksByEventId) {
+                val aiHistory = remember(myTracksByEventId, aiHistoryRefreshTrigger) {
                     AiHistoryStore.getRecent(aiHistoryContext, 10)
                 }
 
@@ -689,16 +691,23 @@ fun PlayScreen(
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         )
-                                        // badge de estado: cached (local) o synced (ya sincronizado)
+                                        // badge de estado segun si es pending, cached u online
+                                        val isPending = entry.feedback.startsWith("Pending")
                                         Surface(
-                                            color = if (isOnline) Color(0xFFD1FAE5) else Color(0xFFDBEAFE),
+                                            color = if (isPending) Color(0xFFFEF3C7)
+                                                else if (isOnline) Color(0xFFD1FAE5)
+                                                else Color(0xFFDBEAFE),
                                             shape = RoundedCornerShape(4.dp)
                                         ) {
                                             Text(
-                                                text = if (isOnline) "SYNCED" else "CACHED",
+                                                text = if (isPending) "PENDING"
+                                                    else if (isOnline) "SYNCED"
+                                                    else "CACHED",
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.Black,
-                                                color = if (isOnline) Color(0xFF065F46) else Color(0xFF1E3A8A),
+                                                color = if (isPending) Color(0xFF92400E)
+                                                    else if (isOnline) Color(0xFF065F46)
+                                                    else Color(0xFF1E3A8A),
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                                             )
                                         }
