@@ -94,9 +94,11 @@ class DummyRetosViewModel : ViewModel(), RetosViewModelInterface {
         _retos.value = listOf(r1, r2, r3)
     }
 
-    override fun joinReto(retoId: String, userId: String) { }
-    
-    override fun leaveReto(retoId: String, userId: String) { }
+    override fun refreshRetos(onComplete: () -> Unit) { onComplete() }
+
+    override fun joinReto(retoId: String, userId: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) { onSuccess() }
+
+    override fun leaveReto(retoId: String, userId: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) { onSuccess() }
 
     override fun addReto(reto: Reto) {
         _retos.value = _retos.value + reto
