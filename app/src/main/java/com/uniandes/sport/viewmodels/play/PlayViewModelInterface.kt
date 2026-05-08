@@ -31,6 +31,8 @@ interface PlayViewModelInterface {
     fun fetchEventByIdOnce(eventId: String, onSuccess: (Event?) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
     fun markBestMatchRecommendation(eventId: String?)
+    fun storeBestMatchScores(scores: Map<String, Double>)
+    fun storeBestMatchScoreForEvent(eventId: String, score: Double)
     fun joinEvent(
         eventId: String,
         userId: String,

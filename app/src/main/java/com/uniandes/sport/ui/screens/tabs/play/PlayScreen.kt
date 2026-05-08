@@ -194,6 +194,11 @@ fun PlayScreen(
         )
     }
 
+    LaunchedEffect(rankedOpenEvents) {
+        val scoresMap = rankedOpenEvents.associate { it.event.id to it.score }
+        viewModel.storeBestMatchScores(scoresMap)
+    }
+
     val onEventSelected: (com.uniandes.sport.models.Event, Boolean) -> Unit = { event, isBestMatchRecommendation ->
         logViewModel.log(
             screen = "PlayScreen",
@@ -208,6 +213,8 @@ fun PlayScreen(
         selectedEventIsBestMatchRecommendation = isBestMatchRecommendation
         if (isBestMatchRecommendation) {
             viewModel.markBestMatchRecommendation(event.id)
+            val score = rankedOpenEvents.find { it.event.id == event.id }?.score
+            score?.let { viewModel.storeBestMatchScoreForEvent(event.id, it) }
         }
     }
 
@@ -247,6 +254,8 @@ fun PlayScreen(
             selectedEventIsBestMatchRecommendation = openEventFromBestMatch
             if (openEventFromBestMatch) {
                 viewModel.markBestMatchRecommendation(pendingEvent.id)
+                val score = rankedOpenEvents.find { it.event.id == pendingEvent.id }?.score
+                score?.let { viewModel.storeBestMatchScoreForEvent(pendingEvent.id, it) }
             }
             onOpenEventConsumed()
             hasTriedDirectOpenById = false
