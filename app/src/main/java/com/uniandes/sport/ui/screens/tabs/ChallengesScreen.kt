@@ -42,6 +42,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 
 import kotlinx.coroutines.delay
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,13 @@ fun ChallengesScreen(
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
         ) {
+
+            // banner de conectividad: muestra que los datos vienen de cache cuando no hay red
+            item {
+                OfflineConnectivityBanner(
+                    offlineMessage = "You're offline. Showing cached challenges. Changes will sync when connection returns."
+                )
+            }
 
             // --- SECTION: ACTIVE CHALLENGES ---
             if (activeChallenges.isNotEmpty()) {
