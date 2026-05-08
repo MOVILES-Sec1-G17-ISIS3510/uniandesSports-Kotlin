@@ -6,12 +6,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.graphics.Bitmap
 import com.google.firebase.FirebaseApp
+import com.google.firebase.storage.FirebaseStorage
 import com.uniandes.sport.ai.AiAnalyzerStrategy
 import com.uniandes.sport.data.cache.AiResultCache
 import com.uniandes.sport.data.local.AiHistoryEntry
 import com.uniandes.sport.data.local.AiHistoryStore
 import com.uniandes.sport.models.Reto
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
+import java.util.UUID
 
 sealed class AiReviewState {
     object Idle : AiReviewState()
@@ -174,50 +177,82 @@ class AiReviewViewModel(
     // el eventid es opcional para asociar el resultado a un evento especifico
     // bitmap opcional para guardar la foto en el historial local (se carga despues con coil)
     fun analyzeCalisthenicsPose(base64Image: String, eventId: String = "standalone", userId: String = "", photoBitmap: Bitmap? = null) {
-        val cacheKey = AiResultCache.poseKey(eventId, userId)
-
-        // buscar en cache lru antes de llamar a la api (evitar llamadas repetidas)
-        val cached = AiResultCache.get(cacheKey)
-        if (cached != null && userId.isNotBlank()) {
-            android.util.Log.d("AiReviewVM", "pose feedback desde cache lru: $cacheKey")
-            _uiState.value = AiReviewState.PoseFeedback(cached)
-            return
-        }
+        // cada analisis de pose es unico (foto diferente), no usamos cache aqui.
+        // el cache lru se usa para consultar resultados anteriores desde el historial,
+        // no para bloquear nuevos analisis
 
         _uiState.value = AiReviewState.Loading
         viewModelScope.launch {
             try {
                 val feedback = analyzerStrategy.analyzePose(base64Image)
                 if (feedback != null) {
-                    // guardar resultado en cache lru para acceso futuro
+                    // guardar en cache lru con timestamp unico para que el historial pueda consultarlo
+                    val cacheKey = AiResultCache.poseKey(eventId, "${System.currentTimeMillis()}")
                     AiResultCache.put(cacheKey, feedback)
 
-                    // guardar en historial local persistente para la seccion "your ai history".
-                    // la foto se guarda como archivo jpg (para cargar con coil) y el
-                    // feedback se guarda en sharedpreferences
+                    // guardar en historial local y subir foto a firebase storage.
+                    // coil cargara la imagen desde la url (online-first):
+                    // 1ra vez: descarga de la url y cachea en memoria + disco
+                    // 2da vez: sirve desde memoria (cache hit, sin red ni disco)
+                    // offline: sirve desde disco cache
                     val ctx = appContext
                     if (ctx != null) {
                         val entryId = "pose_${eventId}_${System.currentTimeMillis()}"
-                        val imagePath = if (photoBitmap != null) {
+                        // guardar copia local como fallback
+                        val localPath = if (photoBitmap != null) {
                             AiHistoryStore.saveImage(ctx, photoBitmap, entryId)
                         } else ""
-                        AiHistoryStore.addEntry(ctx, AiHistoryEntry(
-                            id = entryId,
-                            type = "pose",
-                            eventId = eventId,
-                            feedback = feedback,
-                            imagePath = imagePath
-                        ))
+
+                        // subir a firebase storage para obtener url publica
+                        // coil usara esta url con su cache online-first
+                        if (photoBitmap != null) {
+                            uploadToStorage(photoBitmap) { url ->
+                                AiHistoryStore.addEntry(ctx, AiHistoryEntry(
+                                    id = entryId,
+                                    type = "pose",
+                                    eventId = eventId,
+                                    feedback = feedback,
+                                    imagePath = url
+                                ))
+                            }
+                        } else {
+                            AiHistoryStore.addEntry(ctx, AiHistoryEntry(
+                                id = entryId,
+                                type = "pose",
+                                eventId = eventId,
+                                feedback = feedback,
+                                imagePath = localPath
+                            ))
+                        }
                     }
 
                     _uiState.value = AiReviewState.PoseFeedback(feedback)
                 } else {
-                    _uiState.value = AiReviewState.Error("No se pudo obtener feedback de la IA.")
+                    _uiState.value = AiReviewState.Error("Could not get AI feedback.")
                 }
             } catch (e: Exception) {
-                _uiState.value = AiReviewState.Error("Error analizando pose: ${e.message}")
+                _uiState.value = AiReviewState.Error("Error analyzing pose: ${e.message}")
             }
         }
+    }
+
+    // subir imagen a firebase storage y retornar la url publica.
+    // coil usa esta url para su estrategia online-first:
+    // network -> disk cache -> memory cache
+    private fun uploadToStorage(bitmap: Bitmap, onUrl: (String) -> Unit) {
+        val uuid = UUID.randomUUID().toString()
+        val ref = FirebaseStorage.getInstance().reference.child("ai_poses/$uuid.jpg")
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+        ref.putBytes(baos.toByteArray())
+            .continueWithTask { task ->
+                if (!task.isSuccessful) task.exception?.let { throw it }
+                ref.downloadUrl
+            }
+            .addOnSuccessListener { uri -> onUrl(uri.toString()) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("AiReviewVM", "error subiendo foto a storage", e)
+            }
     }
 
     fun resetState() {
