@@ -6,6 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -29,6 +33,9 @@ fun AppNavigation(
     onPageChanged: (Int) -> Unit = {},
     searchQuery: String = ""
 ) {
+    var pendingBestMatchEventId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var pendingBestMatchIsRecommendation by remember { androidx.compose.runtime.mutableStateOf(false) }
+
     NavHost(
         navController = navController,
         startDestination = "main_tabs/$startTabIndex",
@@ -66,17 +73,29 @@ fun AppNavigation(
             })
         ) { backStackEntry ->
             val initialPage = backStackEntry.arguments?.getInt("initialPage") ?: 0
+            val effectivePendingOpenMatchEventId = pendingBestMatchEventId ?: pendingOpenMatchEventId
+            val effectivePendingOpenMatchFromBestMatch = pendingBestMatchIsRecommendation
             MainTabsScreen(
                 initialPage = initialPage,
-                pendingOpenEventId = pendingOpenMatchEventId,
-                onOpenEventConsumed = onOpenMatchConsumed,
+                pendingOpenEventId = effectivePendingOpenMatchEventId,
+                pendingOpenEventFromBestMatch = effectivePendingOpenMatchFromBestMatch,
+                onOpenEventConsumed = {
+                    pendingBestMatchEventId = null
+                    pendingBestMatchIsRecommendation = false
+                    onOpenMatchConsumed()
+                },
                 onPageChanged = onPageChanged,
                 onNavigate = { route -> 
-                    val tabRoute = when(route) {
-                        "challenges" -> "main_tabs/1"
-                        "play" -> "main_tabs/2"
-                        "social" -> "main_tabs/3"
-                        "coaches" -> "main_tabs/4"
+                    val tabRoute = when {
+                        route.startsWith("play_best_match/") -> {
+                            pendingBestMatchEventId = route.substringAfterLast("/")
+                            pendingBestMatchIsRecommendation = true
+                            "main_tabs/2"
+                        }
+                        route == "challenges" -> "main_tabs/1"
+                        route == "play" -> "main_tabs/2"
+                        route == "social" -> "main_tabs/3"
+                        route == "coaches" -> "main_tabs/4"
                         else -> route
                     }
                     navController.navigate(tabRoute) 

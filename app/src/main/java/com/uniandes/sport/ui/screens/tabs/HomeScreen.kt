@@ -467,7 +467,7 @@ fun HomeScreen(
                         }
                         SmartMatchCard(
                             recommendation = featuredMatch,
-                            onClick = { onNavigate("play") }
+                            onClick = { onNavigate("play_best_match/${featuredMatch.event.id}") }
                         )
                     }
                 }

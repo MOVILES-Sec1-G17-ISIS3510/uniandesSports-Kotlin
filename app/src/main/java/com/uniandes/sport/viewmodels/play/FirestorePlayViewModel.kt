@@ -13,6 +13,7 @@ import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.uniandes.sport.data.local.PendingOpenMatchPayload
@@ -68,8 +69,10 @@ class FirestorePlayViewModel(
     override val myTracksByEventId: StateFlow<Map<String, Track>> = _myTracksByEventId.asStateFlow()
 
     private val _quorumCheckedEventIds = mutableSetOf<String>()
+    private val bestMatchScores = mutableMapOf<String, Double>()
 
     private var joinedEventsListener: ListenerRegistration? = null
+    private var bestMatchRecommendationEventId: String? = null
 
     override val currentUserId: String?
         get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
@@ -367,14 +370,53 @@ class FirestorePlayViewModel(
             }
     }
 
-    override fun joinEvent(eventId: String, userId: String, sport: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    override fun markBestMatchRecommendation(eventId: String?) {
+        bestMatchRecommendationEventId = eventId
+        // Si el evento tiene un score almacenado, lo mantenemos
+        // Si no, se almacenará cuando se llame a storeBestMatchScores
+    }
+
+    override fun storeBestMatchScores(scores: Map<String, Double>) {
+        bestMatchScores.putAll(scores)
+    }
+
+    override fun storeBestMatchScoreForEvent(eventId: String, score: Double) {
+        bestMatchScores[eventId] = score
+    }
+
+    private fun getBestMatchScoreForEvent(eventId: String): Double? {
+        return bestMatchScores[eventId]
+    }
+
+    override fun joinEvent(
+        eventId: String,
+        userId: String,
+        sport: String,
+        joinedFromBestMatchRecommendation: Boolean,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
         val docRef = db.collection("events").document(eventId)
         val memberRef = docRef.collection("members").document(userId)
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        val displayName = currentUser?.email ?: "User ${userId.take(5)}"
+
+        // Usar siempre el UID del usuario autenticado para el documento y payload
+        val authUserId = currentUser?.uid ?: run {
+            onError(Exception("User not authenticated"))
+            return
+        }
+
+        val recommendationUsageRef = db.collection("bq3_use_of_best_match_recommendation")
+            .document("${eventId}_$authUserId")
+
+        val displayName = currentUser.email ?: "User ${authUserId.take(5)}"
+        val shouldTrackBestMatch = joinedFromBestMatchRecommendation || bestMatchRecommendationEventId == eventId
+
+        Log.d("PlayVM", "joinEvent called for eventId=$eventId, userId=$userId, authUserId=$authUserId, joinedFromBestMatchRecommendation=$joinedFromBestMatchRecommendation, bestMatchRecommendationEventId=$bestMatchRecommendationEventId, shouldTrackBestMatch=$shouldTrackBestMatch")
 
         var quorumJustReached = false
         var quorumEventParams: Map<String, String> = emptyMap()
+        var recommendationUsagePayload: Map<String, Any?>? = null
 
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
@@ -400,6 +442,26 @@ class FirestorePlayViewModel(
                 transaction.set(memberRef, newMember)
                 transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
+
+                if (shouldTrackBestMatch) {
+                    val score = getBestMatchScoreForEvent(eventId) ?: 0.0
+                    val payloadMap = mutableMapOf<String, Any?>(
+                            "userId" to authUserId,  // Usar el UID autenticado
+                            "eventId" to eventId,
+                            "eventTitle" to (snapshot.getString("title") ?: ""),
+                            "sport" to eventSport,
+                            "modality" to (snapshot.getString("modality") ?: ""),
+                            "location" to (snapshot.getString("location") ?: ""),
+                            "joinedAt" to null,
+                            "source" to "best_match_for_you",
+                            "membersCountBeforeJoin" to membersCount,
+                            "maxParticipants" to max,
+                            "createdBy" to eventCreatedBy,
+                            "recommendationScore" to score
+                    )
+                    recommendationUsagePayload = payloadMap
+                    Log.d("PlayVM", "Best match payload prepared: userId=$authUserId, eventId=$eventId, score=$score")
+                }
 
                 val newCount = membersCount + 1
                 if (eventCreatedBy.isNotBlank() && newCount >= min && membersCount < min) {
@@ -432,6 +494,32 @@ class FirestorePlayViewModel(
                 action = "join_sport_event",
                 params = mapOf("sport_category" to sport)
             )
+
+            recommendationUsagePayload?.let { payload ->
+                val finalPayload = payload + ("joinedAt" to FieldValue.serverTimestamp())
+                Log.d("PlayVM", "Attempting to write best-match telemetry for authUserId=$authUserId, eventId=$eventId")
+                Log.d("PlayVM", "Payload: userId=${finalPayload["userId"]}, eventId=${finalPayload["eventId"]}")
+
+                recommendationUsageRef
+                    .set(finalPayload)
+                    .addOnSuccessListener {
+                        Log.d("PlayVM", "Best-match recommendation telemetry written successfully for event $eventId")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("PlayVM", "Failed to write best-match recommendation telemetry for event $eventId: ${e.message}", e)
+                        Log.e("PlayVM", "Document path: bq3_use_of_best_match_recommendation/${eventId}_$authUserId")
+                        Log.e("PlayVM", "Payload userId: ${finalPayload["userId"]}, Auth UID: $authUserId")
+
+                        // Verificar que el userId en el payload coincida con el auth UID
+                        if (finalPayload["userId"] != authUserId) {
+                            Log.e("PlayVM", "CRITICAL: userId in payload does not match auth UID!")
+                        }
+                    }
+            }
+
+            if (shouldTrackBestMatch) {
+                bestMatchRecommendationEventId = null
+            }
 
             _joinedEventIds.value = _joinedEventIds.value + eventId
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()

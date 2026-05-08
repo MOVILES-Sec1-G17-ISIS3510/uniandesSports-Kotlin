@@ -19,6 +19,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun MainTabsScreen(
     initialPage: Int = 0,
     pendingOpenEventId: String? = null,
+    pendingOpenEventFromBestMatch: Boolean = false,
     onOpenEventConsumed: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
     onNavigate: (String) -> Unit,
@@ -84,6 +85,7 @@ fun MainTabsScreen(
                 com.uniandes.sport.ui.screens.tabs.play.PlayScreen(
                     viewModel = playViewModel,
                     openEventId = pendingOpenEventId,
+                    openEventFromBestMatch = pendingOpenEventFromBestMatch,
                     onOpenEventConsumed = onOpenEventConsumed,
                     logViewModel = logViewModel,
                     onNavigate = onNavigate
