@@ -24,6 +24,8 @@ data class AiHistoryEntry(
     val eventId: String,
     val feedback: String,
     val imagePath: String,
+    val trackText: String = "",
+    val oldAnalysisJson: String = "{}",
     val createdAtMillis: Long = System.currentTimeMillis()
 )
 
@@ -71,6 +73,8 @@ object AiHistoryStore {
                 eventId = obj.optString("eventId", ""),
                 feedback = obj.optString("feedback", ""),
                 imagePath = obj.optString("imagePath", ""),
+                trackText = obj.optString("trackText", ""),
+                oldAnalysisJson = obj.optString("oldAnalysisJson", "{}"),
                 createdAtMillis = obj.optLong("createdAtMillis", 0L)
             )
         }
@@ -95,6 +99,10 @@ object AiHistoryStore {
     }
 
     // eliminar todas las entradas pending (util al volver internet)
+    fun getPendingTracks(context: Context): List<AiHistoryEntry> {
+        return getAll(context).filter { it.type == "track" && it.feedback.startsWith("Pending") && it.trackText.isNotBlank() }
+    }
+
     fun clearPendingEntries(context: Context) {
         val items = getAll(context).filterNot { it.feedback.startsWith("Pending") }
         saveAll(context, items)
@@ -110,6 +118,8 @@ object AiHistoryStore {
                 put("eventId", entry.eventId)
                 put("feedback", entry.feedback)
                 put("imagePath", entry.imagePath)
+                put("trackText", entry.trackText)
+                put("oldAnalysisJson", entry.oldAnalysisJson)
                 put("createdAtMillis", entry.createdAtMillis)
             })
         }
