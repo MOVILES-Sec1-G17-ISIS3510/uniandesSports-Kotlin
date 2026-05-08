@@ -385,6 +385,7 @@ class FirestorePlayViewModel(
 
         var quorumJustReached = false
         var quorumEventParams: Map<String, String> = emptyMap()
+        var recommendationUsagePayload: Map<String, Any?>? = null
 
         db.runTransaction { transaction ->
             val snapshot = transaction.get(docRef)
@@ -412,22 +413,19 @@ class FirestorePlayViewModel(
                 Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
 
                 if (joinedFromBestMatchRecommendation) {
-                    transaction.set(
-                        recommendationUsageRef,
-                        mapOf(
+                    recommendationUsagePayload = mapOf(
                             "userId" to userId,
                             "eventId" to eventId,
                             "eventTitle" to (snapshot.getString("title") ?: ""),
                             "sport" to eventSport,
                             "modality" to (snapshot.getString("modality") ?: ""),
                             "location" to (snapshot.getString("location") ?: ""),
-                            "joinedAt" to FieldValue.serverTimestamp(),
+                            "joinedAt" to null,
                             "source" to "best_match_for_you",
                             "membersCountBeforeJoin" to membersCount,
                             "maxParticipants" to max,
                             "createdBy" to eventCreatedBy
                         )
-                    )
                 }
 
                 val newCount = membersCount + 1
@@ -461,6 +459,14 @@ class FirestorePlayViewModel(
                 action = "join_sport_event",
                 params = mapOf("sport_category" to sport)
             )
+
+            recommendationUsagePayload?.let { payload ->
+                recommendationUsageRef
+                    .set(payload + ("joinedAt" to FieldValue.serverTimestamp()))
+                    .addOnFailureListener { e ->
+                        Log.e("PlayVM", "Failed to write best-match recommendation telemetry: ${e.message}")
+                    }
+            }
 
             _joinedEventIds.value = _joinedEventIds.value + eventId
             com.uniandes.sport.repositories.EventCacheRepository.invalidateCache()
