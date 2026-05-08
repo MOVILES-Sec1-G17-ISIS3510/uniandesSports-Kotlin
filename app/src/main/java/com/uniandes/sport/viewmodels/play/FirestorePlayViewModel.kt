@@ -71,6 +71,7 @@ class FirestorePlayViewModel(
     private val _quorumCheckedEventIds = mutableSetOf<String>()
 
     private var joinedEventsListener: ListenerRegistration? = null
+    private var bestMatchRecommendationEventId: String? = null
 
     override val currentUserId: String?
         get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
@@ -368,6 +369,10 @@ class FirestorePlayViewModel(
             }
     }
 
+    override fun markBestMatchRecommendation(eventId: String?) {
+        bestMatchRecommendationEventId = eventId
+    }
+
     override fun joinEvent(
         eventId: String,
         userId: String,
@@ -382,6 +387,7 @@ class FirestorePlayViewModel(
             .document("${eventId}_$userId")
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         val displayName = currentUser?.email ?: "User ${userId.take(5)}"
+        val shouldTrackBestMatch = joinedFromBestMatchRecommendation || bestMatchRecommendationEventId == eventId
 
         var quorumJustReached = false
         var quorumEventParams: Map<String, String> = emptyMap()
@@ -412,7 +418,7 @@ class FirestorePlayViewModel(
                 transaction.update(docRef, "membersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 Log.d("PlayVM", "Transaction: User $userId added to subcollection 'members'. Counter incremented.")
 
-                if (joinedFromBestMatchRecommendation) {
+                if (shouldTrackBestMatch) {
                     recommendationUsagePayload = mapOf(
                             "userId" to userId,
                             "eventId" to eventId,
@@ -466,6 +472,10 @@ class FirestorePlayViewModel(
                     .addOnFailureListener { e ->
                         Log.e("PlayVM", "Failed to write best-match recommendation telemetry: ${e.message}")
                     }
+            }
+
+            if (shouldTrackBestMatch) {
+                bestMatchRecommendationEventId = null
             }
 
             _joinedEventIds.value = _joinedEventIds.value + eventId

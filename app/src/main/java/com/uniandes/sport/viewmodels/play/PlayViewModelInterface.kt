@@ -30,6 +30,7 @@ interface PlayViewModelInterface {
     fun fetchEventMembersOnce(eventId: String, onSuccess: (List<MatchMember>) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchEventByIdOnce(eventId: String, onSuccess: (Event?) -> Unit, onError: (Exception) -> Unit = {})
     fun fetchMembers(eventId: String)
+    fun markBestMatchRecommendation(eventId: String?)
     fun joinEvent(
         eventId: String,
         userId: String,

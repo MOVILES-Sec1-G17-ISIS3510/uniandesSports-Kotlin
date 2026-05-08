@@ -57,6 +57,7 @@ import androidx.compose.ui.window.DialogProperties
 fun PlayScreen(
     viewModel: PlayViewModelInterface,
     openEventId: String? = null,
+    openEventFromBestMatch: Boolean = false,
     onOpenEventConsumed: () -> Unit = {},
     logViewModel: com.uniandes.sport.viewmodels.log.LogViewModelInterface = androidx.lifecycle.viewmodel.compose.viewModel<com.uniandes.sport.viewmodels.log.FirebaseLogViewModel>(),
     onNavigate: (String) -> Unit
@@ -205,6 +206,9 @@ fun PlayScreen(
         )
         selectedEventUIModel = EventUIAdapter.toUIModel(event)
         selectedEventIsBestMatchRecommendation = isBestMatchRecommendation
+        if (isBestMatchRecommendation) {
+            viewModel.markBestMatchRecommendation(event.id)
+        }
     }
 
     val pullRefreshState = rememberPullRefreshState(
@@ -240,7 +244,10 @@ fun PlayScreen(
         val pendingEvent = events.firstOrNull { it.id == pendingId }
         if (pendingEvent != null) {
             selectedEventUIModel = EventUIAdapter.toUIModel(pendingEvent)
-            selectedEventIsBestMatchRecommendation = false
+            selectedEventIsBestMatchRecommendation = openEventFromBestMatch
+            if (openEventFromBestMatch) {
+                viewModel.markBestMatchRecommendation(pendingEvent.id)
+            }
             onOpenEventConsumed()
             hasTriedDirectOpenById = false
         } else if (!hasTriedDirectOpenById) {
@@ -250,7 +257,10 @@ fun PlayScreen(
                 onSuccess = { directEvent ->
                     if (directEvent != null) {
                         selectedEventUIModel = EventUIAdapter.toUIModel(directEvent)
-                        selectedEventIsBestMatchRecommendation = false
+                        selectedEventIsBestMatchRecommendation = openEventFromBestMatch
+                        if (openEventFromBestMatch) {
+                            viewModel.markBestMatchRecommendation(directEvent.id)
+                        }
                         onOpenEventConsumed()
                     }
                 }
@@ -274,6 +284,7 @@ fun PlayScreen(
             onDismiss = {
                 selectedEventUIModel = null
                 selectedEventIsBestMatchRecommendation = false
+                viewModel.markBestMatchRecommendation(null)
                 viewModel.refreshEvents()
             }
         )
