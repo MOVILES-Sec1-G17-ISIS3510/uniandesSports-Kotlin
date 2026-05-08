@@ -11,21 +11,54 @@ import android.util.Log
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.*
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.uniandes.sport.data.local.RetosFileStorage
+import com.uniandes.sport.data.local.RetosKeyValueStore
+import com.uniandes.sport.data.local.RetosLocalRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
-// viewmodel de retos con soporte de multithreading usando corrutinas y dispatchers.
-// usamos dispatchers.io para operaciones costosas (firestore, red) y dispatchers.main
-// para actualizar la ui, evitando bloquear el hilo principal y prevenir anrs.
-// segun la clase (isis-3510), las apps moviles son single-threaded por defecto,
-// y las operaciones costosas en el main thread causan gui lagging y anrs (>5 seg).
-// las corrutinas de kotlin resuelven esto con suspend functions y dispatchers
+// viewmodel de retos con soporte de multithreading y local storage.
+//
+// --- multithreading (corrutinas + dispatchers) ---
+// usamos dispatchers.io para operaciones costosas (firestore, room, archivos)
+// y dispatchers.main para actualizar la ui, evitando gui lagging y anrs.
+//
+// --- local storage (estrategia online-first con cache local) ---
+// antipatron resuelto: "missed caching opportunity".
+// sin cache, cada apertura de la pantalla depende de la red y muestra pantalla vacia.
+// con room como cache local, los retos se muestran al instante desde sqlite
+// y en background el snapshotlistener sincroniza datos frescos del servidor.
+// capas de almacenamiento local:
+//   1. room (bd relacional) — cache persistente de retos en sqlite
+//   2. sharedpreferences (llave-valor) — filtros de ui y drafts de creacion
+//   3. archivos locales (json) — exportacion de snapshots para auditoria
 class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     private val db = FirebaseFirestore.getInstance()
     private var retosListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    // acceso al contexto de la app para inicializar el repositorio local.
+    // se obtiene via firebaseapp para no requerir context en el constructor del viewmodel
+    private val appContext
+        get() = try {
+            FirebaseApp.getInstance().applicationContext
+        } catch (_: Exception) {
+            null
+        }
+
+    // repositorio local (facade sobre room dao).
+    // patron facade: el viewmodel no conoce los detalles de room/sqlite,
+    // solo habla con el repositorio que expone modelos de negocio (reto)
+    private val localRepository: RetosLocalRepository?
+        get() = appContext?.let { RetosLocalRepository.getInstance(it) }
+
+    // job para la corrutina que observa cambios en la cache local de room.
+    // se cancela en oncleared() para evitar memory leaks
+    private var retosCacheJob: Job? = null
 
     private val _retos = MutableStateFlow<List<Reto>>(emptyList())
     override val retos: StateFlow<List<Reto>> = _retos.asStateFlow()
@@ -76,19 +109,53 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     init {
+        // restaurar filtros guardados en sharedpreferences (antipatron "missing state persistence").
+        // sin esto, los filtros se resetean a "all" cada vez que el usuario reentra a la pantalla
+        restoreFiltersFromPreferences()
+        // iniciar observacion de la cache local de room y luego conectar con firestore
+        observeLocalRetos()
         fetchRetos()
     }
 
+    // restaura los filtros de tipo y deporte desde sharedpreferences.
+    // usa .apply() (asincrono) en vez de .commit() (sincrono) para no bloquear el main thread
+    private fun restoreFiltersFromPreferences() {
+        val context = appContext ?: return
+        _selectedType.value = RetosKeyValueStore.getSelectedType(context)
+        _selectedSport.value = RetosKeyValueStore.getSelectedSport(context)
+        _searchQuery.value = RetosKeyValueStore.getSearchQuery(context)
+    }
+
+    // persiste los filtros actuales en sharedpreferences cuando el usuario los cambia
     override fun setTypeFilter(type: String) {
         _selectedType.value = type
+        appContext?.let { RetosKeyValueStore.saveSelectedType(it, type) }
     }
 
     override fun setSportFilter(sport: String) {
         _selectedSport.value = sport
+        appContext?.let { RetosKeyValueStore.saveSelectedSport(it, sport) }
     }
 
     override fun setSearchQuery(query: String) {
         _searchQuery.value = query
+        appContext?.let { RetosKeyValueStore.saveSearchQuery(it, query) }
+    }
+
+    // observa la cache local de room reactivamente con flow.
+    // si room tiene datos cacheados (de una sesion anterior), se muestran al instante
+    // mientras el snapshotlistener se conecta con el servidor.
+    // esto resuelve el antipatron "missed caching opportunity" en el cold start
+    private fun observeLocalRetos() {
+        if (retosCacheJob != null) return
+        val repo = localRepository ?: return
+        retosCacheJob = viewModelScope.launch {
+            repo.observeRetos().collect { localList ->
+                if (localList.isNotEmpty() || _retos.value.isEmpty()) {
+                    _retos.value = localList
+                }
+            }
+        }
     }
 
     override fun fetchRetos() {
@@ -113,6 +180,22 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                         }
                     }
                     _retos.value = list
+
+                    // guardar en room (cache local) en background con dispatchers.io.
+                    // la proxima vez que el usuario abra la app, estos datos se
+                    // mostraran al instante desde sqlite sin esperar la red
+                    viewModelScope.launch(Dispatchers.IO) {
+                        localRepository?.replaceRetos(list)
+                    }
+
+                    // exportar snapshot a archivo local para auditoria/debugging.
+                    // se guarda en context.filesdir/retos/ como json
+                    viewModelScope.launch(Dispatchers.IO) {
+                        appContext?.let { ctx ->
+                            RetosFileStorage.exportRetosSnapshot(ctx, list)
+                            Log.d("RetosVM", "snapshot de retos exportado a archivos locales")
+                        }
+                    }
                 }
             }
     }
@@ -123,11 +206,8 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     override fun refreshRetos(onComplete: () -> Unit) {
         viewModelScope.launch {
             try {
-                // sincronizamos desde el servidor en el hilo de entrada/salida
                 syncRetosFromServer()
             } finally {
-                // withcontext(dispatchers.main) cambia al hilo principal para el callback.
-                // esto es necesario porque solo el main thread puede tocar la ui
                 withContext(Dispatchers.Main) {
                     onComplete()
                 }
@@ -138,7 +218,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
     // funcion suspendida que sincroniza los retos desde el servidor de firestore.
     // withcontext(dispatchers.io) mueve toda la ejecucion al pool de hilos de
     // entrada/salida, liberando el hilo principal para que la ui siga respondiendo.
-    // .await() convierte el callback de firebase en codigo secuencial suspendido
+    // tambien actualiza la cache local de room con los datos frescos
     private suspend fun syncRetosFromServer() = withContext(Dispatchers.IO) {
         try {
             val snapshot = db.collection("challenges")
@@ -151,6 +231,8 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                 }.getOrNull()
             }
             _retos.value = list
+            // actualizar la cache local de room con datos frescos
+            localRepository?.replaceRetos(list)
         } catch (e: Exception) {
             Log.e("RetosVM", "error sincronizando retos desde el servidor", e)
         }
@@ -166,16 +248,10 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         onSuccess: () -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        // corrutina principal en dispatchers.io: las transacciones de firestore son
-        // operaciones de red (entrada/salida) que bloquearian el main thread.
-        // si esto corriera en el hilo principal, la app se congelaria (gui lagging)
-        // y si tarda mas de 5 segundos android mostraria un anr
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val docRef = db.collection("challenges").document(retoId)
 
-                // .await() convierte la transaccion basada en callbacks a una
-                // corrutina suspendida, permitiendo codigo asincrono secuencial
                 db.runTransaction { transaction ->
                     val snapshot = transaction.get(docRef)
                     val participants = (snapshot.get("participants") as? List<String>)
@@ -192,17 +268,11 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                     }
                 }.await()
 
-                // corrutina anidada (fire and forget) en dispatchers.io:
-                // lanzamos una segunda corrutina dentro de la primera para verificar
-                // el conteo de participantes en background, sin esperar su resultado.
-                // esto demuestra multiples corrutinas ejecutandose concurrentemente
+                // corrutina anidada (fire and forget) en dispatchers.io
                 launch(Dispatchers.IO) {
                     syncParticipantsCountInternal(retoId)
                 }
 
-                // withcontext(dispatchers.main): cambiamos al hilo principal para
-                // ejecutar el callback de exito. la ui solo se puede actualizar
-                // desde el main thread, si intentamos hacerlo desde io crashearia
                 withContext(Dispatchers.Main) {
                     onSuccess()
                 }
@@ -215,8 +285,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // abandonar un reto con la misma estrategia de multithreading que joinreto:
-    // corrutina en io -> transaccion -> corrutina anidada en io -> callback en main
+    // abandonar un reto con la misma estrategia de multithreading que joinreto
     override fun leaveReto(
         retoId: String,
         userId: String,
@@ -243,7 +312,6 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                     }
                 }.await()
 
-                // corrutina anidada para sincronizar conteo en background
                 launch(Dispatchers.IO) {
                     syncParticipantsCountInternal(retoId)
                 }
@@ -260,8 +328,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // crear un reto nuevo usando corrutinas.
-    // flujo: validacion en main -> escritura en io -> verificacion anidada en io -> estado en main
+    // crear un reto nuevo usando corrutinas
     override fun addReto(reto: Reto) {
         val auth = FirebaseAuth.getInstance()
         val user = auth.currentUser
@@ -292,27 +359,20 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
 
         _creationStatus.value = "IDLE"
 
-        // corrutina en dispatchers.io para la escritura en firestore.
-        // la escritura en base de datos es una operacion costosa de entrada/salida
-        // que no debe correr en el hilo principal
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val docRef = db.collection("challenges").document()
-                // .await() suspende la corrutina hasta que firestore confirme la escritura,
-                // sin bloquear ningun hilo (a diferencia de un Thread.sleep o busy wait)
                 docRef.set(data).await()
 
                 Log.d("RetosVM", "reto creado con exito, id: ${docRef.id}")
 
-                // corrutina anidada (fire and forget): verificamos en background que
-                // el reto se creo correctamente en el servidor. esta corrutina hija
-                // corre concurrentemente mientras el flujo principal continua
+                // limpiar el draft de sharedpreferences despues de crear exitosamente
+                appContext?.let { RetosKeyValueStore.clearNewRetoDraft(it) }
+
                 launch(Dispatchers.IO) {
                     verifyRetoCreation(docRef.id)
                 }
 
-                // volvemos al hilo principal para actualizar el estado de la ui.
-                // _creationstatus es un stateflow observado por compose
                 withContext(Dispatchers.Main) {
                     _creationStatus.value = "SUCCESS"
                 }
@@ -325,9 +385,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // sincronizar progreso de un reto usando multiples corrutinas con dispatchers.
-    // demuestra: corrutina padre en io, transaccion con await, corrutina anidada
-    // en io para recalcular progreso global, y notificacion en main
+    // sincronizar progreso de un reto usando multiples corrutinas con dispatchers
     override fun syncChallengeProgress(
         retoId: String,
         oldProgress: Double,
@@ -347,7 +405,6 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
             return
         }
 
-        // corrutina principal en dispatchers.io para la transaccion de firestore
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.runTransaction { transaction ->
@@ -398,9 +455,6 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                     }
                 }.await()
 
-                // corrutina anidada en io (fire and forget): recalculamos el progreso
-                // global del reto promediando el de todos los participantes.
-                // esta corrutina corre en paralelo sin bloquear el flujo principal
                 launch(Dispatchers.IO) {
                     recalculateGlobalProgress(retoId)
                 }
@@ -416,10 +470,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // funcion suspendida que verifica el conteo real de participantes desde el servidor.
-    // se ejecuta como corrutina anidada en dispatchers.io despues de join/leave.
-    // patron similar a syncreviewscountinternal en el viewmodel de profesores:
-    // lee el documento del servidor y corrige el conteo si hay discrepancia
+    // funcion suspendida que verifica el conteo real de participantes desde el servidor
     private suspend fun syncParticipantsCountInternal(retoId: String) = withContext(Dispatchers.IO) {
         try {
             val docRef = db.collection("challenges").document(retoId)
@@ -440,9 +491,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // funcion suspendida que verifica que un reto recien creado exista en el servidor.
-    // se lanza como corrutina anidada (fire and forget) despues de la creacion,
-    // corriendo en dispatchers.io de forma concurrente con la actualizacion de la ui
+    // funcion suspendida que verifica que un reto recien creado exista en el servidor
     private suspend fun verifyRetoCreation(retoId: String) = withContext(Dispatchers.IO) {
         try {
             val snapshot = db.collection("challenges").document(retoId)
@@ -459,9 +508,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // funcion suspendida que recalcula el progreso global promediando el progreso
-    // de todos los participantes. corre en dispatchers.io como corrutina anidada
-    // despues de cada sync de progreso individual
+    // funcion suspendida que recalcula el progreso global promediando el de todos los participantes
     private suspend fun recalculateGlobalProgress(retoId: String) = withContext(Dispatchers.IO) {
         try {
             val docRef = db.collection("challenges").document(retoId)
@@ -483,11 +530,11 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
         }
     }
 
-    // limpieza de recursos cuando el viewmodel se destruye.
-    // removemos el listener de firestore para evitar fugas de memoria (memory leaks).
+    // limpieza de recursos: remover listener de firestore y cancelar job de room.
     // viewmodelscope cancela automaticamente sus corrutinas hijas en ondestroy
     override fun onCleared() {
         super.onCleared()
         retosListener?.remove()
+        retosCacheJob?.cancel()
     }
 }
