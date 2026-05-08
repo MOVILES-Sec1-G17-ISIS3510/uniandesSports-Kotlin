@@ -90,6 +90,11 @@ class RetoActionSyncWorker(
                             }
                         }.await()
                     }
+                    // create: firestore ya sincronizo el write automaticamente
+                    // (set() encola offline), solo necesitamos limpiar el pending
+                    "create" -> {
+                        Log.d("RetoActionSync", "create ya sincronizado por firestore para ${pending.retoId}")
+                    }
                 }
 
                 PendingRetoActionStore.remove(applicationContext, pending.localId)

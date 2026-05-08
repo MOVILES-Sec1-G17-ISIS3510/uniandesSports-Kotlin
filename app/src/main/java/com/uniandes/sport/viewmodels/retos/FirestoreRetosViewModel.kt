@@ -427,6 +427,7 @@ class FirestoreRetosViewModel : ViewModel(), RetosViewModelInterface {
                 userId = uid,
                 action = "create"
             ))
+            enqueueRetoActionSync(context)
         }
 
         _creationStatus.value = "SUCCESS"
