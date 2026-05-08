@@ -304,16 +304,24 @@ fun PlayScreen(
                     onSuccess = {
                         if (isOnline) {
                             android.widget.Toast.makeText(context, "Track saved", android.widget.Toast.LENGTH_SHORT).show()
+                            // solo correr analisis de ia si hay internet
+                            if (participated && text.isNotBlank()) {
+                                aiTrackEventId = trackEventLocal.id
+                                aiTrackTextToAnalyze = text
+                                aiTrackOldAnalysis = existingTrack?.aiAnalysis ?: emptyMap()
+                            } else if (!participated && existingTrack?.aiAnalysis?.isNotEmpty() == true) {
+                                aiViewModel.resetProgressForEvent(trackEventLocal.id, existingTrack.aiAnalysis)
+                            }
                         } else {
-                            android.widget.Toast.makeText(context, "Track saved offline. Will sync when internet returns.", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                        if (participated && text.isNotBlank()) {
-                            aiTrackEventId = trackEventLocal.id
-                            aiTrackTextToAnalyze = text
-                            aiTrackOldAnalysis = existingTrack?.aiAnalysis ?: emptyMap()
-                        } else if (!participated && existingTrack?.aiAnalysis?.isNotEmpty() == true) {
-                            // Si marcó que NO asistió pero antes tenía progreso, reseteamos el progreso en los retos
-                            aiViewModel.resetProgressForEvent(trackEventLocal.id, existingTrack.aiAnalysis)
+                            android.widget.Toast.makeText(context, "Track saved offline. AI analysis will run when internet returns.", android.widget.Toast.LENGTH_LONG).show()
+                            // guardar en historial local como pendiente para que aparezca en ai history
+                            AiHistoryStore.addEntry(context, com.uniandes.sport.data.local.AiHistoryEntry(
+                                id = "track_${trackEventLocal.id}_${System.currentTimeMillis()}",
+                                type = "track",
+                                eventId = trackEventLocal.id,
+                                feedback = "Pending AI analysis. Will process when internet returns.",
+                                imagePath = ""
+                            ))
                         }
                         onDone(true)
                     },
@@ -538,6 +546,23 @@ fun PlayScreen(
                             onClick = { activeModal = PlayModalType.HISTORY }
                         )
                     }
+                }
+
+                // boton de ai history en el dashboard para acceso rapido
+                val aiHistoryPreview = remember(myTracksByEventId) {
+                    AiHistoryStore.getRecent(context, 10)
+                }
+                if (aiHistoryPreview.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    val pendingAnalyses = aiHistoryPreview.count { it.feedback.startsWith("Pending") }
+                    ActionCard(
+                        title = "AI Reviews",
+                        subtitle = if (pendingAnalyses > 0) "$pendingAnalyses pending analysis" else "${aiHistoryPreview.size} recent analyses",
+                        icon = Icons.Default.AutoAwesome,
+                        badgeCount = if (pendingAnalyses > 0) pendingAnalyses else null,
+                        color = if (pendingAnalyses > 0) Color(0xFF2563EB) else Color(0xFF7C3AED),
+                        onClick = { }
+                    )
                 }
 
                 if (featuredRecommendation != null) {
