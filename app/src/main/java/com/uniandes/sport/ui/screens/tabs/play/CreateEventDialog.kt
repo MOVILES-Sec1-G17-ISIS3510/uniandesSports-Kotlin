@@ -7,12 +7,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -51,11 +51,16 @@ import kotlinx.coroutines.withContext
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.uniandes.sport.cache.OpenMatchLocationCache
+import com.uniandes.sport.cache.OpenMatchLocationSuggestion
+import com.uniandes.sport.cache.OpenMatchLocationSuggestionType
 import com.uniandes.sport.models.Event
 import com.uniandes.sport.patterns.event.PhoneCalendarEvent
 import java.util.Date
@@ -74,6 +79,8 @@ fun CreateEventDialog(
     onDismiss: () -> Unit,
     initialEvent: com.uniandes.sport.models.Event? = null,
     myEvents: List<Event> = emptyList(),
+    historyEvents: List<Event> = emptyList(),
+    allEvents: List<Event> = emptyList(),
     onFinish: (sport: String, title: String, location: String, description: String, date: java.util.Date, endDate: java.util.Date?, skillLevel: String, maxParticipants: Long, minParticipants: Long, shouldJoin: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf(initialEvent?.title ?: "") }
@@ -122,6 +129,14 @@ fun CreateEventDialog(
     val context = LocalContext.current
     val isConnected = rememberNetworkConnectivity()
     var wasQueuedOffline by remember { mutableStateOf(false) }
+    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val locationSuggestions = remember(historyEvents, allEvents, myEvents, currentUserId) {
+        OpenMatchLocationCache.getSuggestions(
+            userId = currentUserId,
+            historyEvents = historyEvents.ifEmpty { myEvents },
+            allEvents = allEvents.ifEmpty { myEvents }
+        )
+    }
 
     LaunchedEffect(isConnected) {
         // Specific location must stay disabled while offline.
@@ -456,6 +471,7 @@ fun CreateEventDialog(
     if (showLocationPicker) {
         LocationPickerDialog(
             onDismiss = { showLocationPicker = false },
+            locationSuggestions = locationSuggestions,
             onLocationSelected = { locationString ->
                 location = locationString
                 showLocationPicker = false
@@ -1564,6 +1580,7 @@ private fun formatConflictTime(millis: Long): String {
 @Composable
 private fun LocationPickerDialog(
     onDismiss: () -> Unit,
+    locationSuggestions: List<OpenMatchLocationSuggestion>,
     onLocationSelected: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -1573,6 +1590,7 @@ private fun LocationPickerDialog(
     val cameraPositionState = rememberCameraPositionState()
     val coroutineScope = rememberCoroutineScope()
     var isLoadingAddress by remember { mutableStateOf(false) }
+    var selectedSuggestionKey by remember(locationSuggestions) { mutableStateOf(locationSuggestions.firstOrNull()?.stableKey) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -1651,6 +1669,55 @@ private fun LocationPickerDialog(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
+                if (locationSuggestions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Text(
+                            text = "Recent and busy places",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(locationSuggestions.size) { index ->
+                                val suggestion = locationSuggestions[index]
+                                val isSelected = selectedSuggestionKey == suggestion.stableKey
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedSuggestionKey = suggestion.stableKey
+                                        coroutineScope.launch {
+                                            cameraPositionState.animate(
+                                                CameraUpdateFactory.newLatLngZoom(
+                                                    LatLng(suggestion.latitude, suggestion.longitude),
+                                                    16f
+                                                )
+                                            )
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = suggestion.label,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = when (suggestion.type) {
+                                                OpenMatchLocationSuggestionType.RECENT -> Icons.Default.Schedule
+                                                OpenMatchLocationSuggestionType.POPULAR -> Icons.Default.Groups
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -1659,7 +1726,21 @@ private fun LocationPickerDialog(
                         cameraPositionState = cameraPositionState,
                         properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
                         uiSettings = MapUiSettings(myLocationButtonEnabled = hasLocationPermission)
-                    )
+                    ) {
+                        locationSuggestions.forEach { suggestion ->
+                            val markerState = remember(suggestion.stableKey) {
+                                MarkerState(position = LatLng(suggestion.latitude, suggestion.longitude))
+                            }
+                            Marker(
+                                state = markerState,
+                                title = suggestion.label,
+                                snippet = when (suggestion.type) {
+                                    OpenMatchLocationSuggestionType.RECENT -> "Recent place"
+                                    OpenMatchLocationSuggestionType.POPULAR -> "Busy place"
+                                }
+                            )
+                        }
+                    }
 
                     Icon(
                         imageVector = Icons.Default.Place,
