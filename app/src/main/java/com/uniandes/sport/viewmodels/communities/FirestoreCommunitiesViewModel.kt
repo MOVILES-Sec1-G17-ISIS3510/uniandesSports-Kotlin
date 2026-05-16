@@ -643,17 +643,14 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 val cachedMessages = messageCache.get(cacheKey)
                 if (cachedMessages != null) {
                     Log.d("FirestoreCommunities", "HIT: Loaded ${cachedMessages.size} messages from LRU cache: $cacheKey")
-                    // Mark all as LRU_CACHE source
                     _channelMessages.value = cachedMessages.map { it.copy(source = MessageSource.LRU_CACHE) }
                     updateCacheStats()
                 } else {
-                    // Cache miss: show empty while loading
+                    // miss
                     _channelMessages.value = emptyList()
-                    // Try Room cache as fallback
                     val roomCached = loadCachedRecentMessages(communityId, channelId)
                     if (roomCached.isNotEmpty()) {
                         Log.d("FirestoreCommunities", "Room cache fallback: ${roomCached.size} messages")
-                        // Mark all as ROOM_CACHE source
                         _channelMessages.value = roomCached.map { it.copy(source = MessageSource.ROOM_CACHE) }
                     }
                     updateCacheStats()

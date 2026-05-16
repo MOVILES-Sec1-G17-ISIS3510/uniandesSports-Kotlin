@@ -20,6 +20,227 @@ La app protege 4 vistas principales:
 3. **Ver detalles de comunidades** — Visible para todos, pero solo los miembros inscritos pueden acceder a canales y mensajes; hay un sistema de membresía con roles.
 4. **Mensajes de canales en cola** — Los mensajes que el usuario intenta enviar offline se persisten en Room y se sincronizan cuando vuelve la red.
 
+## Flujos de Protección Visuales
+
+### 1) Flujo: Formulario de Onboarding
+
+```
+Usuario abre app
+    ↓
+¿FirebaseAuth.currentUser existe?
+    [MainActivity.kt : 141-157]
+    ├─ NO → Mostrar LoginScreen
+    │
+    └─ SÍ → Cargar perfil desde Firestore
+            [FirebaseAuthViewModel.kt]
+            ↓
+        ¿program.isBlank() || mainSport.isBlank()?
+            ├─ SÍ → Mostrar OnboardingScreen (PROTEGIDA)
+            │        [MainActivity.kt : 141-157]
+            │        ↓
+            │       ¿Está online?
+            │        [OnboardingScreen.kt : 274-280]
+            │        ├─ SÍ → Crear usuario + perfil en Firestore
+            │        │        [FirebaseAuthViewModel.kt]
+            │        │        ↓
+            │        │       Navegar a MAIN_TABS
+            │        │
+            │        └─ NO → Guardar payload en SharedPreferences
+            │                 [PendingOnboardingStore.kt : 18-44]
+            │                 ↓
+            │                Programar WorkManager
+            │                 [OnboardingScreen.kt]
+            │                 ↓
+            │                Mostrar mensaje "Pendiente"
+            │                 ↓
+            │                Cuando vuelve red:
+            │                OnboardingSyncWorker sincroniza
+            │                [OnboardingSyncWorker.kt : 32-55]
+            │
+            └─ NO → Usuario completado, mostrar MAIN_TABS
+                    [MainActivity.kt : 141-157]
+                    (no puede acceder a onboarding otra vez)
+```
+
+### 2) Flujo: Crear Open Match
+
+```
+Usuario en PlayScreen
+    ↓
+¿Click en FAB "Create Match"?
+    [PlayScreen.kt : 413-449]
+    ↓
+¿FirebaseAuth.currentUser?.uid existe?
+    [FirestorePlayViewModel.kt : 574-594]
+    ├─ NO → Mostrar error "User not authenticated"
+    │        ↓
+    │       Bloquear acceso
+    │
+    └─ SÍ → Abrir CreateEventDialog (PROTEGIDA)
+            [PlayScreen.kt : 413-449]
+            ↓
+        ¿Llena formulario y presiona "Create"?
+            ↓
+        ¿Está online?
+            [FirestorePlayViewModel.kt : 574-637]
+            ├─ SÍ → Crear evento en Firestore directamente
+            │        [FirestorePlayViewModel.kt : 602-637]
+            │        ↓
+            │       Mostrar confirmación
+            │
+            └─ NO → Guardar en PendingOpenMatchStore (SharedPreferences)
+                    [FirestorePlayViewModel.kt : 609-637]
+                    ↓
+                   Programar OpenMatchSyncWorker
+                    ↓
+                   Mostrar "Pending - will sync when online"
+                    ↓
+                   Cuando vuelve red:
+                   OpenMatchSyncWorker crea evento + membresía
+                   [OpenMatchSyncWorker.kt : 50-67]
+```
+
+### 3) Flujo: Ver Comunidades y Membresía
+
+```
+Usuario en CommunitiesMainScreen
+    ↓
+LoadMembershipIds(userId) → Cargar set de community IDs
+    [FirestoreCommunitiesViewModel.kt : 325-368]
+    ↓
+Mostrar lista de comunidades
+    [CommunitiesMainScreen.kt : 53-117]
+    ├─ Pestaña "Mine": 
+    │   Mostrar comunidades donde: ownerId == userId || myCommunityIds.contains(id)
+    │   [CommunitiesMainScreen.kt : 72-73]
+    │
+    └─ Pestaña "Others":
+        Mostrar comunidades donde: ownerId != userId && !myCommunityIds.contains(id)
+        [CommunitiesMainScreen.kt : 72-73]
+
+Usuario hace clic en comunidad
+    ↓
+¿Community detail se abre?
+    [CommunityDetailModal.kt : 170-172]
+    ↓
+Verificar membresía en CommunityDetailModal
+    ↓
+userMembership = members.find { it.userId == currentUserId }
+    [CommunityDetailModal.kt : 170-172]
+    ↓
+¿userMembership != null?
+    ├─ SÍ (Es miembro) →  Mostrar canales y mensajes (ACCESO PERMITIDO)
+    │                      [CommunityDetailModal.kt : 170-172]
+    │
+    └─ NO (No es miembro) →  Mostrar botón "Join Community"
+                              [CommunityDetailModal.kt : 170-172]
+                              ↓
+                             ¿Click en "Join"?
+                              ├─ NO → Sigue viendo comunidad pero sin canales
+                              │
+                              └─ SÍ → ¿Está online?
+                                      [FirestoreCommunitiesViewModel.kt : 325-368]
+                                      ├─ NO → Error "Cannot join while offline"
+                                      │
+                                      └─ SÍ → db.runTransaction {
+                                              ├─ Verificar: !existingMember.exists()
+                                              ├─ Crear: communities/{id}/members/{userId}
+                                              ├─ Crear: users/{userId}/memberships/{communityId}
+                                              └─ Actualizar: _myCommunityIds.value += communityId
+                                             }
+                                              [FirestoreCommunitiesViewModel.kt : 325-368]
+                                              ↓
+                                             ¿Transaction exitosa?
+                                              ├─ SÍ → Mostrar canales (ACCESO PERMITIDO)
+                                              └─ NO → Mostrar error, bloquear acceso
+```
+
+### 4) Flujo: Mensajes de Canales en Cola
+
+```
+Usuario miembro de comunidad en ChannelScreen
+    ↓
+¿Escribe mensaje y presiona "Send"?
+    ↓
+¿Está online?
+    [FirestoreCommunitiesViewModel.kt : 828-829]
+    ├─ SÍ (Online) → Crear mensaje en Firestore
+    │                 ├─ communities/{communityId}/channels/{channelId}/messages/{messageId}
+    │                 ├─ [FirestoreCommunitiesViewModel.kt : 828-829]
+    │                 └─ Mostrar mensaje como SENT
+    │
+    └─ NO (Offline) → Guardar en Room: PendingMessageEntity
+                      ├─ localId, communityId, channelId, authorId, content
+                      ├─ [CommunitiesCacheEntities.kt : 145-153]
+                      ├─ [CommunitiesCacheDao.kt : 104-106]
+                      ├─ Mostrar mensaje como PENDING en UI
+                      └─ Programar MessageSyncWorker
+                         [FirestoreCommunitiesViewModel.kt : 828-829]
+                         ↓
+                        Cuando vuelve red:
+                         ├─ getPendingMessages() desde Room
+                         │  [MessageSyncWorker.kt : 25-31]
+                         ├─ Para cada pendiente:
+                         │   ├─ db.runTransaction {
+                         │   │   ├─ set(message)
+                         │   │   └─ update(messageCount++)
+                         │   │  }
+                         │   │  [MessageSyncWorker.kt : 35-50]
+                         │   ├─ deletePendingMessage(localId)
+                         │   │  [MessageSyncWorker.kt : 52-54]
+                         │   └─ Mostrar como SENT
+                         └─ Si alguno falla:
+                             └─ Result.retry() → WorkManager reintenta
+                                [MessageSyncWorker.kt : 67]
+```
+
+### Resumen: Capas de Protección
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    5 CAPAS DE PROTECCIÓN                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│ 1. ROUTING (Navigation)                                    │
+│    └─ Solo accedes a OnboardingScreen si isNewUser=true   │
+│       [MainActivity.kt : 141-157]                          │
+│       [AppNavigation.kt]                                   │
+│                                                             │
+│ 2. VIEWMODEL (Business Logic)                             │
+│    └─ Validar FirebaseAuth.currentUser?.uid               │
+│       [FirestorePlayViewModel.kt : 574-594]               │
+│       [FirestoreCommunitiesViewModel.kt : 325-368]        │
+│    └─ Validar StateFlow<Set<String>> para membresía       │
+│       [FirestoreCommunitiesViewModel.kt : 325-368]        │
+│    └─ Validar _isOnline antes de crear transacciones      │
+│       [FirestoreCommunitiesViewModel.kt : 828-829]        │
+│                                                             │
+│ 3. COMPOSABLE (UI State)                                  │
+│    └─ Mostrar/ocultar botones según StateFlow             │
+│       [CommunitiesMainScreen.kt : 53-117]                 │
+│    └─ "Join" aparece solo si !userAlreadyMember           │
+│       [CommunityDetailModal.kt : 170-172]                 │
+│    └─ Canales se muestran solo si isMember                │
+│       [CommunityDetailModal.kt : 170-172]                 │
+│                                                             │
+│ 4. LOCAL DATABASE (Room)                                  │
+│    └─ PendingMessageEntity, PendingOnboardingStore        │
+│       [CommunitiesCacheEntities.kt : 145-153]             │
+│       [PendingOnboardingStore.kt : 18-44]                 │
+│    └─ Cola offline: solo se borra si Firestore confirma   │
+│       [MessageSyncWorker.kt : 52-54]                      │
+│       [OnboardingSyncWorker.kt : 32-55]                   │
+│                                                             │
+│ 5. FIRESTORE (Remote Authority)                           │
+│    └─ Transacciones atómicas para evitar duplicados       │
+│       [FirestoreCommunitiesViewModel.kt : 325-368]        │
+│       [MessageSyncWorker.kt : 35-50]                      │
+│    └─ Rules validan: solo miembros ven canales            │
+│    └─ Fuente de verdad final                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Archivos importantes y líneas
 
 ### 1) Formulario de Onboarding
