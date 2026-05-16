@@ -120,25 +120,20 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
 
     init {
         // A: corrutina con dispatcher.
-        // Se carga cache de Room en IO para no bloquear el hilo principal.
         viewModelScope.launch(Dispatchers.IO) {
             val cached = cacheDao.getCachedCommunities().map { it.toModel() }
-            // separacion IO/Main. La actualizacion de estado para UI se hace en Main.
             withContext(Dispatchers.Main) {
                 if (cached.isNotEmpty()) _communities.value = cached
             }
         }
 
-        // Monitor network connectivity
         viewModelScope.launch(Dispatchers.IO) {
             application.observeConnectivityAsFlow().collect { isConnected ->
                 _isOnline.value = isConnected
                 if (!isConnected) {
-                    // Store last online time when connection is lost
                     val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
                     _lastOnlineTime.value = sdf.format(Date())
                 } else {
-                    // When connection is restored, trigger sync of pending posts
                     syncPendingPosts()
                 }
             }
@@ -148,7 +143,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
     private fun syncPendingPosts() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Schedule background sync for any pending posts
                 val constraints = Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
@@ -160,7 +154,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                 WorkManager.getInstance(getApplication()).enqueue(syncRequest)
                 Log.d("FirestoreCommunities", "Scheduled sync for pending posts")
 
-                // Refresh posts to update status indicators
                 val currentCommunity = activeCommunityId
                 if (currentCommunity != null) {
                     loadCommunityDetails(currentCommunity)
@@ -213,8 +206,7 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         viewModelScope.launch {
             try {
                 val loadedCommunities = withContext(Dispatchers.IO) {
-                    // Rubrica (10): operacion de Input/Output en hilo IO.
-                    // Cache-first: si no hay datos en pantalla, mostrar cache local primero.
+                    // C: operacion de Input/Output en hilo IO.
                     if (_communities.value.isEmpty()) {
                         val cached = cacheDao.getCachedCommunities().map { it.toModel() }
                         withContext(Dispatchers.Main) {
@@ -222,7 +214,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                         }
                     }
 
-                    // Red/Firebase tambien se resuelve en IO.
                     val snapshot = db.collection("communities").get().await()
                     snapshot.documents.mapNotNull { doc ->
                         val c = doc.toObject(Community::class.java)
@@ -230,12 +221,10 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     }
                 }
 
-                // Rubrica (10): actualizacion de estado en Main (UI reactiva via StateFlow).
                 withContext(Dispatchers.Main) {
                     _communities.value = loadedCommunities
                 }
 
-                // Persistencia en background para no bloquear el render principal.
                 launch(Dispatchers.IO) {
                     cacheDao.clearCommunities()
                     cacheDao.upsertCommunities(loadedCommunities.map { it.toEntity() })
@@ -256,7 +245,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
         viewModelScope.launch {
             try {
                 // B: IO + Main.
-                // Primero recuperamos cache local en IO y luego actualizamos estado en Main.
                 val cachedPayload = withContext(Dispatchers.IO) {
                     CommunityDetailsPayload(
                         posts = cacheDao.getPostsByCommunity(communityId).map { it.toModel() },
@@ -270,8 +258,6 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     if (cachedPayload.members.isNotEmpty()) _members.value = cachedPayload.members
                 }
 
-                // multiples corrutinas anidadas usando Input/Output.
-                // Corrutina externa (viewModelScope.launch) + corrutinas internas async(IO) en paralelo.
                 val remotePayload = coroutineScope {
                     val postsDeferred = async(Dispatchers.IO) {
                         db.collection("communities").document(communityId)
@@ -311,14 +297,12 @@ class FirestoreCommunitiesViewModel(application: Application) : AndroidViewModel
                     )
                 }
 
-                // resultado remoto se publica en Main para refrescar UI.
                 withContext(Dispatchers.Main) {
                     _posts.value = remotePayload.posts
                     _channels.value = remotePayload.channels
                     _members.value = remotePayload.members
                 }
 
-                // Persistencia de datos remotos en Room en IO para cache offline.
                 launch(Dispatchers.IO) {
                     cacheDao.clearPostsByCommunity(communityId)
                     cacheDao.upsertPosts(remotePayload.posts.map { it.toEntity(communityId) })
