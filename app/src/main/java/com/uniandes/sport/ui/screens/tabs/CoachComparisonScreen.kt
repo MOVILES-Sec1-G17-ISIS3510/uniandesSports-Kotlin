@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +48,22 @@ fun CoachComparisonScreen(
     LaunchedEffect(Unit) {
         if (allCoaches.isEmpty()) {
             profesoresViewModel.fetchProfesores()
+        }
+    }
+
+    // Responsive design parameters
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val labelColumnWidth = 115.dp
+    val paddingHorizontal = 32.dp // 16.dp margin on each side of the screen
+    val availableWidth = screenWidth - labelColumnWidth - paddingHorizontal
+
+    // Calculate dynamic column width: divide available space equally if they fit, else fallback to 145.dp
+    val columnWidth = remember(comparedCoaches.size, availableWidth) {
+        if (comparedCoaches.isEmpty()) 145.dp
+        else {
+            val calculated = availableWidth / comparedCoaches.size
+            if (calculated >= 145.dp) calculated else 145.dp
         }
     }
 
@@ -104,7 +121,7 @@ fun CoachComparisonScreen(
             return@Scaffold
         }
 
-        // Metrics calculations for highlighting the best attributes
+        // Calculations to determine best-in-class metrics
         val lowestPrice = remember(comparedCoaches) {
             comparedCoaches.map { parsePrice(it.precio) }.minOrNull() ?: 99999
         }
@@ -127,14 +144,14 @@ fun CoachComparisonScreen(
                 .padding(paddingValues)
                 .verticalScroll(scrollStateVertical)
         ) {
-            // Header Info Card showing comparison status
+            // Premium Header Info Card
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -148,186 +165,216 @@ fun CoachComparisonScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Comparing ${comparedCoaches.size} coaches side-by-side. The best value in each category is highlighted.",
+                        text = "Comparing ${comparedCoaches.size} coaches. Glowing borders and badges highlight the optimal selections.",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
 
-            // Matrix Layout
-            // Left sticky labels + Right scrollable content
-            Row(
+            // Glassmorphic Comparison Matrix Container
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                ),
+                shadowElevation = 6.dp
             ) {
-                // Fixed Left Columns for Labels
-                Column(
-                    modifier = Modifier.width(110.dp)
-                ) {
-                    // Row Headers with aligned fixed heights
-                    CellHeader(height = 160.dp, label = "Coach")
-                    CellLabel(height = 56.dp, label = "Sport")
-                    CellLabel(height = 56.dp, label = "Price / hr")
-                    CellLabel(height = 56.dp, label = "Rating")
-                    CellLabel(height = 56.dp, label = "Experience")
-                    CellLabel(height = 96.dp, label = "Specialty")
-                    CellLabel(height = 56.dp, label = "Sport Rank")
-                    CellLabel(height = 56.dp, label = "Sessions")
-                    CellLabel(height = 56.dp, label = "Wins")
-                    CellLabel(height = 56.dp, label = "Verified")
-                }
-
-                // Scrollable Coach Columns
                 Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(scrollStateHorizontal)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    comparedCoaches.forEach { coach ->
-                        Column(
-                            modifier = Modifier
-                                .width(150.dp)
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
-                        ) {
-                            // Column headers: Coach photo + name + action
-                            Box(
-                                modifier = Modifier
-                                    .height(160.dp)
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
+                    // 1. Sticky Left Column (Row Headers)
+                    Column(
+                        modifier = Modifier.width(labelColumnWidth)
+                    ) {
+                        CellHeader(height = 175.dp, label = "Coaches")
+                        CellLabel(height = 56.dp, label = "Sport")
+                        CellLabel(height = 56.dp, label = "Price / hr")
+                        CellLabel(height = 56.dp, label = "Rating")
+                        CellLabel(height = 56.dp, label = "Experience")
+                        CellLabel(height = 100.dp, label = "Specialty")
+                        CellLabel(height = 56.dp, label = "Sport Rank")
+                        CellLabel(height = 56.dp, label = "Sessions")
+                        CellLabel(height = 56.dp, label = "Wins")
+                        CellLabel(height = 56.dp, label = "Verified")
+                    }
+
+                    // 2. Horizontally Scrollable Columns for the Coaches
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(scrollStateHorizontal)
+                    ) {
+                        comparedCoaches.forEach { coach ->
+                            Column(
+                                modifier = Modifier.width(columnWidth)
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(contentAlignment = Alignment.BottomEnd) {
-                                        CoachAvatar(profesor = coach, size = 56.dp)
-                                        if (coach.verified) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "Verified",
-                                                tint = Color(0xFF3B82F6),
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                // Coach Header: Profile Picture, Name and Booking Button
+                                Box(
+                                    modifier = Modifier
+                                        .height(175.dp)
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                                    Color.Transparent
+                                                )
                                             )
+                                        )
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Box(contentAlignment = Alignment.BottomEnd) {
+                                            CoachAvatar(profesor = coach, size = 60.dp)
+                                            if (coach.verified) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = "Verified",
+                                                    tint = Color(0xFF3B82F6),
+                                                    modifier = Modifier
+                                                        .size(18.dp)
+                                                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                                                        .padding(1.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = coach.nombre,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Button(
+                                            onClick = { onBookClass(coach.id) },
+                                            contentPadding = PaddingValues(horizontal = 14.dp),
+                                            modifier = Modifier.height(34.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                                contentColor = Color.White
+                                            )
+                                        ) {
+                                            Text("Book", fontSize = 11.sp, fontWeight = FontWeight.Black)
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = coach.nombre,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
-                                        onClick = { onBookClass(coach.id) },
-                                        contentPadding = PaddingValues(horizontal = 8.dp),
-                                        modifier = Modifier.height(32.dp),
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                                    ) {
-                                        Text("Book", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                // Sport Row
+                                CellContent(height = 56.dp, text = coach.deporte)
+
+                                // Price per hour (Lowest is best)
+                                val coachPriceVal = parsePrice(coach.precio)
+                                val isBestPrice = coachPriceVal == lowestPrice && lowestPrice != 99999
+                                CellContent(
+                                    height = 56.dp,
+                                    text = coach.precio,
+                                    isHighlighted = isBestPrice,
+                                    highlightBgColor = Color(0xFFE8F5E9),
+                                    highlightStrokeColor = Color(0xFF4CAF50),
+                                    textColor = if (isBestPrice) Color(0xFF1B5E20) else Color.Unspecified,
+                                    badgeText = if (isBestPrice) "Best Price" else null
+                                )
+
+                                // Rating (Highest is best)
+                                val isBestRating = coach.rating == highestRating && highestRating > 0.0
+                                CellContent(
+                                    height = 56.dp,
+                                    text = if (coach.totalReviews > 0) {
+                                        "${String.format(Locale.US, "%.1f", coach.rating)} (${coach.totalReviews})"
+                                    } else {
+                                        "New"
+                                    },
+                                    isHighlighted = isBestRating,
+                                    highlightBgColor = Color(0xFFFFFDE7),
+                                    highlightStrokeColor = Color(0xFFFFC107),
+                                    textColor = if (isBestRating) Color(0xFFE65100) else Color.Unspecified,
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            null,
+                                            tint = Color(0xFFF59E0B),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    },
+                                    badgeText = if (isBestRating) "Top Rated" else null
+                                )
+
+                                // Experience (Most experience is best)
+                                val expYears = parseExperience(coach.experiencia)
+                                val isBestExp = expYears == mostExperience && mostExperience > 0
+                                CellContent(
+                                    height = 56.dp,
+                                    text = coach.experiencia,
+                                    isHighlighted = isBestExp,
+                                    highlightBgColor = Color(0xFFE3F2FD),
+                                    highlightStrokeColor = Color(0xFF2196F3),
+                                    textColor = if (isBestExp) Color(0xFF0D47A1) else Color.Unspecified,
+                                    badgeText = if (isBestExp) "Top Exp" else null
+                                )
+
+                                // Specialty
+                                CellContent(
+                                    height = 100.dp,
+                                    text = coach.especialidad,
+                                    maxLines = 4
+                                )
+
+                                // Rank in sport (Lowest number rank is best, e.g. #1)
+                                val isBestRank = coach.rankInSport == bestRank && bestRank != 99999
+                                CellContent(
+                                    height = 56.dp,
+                                    text = "#${coach.rankInSport}",
+                                    isHighlighted = isBestRank,
+                                    highlightBgColor = Color(0xFFF3E5F5),
+                                    highlightStrokeColor = Color(0xFF9C27B0),
+                                    textColor = if (isBestRank) Color(0xFF4A148C) else Color.Unspecified,
+                                    badgeText = if (isBestRank) "Leader" else null
+                                )
+
+                                // Sessions Delivered
+                                CellContent(height = 56.dp, text = coach.sessionsDelivered.toString())
+
+                                // Tournament Wins
+                                CellContent(height = 56.dp, text = coach.tournamentWins.toString())
+
+                                // Verification status
+                                Box(
+                                    modifier = Modifier
+                                        .height(56.dp)
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (coach.verified) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Yes",
+                                            tint = Color(0xFF10B981),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "No",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                }
-                            }
-
-                            // Sport
-                            CellContent(height = 56.dp, text = coach.deporte)
-
-                            // Price per hour (lowest is best)
-                            val isBestPrice = parsePrice(coach.precio) == lowestPrice && lowestPrice != 99999
-                            CellContent(
-                                height = 56.dp,
-                                text = coach.precio,
-                                isHighlighted = isBestPrice,
-                                highlightColor = Color(0xFFE8F5E9), // Light green tint
-                                textColor = if (isBestPrice) Color(0xFF2E7D32) else Color.Unspecified,
-                                badgeText = if (isBestPrice) "Best Value" else null
-                            )
-
-                            // Rating (highest is best)
-                            val isBestRating = coach.rating == highestRating && highestRating > 0.0
-                            CellContent(
-                                height = 56.dp,
-                                text = if (coach.totalReviews > 0) {
-                                    "${String.format(Locale.US, "%.1f", coach.rating)} (${coach.totalReviews})"
-                                } else {
-                                    "New"
-                                },
-                                isHighlighted = isBestRating,
-                                highlightColor = Color(0xFFFFFDE7), // Light yellow tint
-                                textColor = if (isBestRating) Color(0xFFF57F17) else Color.Unspecified,
-                                icon = {
-                                    Icon(
-                                        Icons.Default.Star,
-                                        null,
-                                        tint = Color(0xFFFBBF24),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            )
-
-                            // Experience (highest is best)
-                            val expYears = parseExperience(coach.experiencia)
-                            val isBestExp = expYears == mostExperience && mostExperience > 0
-                            CellContent(
-                                height = 56.dp,
-                                text = coach.experiencia,
-                                isHighlighted = isBestExp,
-                                highlightColor = Color(0xFFECEFF1), // Subtle gray highlight
-                                textColor = if (isBestExp) MaterialTheme.colorScheme.primary else Color.Unspecified
-                            )
-
-                            // Specialty
-                            CellContent(
-                                height = 96.dp,
-                                text = coach.especialidad,
-                                maxLines = 4
-                            )
-
-                            // Rank in sport (lowest number is best, e.g. #1)
-                            val isBestRank = coach.rankInSport == bestRank && bestRank != 99999
-                            CellContent(
-                                height = 56.dp,
-                                text = "#${coach.rankInSport}",
-                                isHighlighted = isBestRank,
-                                highlightColor = Color(0xFFEDE7F6), // Light purple highlight
-                                textColor = if (isBestRank) Color(0xFF673AB7) else Color.Unspecified
-                            )
-
-                            // Sessions
-                            CellContent(height = 56.dp, text = coach.sessionsDelivered.toString())
-
-                            // Wins
-                            CellContent(height = 56.dp, text = coach.tournamentWins.toString())
-
-                            // Verified Status
-                            Box(
-                                modifier = Modifier
-                                    .height(56.dp)
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (coach.verified) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Yes",
-                                        tint = Color(0xFF10B981),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                } else {
-                                    Text("No", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -338,7 +385,7 @@ fun CoachComparisonScreen(
     }
 }
 
-// Helper Cell components to ensure rows align properly
+// Aligned Table cells components
 
 @Composable
 fun CellHeader(height: androidx.compose.ui.unit.Dp, label: String) {
@@ -347,6 +394,7 @@ fun CellHeader(height: androidx.compose.ui.unit.Dp, label: String) {
             .height(height)
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             .padding(12.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -366,7 +414,7 @@ fun CellLabel(height: androidx.compose.ui.unit.Dp, label: String) {
         modifier = Modifier
             .height(height)
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f))
             .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.CenterStart
@@ -385,14 +433,21 @@ fun CellContent(
     height: androidx.compose.ui.unit.Dp,
     text: String,
     isHighlighted: Boolean = false,
-    highlightColor: Color = Color.Transparent,
+    highlightBgColor: Color = Color.Transparent,
+    highlightStrokeColor: Color = Color.Transparent,
     textColor: Color = Color.Unspecified,
     badgeText: String? = null,
     icon: @Composable (() -> Unit)? = null,
     maxLines: Int = 1
 ) {
-    val bgModifier = if (isHighlighted) {
-        Modifier.background(highlightColor)
+    val borderStroke = if (isHighlighted && highlightStrokeColor != Color.Transparent) {
+        androidx.compose.foundation.BorderStroke(1.5.dp, highlightStrokeColor)
+    } else {
+        androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    }
+
+    val bgModifier = if (isHighlighted && highlightBgColor != Color.Transparent) {
+        Modifier.background(highlightBgColor)
     } else {
         Modifier.background(MaterialTheme.colorScheme.surface)
     }
@@ -401,9 +456,9 @@ fun CellContent(
         modifier = Modifier
             .height(height)
             .fillMaxWidth()
-            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            .border(borderStroke)
             .then(bgModifier)
-            .padding(8.dp),
+            .padding(6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -420,7 +475,7 @@ fun CellContent(
                 }
                 Text(
                     text = text,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
                     color = textColor,
                     textAlign = TextAlign.Center,
@@ -432,23 +487,21 @@ fun CellContent(
                 Spacer(modifier = Modifier.height(2.dp))
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFF2E7D32),
-                    modifier = Modifier.height(14.dp)
+                    color = highlightStrokeColor,
+                    modifier = Modifier.height(13.dp)
                 ) {
                     Text(
                         text = badgeText.uppercase(),
                         color = Color.White,
-                        fontSize = 8.sp,
+                        fontSize = 7.sp,
                         fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
                     )
                 }
             }
         }
     }
 }
-
-// Utility functions to parse text metrics
 
 private fun parsePrice(priceStr: String): Int {
     return priceStr.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 99999
