@@ -15,4 +15,6 @@ sealed class Screen(val route: String) {
     object CoachDashboard : Screen("coach_dashboard/{profesorId}")
     object BookClass : Screen("book_class/{profesorId}")
     object CoachProfile : Screen("coach_profile/{profesorId}")
+    object CoachComparison : Screen("coach_comparison/{coachIds}")
 }
+

@@ -89,6 +89,8 @@ fun ProfesoresScreen(
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
+    var selectedCoachesForComparison by remember { mutableStateOf<Set<String>>(emptySet()) }
+
 
     val smartInsights by bookClassViewModel.smartCoachInsights.collectAsState()
     val userBookings by bookClassViewModel.userBookings.collectAsState()
@@ -489,6 +491,20 @@ fun ProfesoresScreen(
                                     onlyFavorites = false
                                 }
                             },
+                            isSelectedForComparison = selectedCoachesForComparison.contains(prof.id),
+                            onToggleComparison = {
+                                val isSelected = selectedCoachesForComparison.contains(prof.id)
+                                selectedCoachesForComparison = if (isSelected) {
+                                    selectedCoachesForComparison - prof.id
+                                } else {
+                                    if (selectedCoachesForComparison.size >= 3) {
+                                        android.widget.Toast.makeText(context, "You can compare up to 3 coaches.", android.widget.Toast.LENGTH_SHORT).show()
+                                        selectedCoachesForComparison
+                                    } else {
+                                        selectedCoachesForComparison + prof.id
+                                    }
+                                }
+                            },
                             onViewProfile = {
                                 ProfesoresKeyValueStore.saveLastOpenedProfesorId(context, prof.id)
                                 onNavigate(Screen.CoachProfile.route.replace("{profesorId}", prof.id))
@@ -578,7 +594,54 @@ fun ProfesoresScreen(
                     tint = Color.White
                 )
             }
+
+            if (selectedCoachesForComparison.size >= 2) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 90.dp, start = 24.dp, end = 24.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Compare Coaches",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "${selectedCoachesForComparison.size} selected (Max 3)",
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val coachIdsJoined = selectedCoachesForComparison.joinToString(",")
+                                onNavigate(Screen.CoachComparison.route.replace("{coachIds}", coachIdsJoined))
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.onPrimary,
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Compare Now", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
         }
+
 
 
 
@@ -744,6 +807,8 @@ fun CoachCard(
     showQuickContact: Boolean = true,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
+    isSelectedForComparison: Boolean = false,
+    onToggleComparison: () -> Unit = {},
     onViewProfile: () -> Unit
 ) {
     val context = LocalContext.current
@@ -835,14 +900,25 @@ fun CoachCard(
                         Text(text = "${profesor.totalReviews} reviews", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = if (isFavorite) "Remove favorite coach" else "Save favorite coach",
-                        tint = if (isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (isFavorite) "Remove favorite coach" else "Save favorite coach",
+                            tint = if (isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onToggleComparison) {
+                        Icon(
+                            imageVector = if (isSelectedForComparison) Icons.Default.CheckCircle else Icons.Default.Compare,
+                            contentDescription = "Compare coach",
+                            tint = if (isSelectedForComparison) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
+
 
             Spacer(modifier = Modifier.height(16.dp))
 

@@ -185,6 +185,23 @@ fun AppNavigation(
                 onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) }
             )
         }
+
+        composable(
+            route = Screen.CoachComparison.route,
+            arguments = listOf(androidx.navigation.navArgument("coachIds") { 
+                type = androidx.navigation.NavType.StringType 
+            })
+        ) { backStackEntry ->
+            val coachIds = backStackEntry.arguments?.getString("coachIds") ?: ""
+            val profesoresViewModel: FirestoreProfesoresViewModel = viewModel()
+            CoachComparisonScreen(
+                coachIds = coachIds,
+                profesoresViewModel = profesoresViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) }
+            )
+        }
+
     }
 }
 
