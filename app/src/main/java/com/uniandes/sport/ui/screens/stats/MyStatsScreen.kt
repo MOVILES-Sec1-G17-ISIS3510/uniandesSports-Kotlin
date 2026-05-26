@@ -78,33 +78,7 @@ fun MyStatsScreen(
             )
         }
     ) { paddingValues ->
-        // FEATURE: Manejo de usuarios nuevos sin datos
-        if (stats == null) {
-            // Usuario nuevo o sin datos
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = " Not enough data to display your statistics",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                Text(
-                    text = "Participate in events, upload posts in the community, and run to see your statistics here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-            return@Scaffold
-        }
-
-        // Usuario tiene datos, mostrar contenido completo
+        // Mostrar siempre los campos, incluso si están vacíos
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -116,7 +90,7 @@ fun MyStatsScreen(
                 SyncStatusBar(
                     isOnline = true, // TODO: Conectar con ConnectivityObserver
                     syncStatus = syncStatus,
-                    lastSyncTime = stats?.lastSyncAt,
+                    lastSyncTime = stats.lastSyncAt,
                     onSync = { viewModel.refreshStats(forceSync = true) },
                     isLoading = isLoading
                 )
@@ -136,7 +110,7 @@ fun MyStatsScreen(
                     )
                     
                     Text(
-                        text = "LEVEL ${stats?.level ?: 1} ⭐ • ${stats?.points ?: 0} points",
+                        text = "LEVEL ${stats.level} ⭐ • ${stats.points} points",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -156,7 +130,7 @@ fun MyStatsScreen(
                     )
                     
                     Text(
-                        text = "Events: ${stats?.totalEvents ?: 0} • Posts: ${stats?.totalPosts ?: 0} • Km: ${String.format("%.1f", stats?.totalKm ?: 0f)}",
+                        text = "Events: ${stats.totalEvents} • Posts: ${stats.totalPosts} • Km: ${String.format("%.1f", stats.totalKm)}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
