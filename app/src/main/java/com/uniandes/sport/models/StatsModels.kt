@@ -18,16 +18,25 @@ data class RunDataPoint(
 )
 
 /**
- * A challenge the user is actively participating in,
- * with their personal progress in the 0–100 scale.
+ * Summary counts for challenges the user has participated in.
+ * total = completed + inProgress (always).
  */
-data class ActiveChallengeData(
+data class ChallengeStats(
+    val total: Int,       // all challenges joined regardless of progress
+    val completed: Int,   // progressByUser[uid] >= 100
+    val inProgress: Int   // progressByUser[uid] < 100 (or 0 = not started)
+)
+
+/**
+ * A single open-match / event the user has joined.
+ * Shown in the "My Events" section as scrollable cards.
+ */
+data class EventSummary(
     val id: String,
     val title: String,
     val sport: String,
-    val goalLabel: String,
-    val userProgress: Double,   // 0–100 (same scale as Reto.progressByUser)
-    val endDate: Long? = null   // nullable: some challenges have no end date
+    val status: String,
+    val scheduledAt: Long? = null
 )
 
 /** How many events a user has joined, broken down by sport. */
