@@ -1,5 +1,6 @@
 package com.uniandes.sport.viewmodels.stats
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.uniandes.sport.data.cache.BadgeArrayMapCache
@@ -102,8 +103,11 @@ class MyStatsViewModel(
      * Cada launch es una coroutine que observa Repository
      */
     init {
+        Log.d("📊 MYSTATS:", "🎯 MyStatsViewModel INIT for userId: $userId")
+        
         viewModelScope.launch {
             repository.getStats(userId).collect { stats ->
+                Log.d("📊 MYSTATS:", "📥 ViewModel received stats: events=${stats.totalEvents} posts=${stats.totalPosts} km=${stats.totalKm} level=${stats.level}")
                 _stats.value = stats
                 _isLoading.value = false
             }
@@ -111,12 +115,14 @@ class MyStatsViewModel(
 
         viewModelScope.launch {
             repository.getBadges(userId).collect { badgeList ->
+                Log.d("📊 MYSTATS:", "📥 ViewModel received ${badgeList.size} badges")
                 _badges.value = badgeList
             }
         }
 
         viewModelScope.launch {
             repository.getSyncStatus().collect { status ->
+                Log.d("📊 MYSTATS:", "🔄 ViewModel sync status: $status")
                 _syncStatus.value = status
                 _isLoading.value = status == "SYNCING"
             }

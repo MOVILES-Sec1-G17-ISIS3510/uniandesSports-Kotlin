@@ -1,5 +1,6 @@
 package com.uniandes.sport.ui.screens.stats
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,6 +66,8 @@ fun MyStatsScreen(
     val badges by viewModel.badges.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    
+    Log.d("📊 MYSTATS:", "🖼️ MyStatsScreen RENDER: stats=${stats.totalEvents}/${stats.totalPosts}/${stats.totalKm} | syncStatus=$syncStatus | isLoading=$isLoading")
 
     Scaffold(
         topBar = {

@@ -61,42 +61,58 @@ class MyStatsRepository(
         userId: String,
         forceRefresh: Boolean
     ): Flow<UserStatsEntity> = flow {
+        Log.d("📊 MYSTATS:", "🚀 START getStats() for userId: $userId | forceRefresh: $forceRefresh")
+        
         // Paso 1: Obtener datos del Room Database (caché persistente)
-        var stats = statsDatabase.userStatsDao().getStats(userId).run {
+        Log.d("📊 MYSTATS:", "📍 Attempting to collect from Room DAO...")
+        val cachedStats: UserStatsEntity? = try {
+            // Recopilar datos del Room de forma síncrona dentro del flow
             var result: UserStatsEntity? = null
-            collect { result = it }
+            statsDatabase.userStatsDao().getStats(userId).collect { roomResult ->
+                Log.d("📊 MYSTATS:", "📍 Room DAO emitted data: $roomResult")
+                result = roomResult
+            }
+            Log.d("📊 MYSTATS:", "✓ Finished collecting from Room. stats=$result")
             result
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "❌ Error collecting from Room: ${e.message}")
+            null
         }
 
-        if (stats != null) {
-            Log.i("MyStatsRepository", " Emitting from Room Cache (50ms)")
-            emit(stats)
+        if (cachedStats != null) {
+            Log.d("📊 MYSTATS:", "💾 From Room Cache: events=${cachedStats.totalEvents} posts=${cachedStats.totalPosts} km=${cachedStats.totalKm} hasRealData=${cachedStats.hasRealData}")
+            emit(cachedStats)
 
             // Si data es fresca (TTL válido), no sincronizar
-            if (!forceRefresh && System.currentTimeMillis() - (stats.lastSyncAt
+            if (!forceRefresh && System.currentTimeMillis() - (cachedStats.lastSyncAt
                     ?: 0) < 15 * 60 * 1000
             ) {
+                Log.d("📊 MYSTATS:", "✅ Room cache is fresh (TTL valid), returning without Firestore sync")
                 return@flow // Room data es fresca, no sincronizar
             }
+        } else {
+            Log.d("📊 MYSTATS:", "⚠️ Room returned null, will fetch from Firestore")
         }
 
         // Paso 2: Sincronizar desde Firestore si es necesario
+        Log.d("📊 MYSTATS:", "🔄 About to enter Firestore sync block...")
         try {
             _syncStatus.value = "SYNCING"
+            Log.d("📊 MYSTATS:", "🔄 SYNCING from Firestore...")
 
             // FEATURE: Multi-threading (Requisito a)
             // Fetch desde Firestore subcollections sin bloquear UI
-            val newStats = fetchFromFirestoreSubcollections(userId, stats)
+            val newStats = fetchFromFirestoreSubcollections(userId, cachedStats)
 
             if (newStats != null) {
                 // Paso 3: Guardar en Room Database
                 statsDatabase.userStatsDao().insertStats(newStats)
 
-                Log.i("MyStatsRepository", " Emitting from Firestore (after sync)")
+                Log.d("📊 MYSTATS:", "✅ From Firestore Sync: events=${newStats.totalEvents} posts=${newStats.totalPosts} km=${newStats.totalKm} hasRealData=${newStats.hasRealData}")
                 emit(newStats)
             } else {
                 // Usuario nuevo sin datos - emitir entidad con valores por defecto
-                Log.i("MyStatsRepository", " New user, no data yet")
+                Log.d("📊 MYSTATS:", "ℹ️ No data found in Firestore - new user, emitting empty stats")
                 val emptyStats = UserStatsEntity(
                     userId = userId,
                     totalKm = 0f,
@@ -110,6 +126,7 @@ class MyStatsRepository(
                     syncStatus = "IDLE",
                     hasRealData = false
                 )
+                Log.d("📊 MYSTATS:", "📤 EMITTING empty stats for new user")
                 emit(emptyStats)
             }
 
@@ -117,15 +134,17 @@ class MyStatsRepository(
 
         } catch (e: Exception) {
             // Paso 4: Error handling
-            Log.e("MyStatsRepository", " Error syncing stats", e)
+            Log.e("📊 MYSTATS:", "❌ EXCEPTION in getStats: ${e.message}", e)
             _syncStatus.value = "ERROR"
 
             // FEATURE: Eventual Connectivity (Requisito d)
             // Re-emitir caché como fallback, no dejar app rota
-            if (stats != null) {
-                emit(stats)
-            } else {
+            cachedStats?.let { fallbackStats ->
+                Log.d("📊 MYSTATS:", "📤 EMITTING fallback from cache after error")
+                emit(fallbackStats)
+            } ?: run {
                 // Usuario nuevo, emitir entidad vacía
+                Log.d("📊 MYSTATS:", "📤 EMITTING empty stats after error (no cache available)")
                 emit(UserStatsEntity(
                     userId = userId,
                     totalKm = 0f,
@@ -184,9 +203,9 @@ class MyStatsRepository(
      * Calcula estadísticas reales buscando en Firestore directamente
      * 
      * ESTRATEGIA:
-     * 1. Buscar en users/{userId}/events (open matches)
-     * 2. Buscar en users/{userId}/posts (mensajes en comunidades)
-     * 3. Buscar en users/{userId}/runs (corridas)
+     * 1. Buscar en db.collection("events") donde members incluya userId (open matches)
+     * 2. Buscar en todas las comunidades → collection("posts") donde author == userId
+     * 3. Buscar en users/{userId}/runs (corridas - ruta correcta)
      * 4. Agregar datos y calcular level + points
      * 
      * IMPORTANTE: Esta función es suspend (no blocking)
@@ -194,36 +213,93 @@ class MyStatsRepository(
      */
     private suspend fun calculateRealStats(userId: String): UserStatsEntity? {
         return try {
+            Log.d("📊 MYSTATS:", "📍 calculateRealStats() START for userId: $userId")
             val db = FirebaseFirestore.getInstance()
             
-            // 1. Contar eventos en users/{userId}/events
-            val eventsSnapshot = db.collection("users").document(userId)
-                .collection("events").get().await()
-            val totalEvents = eventsSnapshot.size()
+            // 1. Contar eventos donde el usuario es miembro
+            // Ruta: db.collection("events") → {eventId} → collection("members") → {userId}
+            // OPTIMIZADO: Una sola query para obtener todos los eventos
+            var totalEvents = 0
+            try {
+                val eventsSnapshot = db.collection("events")
+                    .get().await()
+                
+                Log.d("📊 MYSTATS:", "📋 Checking ${eventsSnapshot.size()} total events for membership of $userId")
+                
+                // Filtrar eventos donde userId es miembro (paralelizable en Firestore v9+)
+                val eventIds = eventsSnapshot.documents
+                    .mapNotNull { it.id }
+                
+                // Hacer lookup eficiente: obtener todos los miembros en batch si es posible
+                // Alternativa: hacer una sola query por cada evento (N+1 pero necesario sin indexes)
+                for (eventId in eventIds) {
+                    try {
+                        val memberDoc = db.collection("events")
+                            .document(eventId)
+                            .collection("members")
+                            .document(userId)
+                            .get()
+                            .await()
+                        
+                        if (memberDoc.exists()) {
+                            totalEvents++
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MyStatsRepository", "Error checking event membership for $eventId: ${e.message}")
+                    }
+                }
+                
+                Log.d("📊 MYSTATS:", "🎯 EVENTS TOTAL: $totalEvents events where user is member")
+            } catch (e: Exception) {
+                Log.e("📊 MYSTATS:", "❌ Error counting events: ${e.message}")
+                totalEvents = 0
+            }
             
-            Log.i("MyStatsRepository", "Found $totalEvents events for user: $userId")
-            
-            // 2. Contar posts en users/{userId}/posts
-            val postsSnapshot = db.collection("users").document(userId)
-                .collection("posts").get().await()
-            val totalPosts = postsSnapshot.size()
-            
-            Log.i("MyStatsRepository", "Found $totalPosts posts for user: $userId")
+            // 2. Contar posts en comunidades donde author == userId
+            // Ruta: db.collection("communities") → {communityId} → collection("posts")
+            var totalPosts = 0
+            try {
+                Log.d("📊 MYSTATS:", "📋 Searching posts in communities...")
+                val communitiesSnapshot = db.collection("communities").get().await()
+                Log.d("📊 MYSTATS:", "📋 Found ${communitiesSnapshot.size()} communities")
+                
+                for (communityDoc in communitiesSnapshot.documents) {
+                    val postsSnapshot = communityDoc.reference
+                        .collection("posts")
+                        .whereEqualTo("author", userId)
+                        .get()
+                        .await()
+                    if (postsSnapshot.size() > 0) {
+                        Log.d("📊 MYSTATS:", "✓ Found ${postsSnapshot.size()} posts in community: ${communityDoc.id}")
+                    }
+                    totalPosts += postsSnapshot.size()
+                }
+                
+                Log.d("📊 MYSTATS:", "🎯 POSTS TOTAL: $totalPosts posts for user: $userId")
+            } catch (e: Exception) {
+                Log.e("📊 MYSTATS:", "❌ Error counting posts: ${e.message}")
+                totalPosts = 0
+            }
             
             // 3. Sumar km en users/{userId}/runs
             var totalKm = 0f
             try {
+                Log.d("📊 MYSTATS:", "📋 Searching runs at users/$userId/runs...")
                 val runsSnapshot = db.collection("users").document(userId)
                     .collection("runs").get().await()
                 
+                Log.d("📊 MYSTATS:", "📋 Found ${runsSnapshot.size()} runs")
+                
                 totalKm = runsSnapshot.documents.fold(0f) { acc, doc ->
                     val distance = doc.getDouble("distanceKm") ?: 0.0
+                    val runId = doc.id
+                    Log.d("📊 MYSTATS:", "✓ Run $runId: ${String.format("%.2f", distance)}km")
                     acc + distance.toFloat()
                 }
                 
-                Log.i("MyStatsRepository", "Calculated $totalKm km for user: $userId")
+                Log.d("📊 MYSTATS:", "🎯 RUNS TOTAL: $totalKm km for user: $userId")
             } catch (e: Exception) {
-                Log.w("MyStatsRepository", "Error fetching runs: ${e.message}")
+                Log.e("📊 MYSTATS:", "❌ Error fetching runs: ${e.message}")
                 totalKm = 0f
             }
             
@@ -237,7 +313,7 @@ class MyStatsRepository(
             // 5. Calcular streak
             val streakDays = calculateStreakDays(userId)
             
-            UserStatsEntity(
+            val result = UserStatsEntity(
                 userId = userId,
                 totalKm = totalKm,
                 totalEvents = totalEvents,
@@ -250,8 +326,10 @@ class MyStatsRepository(
                 syncStatus = "IDLE",
                 hasRealData = true
             )
+            Log.d("📊 MYSTATS:", "✅ RESULT: level=$level points=$points streak=$streakDays (events=$totalEvents, posts=$totalPosts, km=$totalKm)")
+            result
         } catch (e: Exception) {
-            Log.e("MyStatsRepository", "Error in calculateRealStats: ${e.message}", e)
+            Log.e("📊 MYSTATS:", "❌ ERROR in calculateRealStats: ${e.message}", e)
             null
         }
     }
