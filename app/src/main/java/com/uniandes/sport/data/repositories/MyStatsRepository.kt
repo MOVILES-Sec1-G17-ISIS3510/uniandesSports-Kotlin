@@ -4,17 +4,13 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.uniandes.sport.data.cache.BadgeArrayMapCache
 import com.uniandes.sport.data.database.StatsDatabase
-import com.uniandes.sport.data.entities.ActivityLogEntity
 import com.uniandes.sport.data.entities.BadgeEntity
 import com.uniandes.sport.data.entities.UserStatsEntity
-import com.uniandes.sport.viewmodels.communities.CommunitiesViewModelInterface
-import com.uniandes.sport.viewmodels.play.PlayViewModelInterface
-import com.uniandes.sport.viewmodels.running.FirestoreRunningViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -27,522 +23,402 @@ interface MyStatsRepositoryInterface {
 }
 
 /**
- * MyStatsRepository — Implementación con cache-first strategy.
- * 
- * FEATURES IMPLEMENTADOS:
- * a) Multi-threading (Requisito a): Coroutines en IO dispatcher
- * c) Caching (Requisito c): Room (50ms) + StateFlow + ArrayMap
- * d) Eventual Connectivity (Requisito d): SyncStatus + fallback
- * 
- * @author Juan Felipe Hernández
- * @since 26-may-2026
+ * MyStatsRepository — Cache-first strategy.
+ *
+ * BUGS CORREGIDOS:
+ *  1. collect {} en Flow de Room nunca terminaba → reemplazado por firstOrNull()
+ *  2. runBlocking { Flow.collect {} } en calculateStreakDays → ahora suspend + firstOrNull()
+ *  3. Posts query usaba userId pero Firestore guarda displayName → ahora fetchea fullName primero
+ *  4. Badges nunca se calculaban ni guardaban → nuevo computeAndSaveBadges()
+ *  5. getBadges() ahora retorna el flow reactivo de Room para que se actualice al insertar badges
  */
 class MyStatsRepository(
     private val statsDatabase: StatsDatabase,
-    private val badgeArrayMapCache: BadgeArrayMapCache = BadgeArrayMapCache(),
-    private val playViewModel: PlayViewModelInterface? = null,
-    private val communitiesViewModel: CommunitiesViewModelInterface? = null,
-    private val runningViewModel: FirestoreRunningViewModel? = null
+    private val badgeArrayMapCache: BadgeArrayMapCache = BadgeArrayMapCache()
 ) : MyStatsRepositoryInterface {
 
-    private val _syncStatus = MutableStateFlow<String>("IDLE")
+    private val _syncStatus = MutableStateFlow("IDLE")
 
     override fun getSyncStatus(): Flow<String> = _syncStatus.asStateFlow()
 
+    // ─── getStats ─────────────────────────────────────────────────────────────
+
     /**
-     * GET STATS con cache-first strategy
-     * 
-     * FLUJO:
-     * 1. Room Database (50ms) → Si existe
-     * 2. Firestore Sync (500ms) → Si forceRefresh o TTL expiró
-     * 3. Error Handling → Re-emitir caché como fallback
+     * Emite datos cacheados de Room primero (si existen), luego sincroniza con
+     * Firestore y emite datos frescos. El flow completa después de la segunda emisión.
+     *
+     * BUG CORREGIDO: antes usaba .collect{} sobre el Room Flow (infinito) que
+     * bloqueaba para siempre. Ahora usa .firstOrNull() que toma el primer valor
+     * y cancela la suscripción inmediatamente.
      */
-    override fun getStats(
-        userId: String,
-        forceRefresh: Boolean
-    ): Flow<UserStatsEntity> = flow {
-        Log.d("📊 MYSTATS:", "🚀 START getStats() for userId: $userId | forceRefresh: $forceRefresh")
-        
-        // Paso 1: Obtener datos del Room Database (caché persistente)
-        Log.d("📊 MYSTATS:", "📍 Attempting to collect from Room DAO...")
+    override fun getStats(userId: String, forceRefresh: Boolean): Flow<UserStatsEntity> = flow {
+        if (userId.isBlank()) {
+            Log.w("📊 MYSTATS:", "userId vacío, abortando")
+            emit(emptyStats(userId))
+            return@flow
+        }
+
+        Log.d("📊 MYSTATS:", "🚀 getStats() userId=$userId forceRefresh=$forceRefresh")
+
+        // Paso 1: Leer caché de Room (firstOrNull = toma primer valor y cancela el flow)
         val cachedStats: UserStatsEntity? = try {
-            // Recopilar datos del Room de forma síncrona dentro del flow
-            var result: UserStatsEntity? = null
-            statsDatabase.userStatsDao().getStats(userId).collect { roomResult ->
-                Log.d("📊 MYSTATS:", "📍 Room DAO emitted data: $roomResult")
-                result = roomResult
-            }
-            Log.d("📊 MYSTATS:", "✓ Finished collecting from Room. stats=$result")
-            result
+            statsDatabase.userStatsDao().getStats(userId).firstOrNull()
         } catch (e: Exception) {
-            Log.e("📊 MYSTATS:", "❌ Error collecting from Room: ${e.message}")
+            Log.e("📊 MYSTATS:", "Error leyendo Room: ${e.message}")
             null
         }
 
         if (cachedStats != null) {
-            Log.d("📊 MYSTATS:", "💾 From Room Cache: events=${cachedStats.totalEvents} posts=${cachedStats.totalPosts} km=${cachedStats.totalKm} hasRealData=${cachedStats.hasRealData}")
+            Log.d("📊 MYSTATS:", "💾 Room cache: events=${cachedStats.totalEvents} posts=${cachedStats.totalPosts} km=${cachedStats.totalKm}")
             emit(cachedStats)
 
-            // Si data es fresca (TTL válido), no sincronizar
-            if (!forceRefresh && System.currentTimeMillis() - (cachedStats.lastSyncAt
-                    ?: 0) < 15 * 60 * 1000
-            ) {
-                Log.d("📊 MYSTATS:", "✅ Room cache is fresh (TTL valid), returning without Firestore sync")
-                return@flow // Room data es fresca, no sincronizar
+            // Si la caché está fresca (TTL de 15 min), no sincronizar
+            val age = System.currentTimeMillis() - cachedStats.lastSyncAt
+            if (!forceRefresh && age < 15 * 60 * 1000L) {
+                Log.d("📊 MYSTATS:", "✅ Caché fresca (${age / 1000}s), sin sync")
+                return@flow
             }
-        } else {
-            Log.d("📊 MYSTATS:", "⚠️ Room returned null, will fetch from Firestore")
         }
 
-        // Paso 2: Sincronizar desde Firestore si es necesario
-        Log.d("📊 MYSTATS:", "🔄 About to enter Firestore sync block...")
+        // Paso 2: Sincronizar desde Firestore
         try {
             _syncStatus.value = "SYNCING"
-            Log.d("📊 MYSTATS:", "🔄 SYNCING from Firestore...")
+            Log.d("📊 MYSTATS:", "🔄 Sincronizando desde Firestore...")
 
-            // FEATURE: Multi-threading (Requisito a)
-            // Fetch desde Firestore subcollections sin bloquear UI
-            val newStats = fetchFromFirestoreSubcollections(userId, cachedStats)
+            val freshStats = fetchAndCalculateFromFirestore(userId, cachedStats)
+            statsDatabase.userStatsDao().insertStats(freshStats)
 
-            if (newStats != null) {
-                // Paso 3: Guardar en Room Database
-                statsDatabase.userStatsDao().insertStats(newStats)
+            // Calcular y guardar badges basados en los stats recién obtenidos
+            computeAndSaveBadges(userId, freshStats)
 
-                Log.d("📊 MYSTATS:", "✅ From Firestore Sync: events=${newStats.totalEvents} posts=${newStats.totalPosts} km=${newStats.totalKm} hasRealData=${newStats.hasRealData}")
-                emit(newStats)
-            } else {
-                // Usuario nuevo sin datos - emitir entidad con valores por defecto
-                Log.d("📊 MYSTATS:", "ℹ️ No data found in Firestore - new user, emitting empty stats")
-                val emptyStats = UserStatsEntity(
-                    userId = userId,
-                    totalKm = 0f,
-                    totalEvents = 0,
-                    totalPosts = 0,
-                    totalMessages = 0,
-                    level = 1,
-                    points = 0,
-                    streakDays = 0,
-                    lastSyncAt = System.currentTimeMillis(),
-                    syncStatus = "IDLE",
-                    hasRealData = false
-                )
-                Log.d("📊 MYSTATS:", "📤 EMITTING empty stats for new user")
-                emit(emptyStats)
-            }
-
+            Log.d("📊 MYSTATS:", "✅ Firestore sync: events=${freshStats.totalEvents} posts=${freshStats.totalPosts} km=${freshStats.totalKm} level=${freshStats.level}")
+            emit(freshStats)
             _syncStatus.value = "IDLE"
 
         } catch (e: Exception) {
-            // Paso 4: Error handling
-            Log.e("📊 MYSTATS:", "❌ EXCEPTION in getStats: ${e.message}", e)
+            Log.e("📊 MYSTATS:", "❌ Error Firestore: ${e.message}", e)
             _syncStatus.value = "ERROR"
-
-            // FEATURE: Eventual Connectivity (Requisito d)
-            // Re-emitir caché como fallback, no dejar app rota
-            cachedStats?.let { fallbackStats ->
-                Log.d("📊 MYSTATS:", "📤 EMITTING fallback from cache after error")
-                emit(fallbackStats)
-            } ?: run {
-                // Usuario nuevo, emitir entidad vacía
-                Log.d("📊 MYSTATS:", "📤 EMITTING empty stats after error (no cache available)")
-                emit(UserStatsEntity(
-                    userId = userId,
-                    totalKm = 0f,
-                    totalEvents = 0,
-                    totalPosts = 0,
-                    totalMessages = 0,
-                    level = 1,
-                    points = 0,
-                    streakDays = 0,
-                    lastSyncAt = System.currentTimeMillis(),
-                    syncStatus = "ERROR",
-                    hasRealData = false
-                ))
+            // Fallback: re-emitir caché si existe
+            if (cachedStats != null) {
+                emit(cachedStats)
+            } else {
+                emit(emptyStats(userId, syncStatus = "ERROR"))
             }
         }
     }
 
+    // ─── getBadges ────────────────────────────────────────────────────────────
+
     /**
-     * GET BADGES con ArrayMap cache
-     * 
-     * FLUJO:
-     * 1. ArrayMap Cache → Si está cargado
-     * 2. Room Database → Fallback
-     * 3. Empty list → Si no existe data
+     * Retorna el Flow reactivo de Room directamente.
+     *
+     * BUG CORREGIDO: antes usaba collect{} dentro de un flow{} builder (bloqueante).
+     * Ahora retorna el Room Flow directamente → Compose reacciona automáticamente
+     * cuando computeAndSaveBadges() inserta nuevos badges.
      */
-    override fun getBadges(userId: String): Flow<List<BadgeEntity>> = flow {
-        // Paso 1: Intentar ArrayMap Cache
-        var badges = badgeArrayMapCache.getAllBadges()
-
-        if (badges.isNotEmpty()) {
-            Log.i("MyStatsRepository", " Emitting badges from ArrayMap Cache (HIT)")
-            emit(badges)
-            return@flow
-        }
-
-        // Paso 2: Fallback a Room Database
-        badges = statsDatabase.badgeDao().getBadgesForUser(userId).run {
-            var result: List<BadgeEntity> = emptyList()
-            collect { result = it }
-            result
-        }
-
-        if (badges.isNotEmpty()) {
-            Log.i("MyStatsRepository", " Emitting badges from Room Cache")
-            // Cargar en ArrayMap para próximas consultas
-            badgeArrayMapCache.loadBadges(badges)
-            emit(badges)
-        } else {
-            // First time, no badges yet
-            Log.i("MyStatsRepository", "No badges found, emitting empty list")
-            emit(emptyList())
-        }
+    override fun getBadges(userId: String): Flow<List<BadgeEntity>> {
+        return statsDatabase.badgeDao().getBadgesForUser(userId)
     }
 
+    // ─── Cálculo de stats desde Firestore ────────────────────────────────────
+
     /**
-     * Calcula estadísticas reales buscando en Firestore directamente
-     * 
-     * ESTRATEGIA:
-     * 1. Buscar en db.collection("events") donde members incluya userId (open matches)
-     * 2. Buscar en todas las comunidades → collection("posts") donde author == userId
-     * 3. Buscar en users/{userId}/runs (corridas - ruta correcta)
-     * 4. Agregar datos y calcular level + points
-     * 
-     * IMPORTANTE: Esta función es suspend (no blocking)
-     * Se ejecuta en coroutine sin bloquear UI
+     * Obtiene datos reales del usuario desde Firestore y calcula sus estadísticas.
+     *
+     * BUGS CORREGIDOS:
+     *  - Posts: antes usaba whereEqualTo("author", userId) pero Firestore guarda
+     *    el displayName, no el UID. Ahora primero obtiene el fullName del usuario.
+     *  - Eventos: usa collectionGroup("members") para una sola query eficiente.
+     *  - calculateStreakDays: ahora es suspend y usa firstOrNull() en lugar de runBlocking.
      */
-    private suspend fun calculateRealStats(userId: String): UserStatsEntity? {
+    private suspend fun fetchAndCalculateFromFirestore(
+        userId: String,
+        localStats: UserStatsEntity?
+    ): UserStatsEntity {
+        val db = FirebaseFirestore.getInstance()
+
+        // ── 1. Contar eventos donde el usuario es miembro ──────────────────
+        val totalEvents = countUserEvents(db, userId)
+
+        // ── 2. Obtener displayName del usuario para buscar sus posts ────────
+        val userDisplayName = fetchUserDisplayName(db, userId)
+
+        // ── 3. Contar posts del usuario en todas las comunidades ─────────────
+        val totalPosts = countUserPosts(db, userDisplayName)
+
+        // ── 4. Sumar km de las sesiones de running ──────────────────────────
+        val totalKm = countUserKm(db, userId)
+
+        // ── 5. Calcular level y puntos ──────────────────────────────────────
+        val (level, points) = calculateLevelAndPoints(totalEvents, totalPosts, totalKm)
+
+        // ── 6. Calcular streak (BUG CORREGIDO: ahora suspend + firstOrNull) ─
+        val streakDays = calculateStreakDays(userId)
+
+        val hasData = totalEvents > 0 || totalPosts > 0 || totalKm > 0f
+
+        return UserStatsEntity(
+            userId = userId,
+            totalKm = totalKm,
+            totalEvents = totalEvents,
+            totalPosts = totalPosts,
+            totalMessages = 0,
+            level = level,
+            points = points,
+            streakDays = streakDays,
+            lastSyncAt = System.currentTimeMillis(),
+            syncStatus = "IDLE",
+            hasRealData = hasData
+        )
+    }
+
+    /** Cuenta los eventos donde el usuario es miembro usando collectionGroup (1 query). */
+    private suspend fun countUserEvents(db: FirebaseFirestore, userId: String): Int {
         return try {
-            Log.d("📊 MYSTATS:", "📍 calculateRealStats() START for userId: $userId")
-            val db = FirebaseFirestore.getInstance()
-            
-            // 1. Contar eventos donde el usuario es miembro
-            // Ruta: db.collection("events") → {eventId} → collection("members") → {userId}
-            // OPTIMIZADO: Una sola query para obtener todos los eventos
-            var totalEvents = 0
-            try {
-                val eventsSnapshot = db.collection("events")
-                    .get().await()
-                
-                Log.d("📊 MYSTATS:", "📋 Checking ${eventsSnapshot.size()} total events for membership of $userId")
-                
-                // Filtrar eventos donde userId es miembro (paralelizable en Firestore v9+)
-                val eventIds = eventsSnapshot.documents
-                    .mapNotNull { it.id }
-                
-                // Hacer lookup eficiente: obtener todos los miembros en batch si es posible
-                // Alternativa: hacer una sola query por cada evento (N+1 pero necesario sin indexes)
-                for (eventId in eventIds) {
-                    try {
-                        val memberDoc = db.collection("events")
-                            .document(eventId)
-                            .collection("members")
-                            .document(userId)
-                            .get()
-                            .await()
-                        
-                        if (memberDoc.exists()) {
-                            totalEvents++
-                        }
-                    } catch (e: Exception) {
-                        Log.w("MyStatsRepository", "Error checking event membership for $eventId: ${e.message}")
-                    }
-                }
-                
-                Log.d("📊 MYSTATS:", "🎯 EVENTS TOTAL: $totalEvents events where user is member")
-            } catch (e: Exception) {
-                Log.e("📊 MYSTATS:", "❌ Error counting events: ${e.message}")
-                totalEvents = 0
+            // collectionGroup("members") busca en TODAS las subcolecciones "members"
+            // whereEqualTo("userId", userId) filtra los documentos del usuario
+            val memberships = db.collectionGroup("members")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+
+            // Filtrar solo documentos cuyo abuelo es la colección "events"
+            // Ruta: events/{eventId}/members/{userId}
+            val count = memberships.documents.count { doc ->
+                doc.reference.parent.parent?.parent?.id == "events"
             }
-            
-            // 2. Contar posts en comunidades donde author == userId
-            // Ruta: db.collection("communities") → {communityId} → collection("posts")
-            var totalPosts = 0
-            try {
-                Log.d("📊 MYSTATS:", "📋 Searching posts in communities...")
-                val communitiesSnapshot = db.collection("communities").get().await()
-                Log.d("📊 MYSTATS:", "📋 Found ${communitiesSnapshot.size()} communities")
-                
-                for (communityDoc in communitiesSnapshot.documents) {
-                    val postsSnapshot = communityDoc.reference
-                        .collection("posts")
-                        .whereEqualTo("author", userId)
+            Log.d("📊 MYSTATS:", "🎯 Eventos: $count (collectionGroup)")
+            count
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error countUserEvents con collectionGroup: ${e.message}")
+            // Fallback N+1 si collectionGroup falla (puede necesitar índice)
+            countUserEventsFallback(db, userId)
+        }
+    }
+
+    /** Fallback N+1 para contar eventos si collectionGroup no está disponible. */
+    private suspend fun countUserEventsFallback(db: FirebaseFirestore, userId: String): Int {
+        return try {
+            val eventsSnapshot = db.collection("events").get().await()
+            var count = 0
+            for (eventDoc in eventsSnapshot.documents) {
+                try {
+                    val memberDoc = eventDoc.reference
+                        .collection("members")
+                        .document(userId)
                         .get()
                         .await()
-                    if (postsSnapshot.size() > 0) {
-                        Log.d("📊 MYSTATS:", "✓ Found ${postsSnapshot.size()} posts in community: ${communityDoc.id}")
-                    }
-                    totalPosts += postsSnapshot.size()
-                }
-                
-                Log.d("📊 MYSTATS:", "🎯 POSTS TOTAL: $totalPosts posts for user: $userId")
-            } catch (e: Exception) {
-                Log.e("📊 MYSTATS:", "❌ Error counting posts: ${e.message}")
-                totalPosts = 0
+                    if (memberDoc.exists()) count++
+                } catch (_: Exception) {}
             }
-            
-            // 3. Sumar km en users/{userId}/runs
-            var totalKm = 0f
-            try {
-                Log.d("📊 MYSTATS:", "📋 Searching runs at users/$userId/runs...")
-                val runsSnapshot = db.collection("users").document(userId)
-                    .collection("runs").get().await()
-                
-                Log.d("📊 MYSTATS:", "📋 Found ${runsSnapshot.size()} runs")
-                
-                totalKm = runsSnapshot.documents.fold(0f) { acc, doc ->
-                    val distance = doc.getDouble("distanceKm") ?: 0.0
-                    val runId = doc.id
-                    Log.d("📊 MYSTATS:", "✓ Run $runId: ${String.format("%.2f", distance)}km")
-                    acc + distance.toFloat()
-                }
-                
-                Log.d("📊 MYSTATS:", "🎯 RUNS TOTAL: $totalKm km for user: $userId")
-            } catch (e: Exception) {
-                Log.e("📊 MYSTATS:", "❌ Error fetching runs: ${e.message}")
-                totalKm = 0f
-            }
-            
-            // 4. Calcular level y points
-            val (level, points) = calculateLevelAndPoints(
-                totalEvents,
-                totalPosts,
-                totalKm
-            )
-            
-            // 5. Calcular streak
-            val streakDays = calculateStreakDays(userId)
-            
-            val result = UserStatsEntity(
-                userId = userId,
-                totalKm = totalKm,
-                totalEvents = totalEvents,
-                totalPosts = totalPosts,
-                totalMessages = 0, // NOTA: Requiere ChannelsViewModel para agregación de mensajes
-                level = level,
-                points = points,
-                streakDays = streakDays,
-                lastSyncAt = System.currentTimeMillis(),
-                syncStatus = "IDLE",
-                hasRealData = true
-            )
-            Log.d("📊 MYSTATS:", "✅ RESULT: level=$level points=$points streak=$streakDays (events=$totalEvents, posts=$totalPosts, km=$totalKm)")
-            result
+            Log.d("📊 MYSTATS:", "🎯 Eventos (fallback N+1): $count")
+            count
         } catch (e: Exception) {
-            Log.e("📊 MYSTATS:", "❌ ERROR in calculateRealStats: ${e.message}", e)
-            null
-        }
-    }
-
-    /**
-     * Calcula level y points basado en actividades
-     * 
-     * FÓRMULA:
-     * points = (totalEvents * 10) + (totalPosts * 5) + totalKm.toInt()
-     * level = (points / 100) + 1
-     * 
-     * EJEMPLOS:
-     * - 0 actividades → 0 points → Level 1
-     * - 100 points → Level 2
-     * - 200 points → Level 3
-     */
-    private fun calculateLevelAndPoints(
-        totalEvents: Int,
-        totalPosts: Int,
-        totalKm: Float
-    ): Pair<Int, Int> {
-        val points = (totalEvents * 10) + (totalPosts * 5) + totalKm.toInt()
-        val level = (points / 100) + 1
-        return Pair(level, points)
-    }
-
-    /**
-     * Calcula días consecutivos de actividad (streak)
-     * 
-     * LÓGICA:
-     * 1. Consultar últimos 365 días de actividades desde ActivityLog
-     * 2. Agrupar por fecha única (hoy, ayer, hace 2 días, etc.)
-     * 3. Contar cuántos días seguidos tienen al menos 1 actividad
-     * 4. Parar cuando encontramos un hueco (día sin actividad)
-     * 
-     * EJEMPLOS:
-     * - Actividades hoy y ayer → streak = 2
-     * - Hoy, ayer, pero no anteayer → streak = 2
-     * - Sin actividades → streak = 0
-     */
-    private fun calculateStreakDays(userId: String): Int {
-        return try {
-            // Obtener actividades de los últimos 365 días
-            val thirtyDaysAgo = System.currentTimeMillis() - (365 * 24 * 60 * 60 * 1000L)
-            val todayStart = System.currentTimeMillis() - (System.currentTimeMillis() % (24 * 60 * 60 * 1000L))
-            
-            val activities = mutableListOf<ActivityLogEntity>()
-            
-            // Ejecutar Flow bloqueante para obtener datos (en contexto sync)
-            runBlocking {
-                statsDatabase.activityLogDao()
-                    .getActivitiesInRange(userId, thirtyDaysAgo, System.currentTimeMillis())
-                    .collect { activities.addAll(it) }
-            }
-            
-            if (activities.isEmpty()) return 0
-            
-            // Agrupar por día y calcular streak
-            val activeDays = activities
-                .map { activity ->
-                    // Convertir timestamp a fecha (00:00)
-                    activity.activityDate - (activity.activityDate % (24 * 60 * 60 * 1000L))
-                }
-                .toSortedSet(compareByDescending { it })
-            
-            // Contar días consecutivos desde hoy hacia atrás
-            var streak = 0
-            var currentDate = todayStart
-            
-            for (i in 0..365) {
-                if (currentDate in activeDays) {
-                    streak++
-                    currentDate -= 24 * 60 * 60 * 1000L
-                } else {
-                    break
-                }
-            }
-            
-            streak
-        } catch (e: Exception) {
-            Log.w("MyStatsRepository", "Error calculating streak: ${e.message}")
+            Log.e("📊 MYSTATS:", "Error countUserEventsFallback: ${e.message}")
             0
         }
     }
 
     /**
-     * Fetch desde Firestore Subcollections
-     * 
-     * CASOS:
-     * 1. Usuario NUEVO (sin Room) → null (mostrar "No hay datos...")
-     * 2. Usuario con DATOS Room pero SIN Firestore → Calcular + crear subcollections
-     * 3. Usuario con DATOS Room Y Firestore → Sincronizar
+     * Obtiene el fullName (o email) del usuario desde Firestore para luego
+     * buscar sus posts por nombre de autor.
+     *
+     * BUG ORIGINAL: el post almacena "author" = displayName (no el UID).
+     * Por eso la query anterior whereEqualTo("author", userId) nunca encontraba nada.
      */
-    private suspend fun fetchFromFirestoreSubcollections(
-        userId: String,
-        localStats: UserStatsEntity?
-    ): UserStatsEntity? {
+    private suspend fun fetchUserDisplayName(db: FirebaseFirestore, userId: String): String {
         return try {
-            // SIEMPRE intentar obtener datos reales desde Firestore
-            Log.i("MyStatsRepository", "Buscando datos en Firestore para usuario: $userId")
-            
-            val realStats = calculateRealStats(userId)
-            
-            if (realStats != null && realStats.hasRealData) {
-                // Se encontraron datos en Firestore
-                Log.i("MyStatsRepository", "✅ Datos encontrados para $userId: ${realStats.totalEvents} events, ${realStats.totalPosts} posts, ${realStats.totalKm}km")
-                
-                // Guardar en Room Database para caché local
-                statsDatabase.userStatsDao().insertStats(realStats)
-                
-                // Opcionalmente crear/actualizar subcollections en Firestore
-                createFirestoreSubcollections(userId, realStats)
-                
-                return realStats
-            }
-            
-            // No se encontraron datos en Firestore, pero verificar si hay data local
-            if (localStats != null && localStats.hasRealData) {
-                Log.i("MyStatsRepository", "Usando datos locales para $userId")
-                return localStats.copy(
-                    lastSyncAt = System.currentTimeMillis(),
-                    syncStatus = "IDLE"
-                )
-            }
-            
-            // No hay datos ni en Firestore ni en Room → Usuario nuevo
-            Log.i("MyStatsRepository", "ℹ No data found for user: $userId (new user)")
-            UserStatsEntity(
-                userId = userId,
-                totalKm = 0f,
-                totalEvents = 0,
-                totalPosts = 0,
-                totalMessages = 0,
-                level = 1,
-                points = 0,
-                streakDays = 0,
-                lastSyncAt = System.currentTimeMillis(),
-                syncStatus = "IDLE",
-                hasRealData = false
-            )
+            val userDoc = db.collection("users").document(userId).get().await()
+            val fullName = userDoc.getString("fullName")?.takeIf { it.isNotBlank() }
+            val email = userDoc.getString("email")?.takeIf { it.isNotBlank() }
+            val name = fullName ?: email ?: ""
+            Log.d("📊 MYSTATS:", "👤 DisplayName para posts: '$name'")
+            name
         } catch (e: Exception) {
-            // Firestore offline u error
-            Log.w("MyStatsRepository", "Error fetching from Firestore: ${e.message}")
-
-            // Si existe data local, usarla
-            if (localStats?.hasRealData == true) {
-                Log.i("MyStatsRepository", "Using local data (Firestore offline)")
-                return localStats
-            }
-
-            // Si no hay data local y no hay Firestore → devolver entidad vacía
-            Log.i("MyStatsRepository", "No data available (offline)")
-            UserStatsEntity(
-                userId = userId,
-                totalKm = 0f,
-                totalEvents = 0,
-                totalPosts = 0,
-                totalMessages = 0,
-                level = 1,
-                points = 0,
-                streakDays = 0,
-                lastSyncAt = System.currentTimeMillis(),
-                syncStatus = "OFFLINE",
-                hasRealData = false
-            )
+            Log.e("📊 MYSTATS:", "Error fetchUserDisplayName: ${e.message}")
+            ""
         }
     }
 
     /**
-     * Crear subcollections en Firestore para usuario que tiene datos locales
-     * pero no tiene subcollections creadas aún
-     * 
-     * NOTA: Opcional - MVP funciona completamente con Room Database
+     * Cuenta posts donde "author" == displayName del usuario.
+     * Itera por comunidades (la estructura de Firestore no permite collectionGroup
+     * sin índice compuesto para este caso).
      */
-    private suspend fun createFirestoreSubcollections(
-        userId: String,
-        stats: UserStatsEntity
-    ) {
+    private suspend fun countUserPosts(db: FirebaseFirestore, displayName: String): Int {
+        if (displayName.isBlank()) {
+            Log.w("📊 MYSTATS:", "⚠️ displayName vacío, no se pueden contar posts")
+            return 0
+        }
+        return try {
+            val communitiesSnapshot = db.collection("communities").get().await()
+            var total = 0
+            for (communityDoc in communitiesSnapshot.documents) {
+                val postsSnapshot = communityDoc.reference
+                    .collection("posts")
+                    .whereEqualTo("author", displayName)
+                    .get()
+                    .await()
+                total += postsSnapshot.size()
+            }
+            Log.d("📊 MYSTATS:", "🎯 Posts: $total (author='$displayName')")
+            total
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error countUserPosts: ${e.message}")
+            0
+        }
+    }
+
+    /** Suma los km totales de las sesiones de running del usuario. */
+    private suspend fun countUserKm(db: FirebaseFirestore, userId: String): Float {
+        return try {
+            val runsSnapshot = db.collection("users")
+                .document(userId)
+                .collection("runs")
+                .get()
+                .await()
+
+            val km = runsSnapshot.documents.fold(0f) { acc, doc ->
+                acc + (doc.getDouble("distanceKm") ?: 0.0).toFloat()
+            }
+            Log.d("📊 MYSTATS:", "🎯 Km totales: $km (${runsSnapshot.size()} runs)")
+            km
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error countUserKm: ${e.message}")
+            0f
+        }
+    }
+
+    // ─── Cálculo de level, puntos y streak ──────────────────────────────────
+
+    /**
+     * Fórmula:
+     *   points = (events × 10) + (posts × 5) + km.toInt()
+     *   level  = (points / 100) + 1
+     */
+    private fun calculateLevelAndPoints(events: Int, posts: Int, km: Float): Pair<Int, Int> {
+        val points = (events * 10) + (posts * 5) + km.toInt()
+        val level = (points / 100) + 1
+        return Pair(level, points)
+    }
+
+    /**
+     * BUG CORREGIDO: antes usaba runBlocking { Flow.collect {} } que bloqueaba para siempre.
+     * Ahora es suspend y usa firstOrNull() → cancela el flow tras la primera emisión.
+     */
+    private suspend fun calculateStreakDays(userId: String): Int {
+        return try {
+            val since = System.currentTimeMillis() - (365L * 24 * 60 * 60 * 1000)
+            val todayStart = System.currentTimeMillis() -
+                    (System.currentTimeMillis() % (24L * 60 * 60 * 1000))
+
+            val activities = statsDatabase.activityLogDao()
+                .getActivitiesInRange(userId, since, System.currentTimeMillis())
+                .firstOrNull() ?: emptyList()
+
+            if (activities.isEmpty()) return 0
+
+            val activeDays = activities
+                .map { it.activityDate - (it.activityDate % (24L * 60 * 60 * 1000)) }
+                .toSortedSet(compareByDescending { it })
+
+            var streak = 0
+            var current = todayStart
+            for (i in 0..365) {
+                if (current in activeDays) { streak++; current -= 24L * 60 * 60 * 1000 }
+                else break
+            }
+            streak
+        } catch (e: Exception) {
+            Log.w("📊 MYSTATS:", "Error calculateStreakDays: ${e.message}")
+            0
+        }
+    }
+
+    // ─── Cálculo y almacenamiento de badges ──────────────────────────────────
+
+    /**
+     * Calcula qué badges ha ganado el usuario según sus stats y los guarda en Room.
+     *
+     * BUG CORREGIDO: antes no existía ningún código que calculara o guardara badges.
+     * Al insertar en Room, el Flow reactivo de getBadges() emite automáticamente
+     * y el ViewModel actualiza la UI sin necesidad de acción adicional.
+     */
+    private suspend fun computeAndSaveBadges(userId: String, stats: UserStatsEntity) {
         try {
-            // NOTA: Para habilitar sincronización con Firestore, descomentar:
-            //
-            // val db = FirebaseFirestore.getInstance()
-            // db.collection("users").document(userId).collection("stats")
-            //     .document("profile").set(stats.toMap())
-            //
-            // db.collection("users").document(userId).collection("badges")
-            //     .document("all").set(mapOf("count" to stats.level))
-            //
-            // db.collection("users").document(userId).collection("activities")
-            //     .document("all").set(mapOf(
-            //         "events" to stats.totalEvents,
-            //         "posts" to stats.totalPosts,
-            //         "km" to stats.totalKm
-            //     ))
-            //
-            // db.collection("users").document(userId).collection("streaks")
-            //     .document("current").set(mapOf("days" to stats.streakDays))
+            val now = System.currentTimeMillis()
+            val earned = mutableListOf<BadgeEntity>()
 
-            Log.i(
-                "MyStatsRepository",
-                "ℹ Firestore sync skipped (optional for MVP) - user: $userId"
-            )
+            // Badges por eventos
+            if (stats.totalEvents >= 1)
+                earned += BadgeEntity("event_first_$userId", userId, "First Match",
+                    "Joined your first event", "⚽", "COMMON", now)
+            if (stats.totalEvents >= 5)
+                earned += BadgeEntity("event_team_$userId", userId, "Team Player",
+                    "Joined 5 events", "🤝", "RARE", now)
+            if (stats.totalEvents >= 20)
+                earned += BadgeEntity("event_veteran_$userId", userId, "Sports Veteran",
+                    "Joined 20 events", "🏆", "EPIC", now)
+
+            // Badges por posts
+            if (stats.totalPosts >= 1)
+                earned += BadgeEntity("post_first_$userId", userId, "First Post",
+                    "Made your first community post", "📝", "COMMON", now)
+            if (stats.totalPosts >= 10)
+                earned += BadgeEntity("post_voice_$userId", userId, "Community Voice",
+                    "Made 10 posts", "📣", "RARE", now)
+            if (stats.totalPosts >= 50)
+                earned += BadgeEntity("post_influencer_$userId", userId, "Influencer",
+                    "Made 50 posts", "⭐", "EPIC", now)
+
+            // Badges por running
+            if (stats.totalKm >= 1f)
+                earned += BadgeEntity("run_first_$userId", userId, "First Run",
+                    "Ran your first km", "🏃", "COMMON", now)
+            if (stats.totalKm >= 10f)
+                earned += BadgeEntity("run_10k_$userId", userId, "10K Club",
+                    "Ran 10 km total", "👟", "RARE", now)
+            if (stats.totalKm >= 42f)
+                earned += BadgeEntity("run_marathon_$userId", userId, "Marathon Hero",
+                    "Ran 42 km total", "🥇", "EPIC", now)
+
+            // Badges por level
+            if (stats.level >= 3)
+                earned += BadgeEntity("level_rising_$userId", userId, "Rising Star",
+                    "Reached Level 3", "🌟", "RARE", now)
+            if (stats.level >= 5)
+                earned += BadgeEntity("level_champion_$userId", userId, "Champion",
+                    "Reached Level 5", "🏅", "EPIC", now)
+            if (stats.level >= 10)
+                earned += BadgeEntity("level_legend_$userId", userId, "Legend",
+                    "Reached Level 10", "👑", "LEGENDARY", now)
+
+            if (earned.isNotEmpty()) {
+                statsDatabase.badgeDao().insertBadges(earned)
+                badgeArrayMapCache.loadBadges(earned)
+                Log.d("📊 MYSTATS:", "🏅 ${earned.size} badges guardados para $userId")
+            }
         } catch (e: Exception) {
-            Log.e(
-                "MyStatsRepository",
-                "Error in createFirestoreSubcollections: ${e.message}"
-            )
+            Log.e("📊 MYSTATS:", "Error computeAndSaveBadges: ${e.message}")
         }
     }
 
-    /**
-     * Estadísticas de caches (para debugging)
-     */
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    private fun emptyStats(userId: String, syncStatus: String = "IDLE") = UserStatsEntity(
+        userId = userId,
+        totalKm = 0f,
+        totalEvents = 0,
+        totalPosts = 0,
+        totalMessages = 0,
+        level = 1,
+        points = 0,
+        streakDays = 0,
+        lastSyncAt = System.currentTimeMillis(),
+        syncStatus = syncStatus,
+        hasRealData = false
+    )
+
     fun printCacheStats() {
         Log.d("CACHE_STATS", badgeArrayMapCache.getStats())
     }
