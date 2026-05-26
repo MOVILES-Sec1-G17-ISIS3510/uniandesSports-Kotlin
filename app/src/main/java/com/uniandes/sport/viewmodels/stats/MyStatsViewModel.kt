@@ -3,7 +3,6 @@ package com.uniandes.sport.viewmodels.stats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.uniandes.sport.data.cache.BadgeArrayMapCache
-import com.uniandes.sport.data.cache.UserStatsLRUCache
 import com.uniandes.sport.data.entities.BadgeEntity
 import com.uniandes.sport.data.entities.UserStatsEntity
 import com.uniandes.sport.data.repositories.MyStatsRepository
@@ -77,7 +76,7 @@ class MyStatsViewModel(
     private val _badges = MutableStateFlow<List<BadgeEntity>>(emptyList())
     override val badges: StateFlow<List<BadgeEntity>> = _badges.asStateFlow()
 
-    private val _syncStatus = MutableStateFlow<String>(\"IDLE\")
+    private val _syncStatus = MutableStateFlow<String>("IDLE")
     override val syncStatus: StateFlow<String> = _syncStatus.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
@@ -105,7 +104,7 @@ class MyStatsViewModel(
         viewModelScope.launch {
             repository.getSyncStatus().collect { status ->
                 _syncStatus.value = status
-                _isLoading.value = status == \"SYNCING\"
+                _isLoading.value = status == "SYNCING"
             }
         }
     }
@@ -116,7 +115,7 @@ class MyStatsViewModel(
      */
     override fun refreshStats(forceSync: Boolean) {
         viewModelScope.launch {
-            repository.getStats(userId, forceSync = forceSync).collect { stats ->
+            repository.getStats(userId).collect { stats ->
                 _stats.value = stats
             }
         }

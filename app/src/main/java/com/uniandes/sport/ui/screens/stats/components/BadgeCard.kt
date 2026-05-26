@@ -117,9 +117,9 @@ fun LockBadgeCard() {
  * @author Juan Felipe Hernández
  */
 fun getRarityColor(rarity: String): Color = when (rarity) {
-    \"COMMON\" -> Color(0xFFD3D3D3)      // Gris
-    \"RARE\" -> Color(0xFF1E88E5)        // Azul
-    \"EPIC\" -> Color(0xFF7B1FA2)        // Púrpura
-    \"LEGENDARY\" -> Color(0xFFFFA500)   // Naranja
+    "COMMON" -> Color(0xFFD3D3D3)      // Gris
+    "RARE" -> Color(0xFF1E88E5)        // Azul
+    "EPIC" -> Color(0xFF7B1FA2)        // Púrpura
+    "LEGENDARY" -> Color(0xFFFFA500)   // Naranja
     else -> Color.Gray
 }

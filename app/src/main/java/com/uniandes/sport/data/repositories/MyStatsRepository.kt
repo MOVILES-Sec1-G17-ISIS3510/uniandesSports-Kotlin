@@ -65,7 +65,7 @@ class MyStatsRepository(
     private val badgeArrayMapCache: BadgeArrayMapCache = BadgeArrayMapCache()
 ) : MyStatsRepositoryInterface {
 
-    private val _syncStatus = MutableStateFlow<String>(\"IDLE\")
+    private val _syncStatus = MutableStateFlow<String>("IDLE")
     override fun getSyncStatus(): Flow<String> = _syncStatus.asStateFlow()
 
     /**
@@ -156,7 +156,7 @@ class MyStatsRepository(
         var badges = badgeArrayMapCache.getAllBadges()
         
         if (badges.isNotEmpty()) {
-            Log.i(\"MyStatsRepository\", \" Emitting badges from ArrayMap Cache (HIT)\")
+            Log.i("MyStatsRepository", " Emitting badges from ArrayMap Cache (HIT)")
             emit(badges)
             return@flow
         }
@@ -169,13 +169,13 @@ class MyStatsRepository(
         }
         
         if (badges.isNotEmpty()) {
-            Log.i(\"MyStatsRepository\", \" Emitting badges from Room Cache\")
+            Log.i("MyStatsRepository", " Emitting badges from Room Cache")
             // Cargar en ArrayMap para próximas consultas
             badgeArrayMapCache.loadBadges(badges)
             emit(badges)
         } else {
             // First time, no badges yet
-            Log.i(\"MyStatsRepository\", \"No badges found, emitting empty list\")
+            Log.i("MyStatsRepository", "No badges found, emitting empty list")
             emit(emptyList())
         }
     }

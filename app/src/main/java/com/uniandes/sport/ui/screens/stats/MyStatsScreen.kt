@@ -72,7 +72,7 @@ fun MyStatsScreen(
                 title = { Text("My Activity") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, \"back\")
+                        Icon(Icons.Default.ArrowBack, "back")
                     }
                 }
             )
@@ -170,13 +170,13 @@ fun MyStatsScreen(
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = \"🏅 Badges (\${badges.size}/18)\",
+                        text = "🏅 Badges (\${badges.size}/18)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     
                     Text(
-                        text = "\"Unlock badges by participating in the community\"",
+                        text = "Unlock badges by participating in the community",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -185,7 +185,7 @@ fun MyStatsScreen(
             // Línea 113: Footer
             item {
                 Text(
-                    text = " Tip: Manually sync to get fresh data",
+                    text = "💡 Tip: Manually sync to get fresh data",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.labelSmall
                 )

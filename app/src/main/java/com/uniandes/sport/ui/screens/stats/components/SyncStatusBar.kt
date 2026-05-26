@@ -82,7 +82,7 @@ fun SyncStatusBar(
             }
 
             // Línea 55-67: Spinner si sincronizando, botón si idle
-            if (syncStatus == \"SYNCING\") {
+            if (syncStatus == "SYNCING") {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
                     strokeWidth = 2.dp
@@ -92,7 +92,7 @@ fun SyncStatusBar(
                     onClick = onSync,
                     enabled = isOnline && !isLoading
                 ) {
-                    Text("Sync"))
+                    Text("Sync")
                 }
             }
         }
