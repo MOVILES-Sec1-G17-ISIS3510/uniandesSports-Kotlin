@@ -31,5 +31,6 @@ data class UserStatsEntity(
     val points: Int = 0,
     val streakDays: Int = 0,
     val lastSyncAt: Long = 0L, // para TTL validation
-    val syncStatus: String = "IDLE" // SYNCING, IDLE, ERROR
+    val syncStatus: String = "IDLE", // SYNCING, IDLE, ERROR
+    val hasRealData: Boolean = false // FEATURE: Diferenciar usuarios nuevos de usuarios con datos
 )
