@@ -3,6 +3,7 @@ package com.uniandes.sport.ui.screens.stats
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -616,13 +617,35 @@ private fun BadgeGrid(earnedBadges: List<BadgeEntity>, userId: String) {
 
 @Composable
 private fun BadgeCell(def: BadgeDef, earned: Boolean, modifier: Modifier = Modifier) {
-    val (bgColor, accentColor) = rarityColors(def.rarity, earned)
+    val isDark       = isSystemInDarkTheme()
+    val accentColor  = rarityAccentColor(def.rarity)
+
+    // Background:
+    //  • Locked   → surfaceVariant (theme-adaptive, works in light and dark)
+    //  • Earned, light mode → pastel tint matching the rarity
+    //  • Earned, dark mode  → surfaceVariant base; rarity communicated by border + icon color
+    val bgColor = when {
+        !earned -> MaterialTheme.colorScheme.surfaceVariant
+        isDark  -> MaterialTheme.colorScheme.surfaceVariant
+        else    -> when (def.rarity) {
+            "LEGENDARY" -> Color(0xFFFFF8E1)
+            "EPIC"      -> Color(0xFFEDE7F6)
+            "RARE"      -> Color(0xFFE3F2FD)
+            else        -> Color(0xFFE8F5E9)   // COMMON
+        }
+    }
+
+    // In dark mode, earned badges get a colored border so rarity is still visible
+    val cardModifier = if (earned && isDark)
+        modifier.border(1.5.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+    else
+        modifier
 
     Card(
-        modifier  = modifier,
+        modifier  = cardModifier,
         colors    = CardDefaults.cardColors(containerColor = bgColor),
         shape     = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(if (earned) 3.dp else 0.dp)
+        elevation = CardDefaults.cardElevation(if (earned) 2.dp else 0.dp)
     ) {
         Column(
             modifier            = Modifier
@@ -634,17 +657,18 @@ private fun BadgeCell(def: BadgeDef, earned: Boolean, modifier: Modifier = Modif
             // Icon with lock overlay when locked
             Box(contentAlignment = Alignment.BottomEnd) {
                 Icon(
-                    imageVector  = def.icon,
+                    imageVector        = def.icon,
                     contentDescription = def.name,
-                    tint         = if (earned) accentColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                    modifier     = Modifier.size(30.dp)
+                    tint               = if (earned) accentColor
+                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                    modifier           = Modifier.size(30.dp)
                 )
                 if (!earned) {
                     Icon(
-                        imageVector  = Icons.Default.Lock,
+                        imageVector        = Icons.Default.Lock,
                         contentDescription = "Locked",
-                        tint         = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                        modifier     = Modifier.size(12.dp)
+                        tint               = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier           = Modifier.size(12.dp)
                     )
                 }
             }
@@ -660,7 +684,7 @@ private fun BadgeCell(def: BadgeDef, earned: Boolean, modifier: Modifier = Modif
                 color      = if (earned) MaterialTheme.colorScheme.onSurface
                              else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )
-            // Rarity (earned) or requirement (locked)
+            // Rarity label (earned) or unlock requirement (locked)
             Text(
                 text      = if (earned) def.rarity else def.requirement,
                 style     = MaterialTheme.typography.labelSmall,
@@ -677,15 +701,15 @@ private fun BadgeCell(def: BadgeDef, earned: Boolean, modifier: Modifier = Modif
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-/** Background color + accent color for each rarity tier. */
-private fun rarityColors(rarity: String, earned: Boolean): Pair<Color, Color> {
-    if (!earned) return Pair(Color(0xFFF5F5F5), Color.Gray)
-    return when (rarity) {
-        "LEGENDARY" -> Pair(Color(0xFFFFF8E1), Color(0xFFFFAB00))
-        "EPIC"      -> Pair(Color(0xFFEDE7F6), Color(0xFF7C4DFF))
-        "RARE"      -> Pair(Color(0xFFE3F2FD), Color(0xFF1E88E5))
-        else        -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32))  // COMMON = green
-    }
+/**
+ * Accent color for each rarity tier.
+ * Saturated enough to be readable on both light and dark surfaces.
+ */
+private fun rarityAccentColor(rarity: String): Color = when (rarity) {
+    "LEGENDARY" -> Color(0xFFFFAB00)   // amber
+    "EPIC"      -> Color(0xFF7C4DFF)   // deep purple
+    "RARE"      -> Color(0xFF1E88E5)   // blue
+    else        -> Color(0xFF2E7D32)   // dark green (COMMON)
 }
 
 /** Returns a Material Icon for a given sport name. */
