@@ -33,22 +33,32 @@ val isNew: Boolean = false     // para notificaciones
 
 #### UserStatsEntity.kt
 **Ruta:** `app/src/main/java/com/uniandes/sport/data/entities/UserStatsEntity.kt`  
-**Propósito:** Snapshot de estadísticas del usuario (caché persistente)  
+**Propósito:** Room entity para almacenar snapshots de estadísticas del usuario  
 **Líneas Clave:**
 - `@Entity(tableName = "user_stats", primaryKeys = ["userId"])` → línea 20
-- Campo syncStatus para UI feedback → línea 33
-- **FEATURE:** Caching (Requisito c) — Room como caché persistente
+- Campo `hasRealData: Boolean = false` → **NEW** línea 34 (FEATURE: Diferenciar usuarios nuevos)
+- **FEATURE:** Local Storage (Requisito b) + Caching (Requisito c)
 
 **Qué Almacena:**
 ```kotlin
-val totalKm: Float = 0f        // km totales corridos
-val totalEvents: Int = 0       // eventos participados
-val totalPosts: Int = 0        // posts publicados
-val totalMessages: Int = 0     // mensajes en comunidades
+val userId: String = ""
+val totalKm: Float = 0f
+val totalEvents: Int = 0
+val totalPosts: Int = 0
+val totalMessages: Int = 0
+val totalBadgesUnlocked: Int = 0
 val level: Int = 1             // puntos / 100
-val syncStatus: String = ""    // IDLE, SYNCING, ERROR
-val lastSyncAt: Long = 0L      // para validar TTL (15 min)
+val points: Int = 0
+val streakDays: Int = 0
+val lastSyncAt: Long = 0L      // TTL validation
+val syncStatus: String = "IDLE" // SYNCING, IDLE, ERROR
+val hasRealData: Boolean = false // ⭐ NEW: Indica si usuario tiene datos reales vs usuario nuevo
 ```
+
+**Clave `hasRealData`:**
+- `true` → Usuario tiene datos reales (actividad registrada)
+- `false` → Usuario nuevo sin datos (mostrar "No hay datos..." en UI)
+- Permite diferenciar entre "0 porque es nuevo" vs "0 porque realmente tiene 0 eventos"
 
 ---
 
@@ -194,41 +204,25 @@ abstract fun streakDao(): StreakDao
 
 ### **4. CACHING EN CAPAS**
 
-#### UserStatsLRUCache.kt
-**Ruta:** `app/src/main/java/com/uniandes/sport/data/cache/UserStatsLRUCache.kt`  
-**Propósito:** In-memory LRU cache para UserStatsEntity  
-**FEATURE: Caching (Requisito c)** ⭐⭐⭐  
-**Patrón:** Least Recently Used (LRU) eviction policy
+#### 🚫 UserStatsLRUCache — NO USADO
+**Decisión:** Eliminar UserStatsLRUCache por redundancia  
+**Razón:** Usuario individual solo consulta SUS datos, no múltiples usuarios
 
-**Estructura (Línea 29-45):**
-```kotlin
-private val cache = object : LinkedHashMap<String, CacheEntry<UserStatsEntity>>(
-    maxSize,        // 5 entries máximo
-    0.75f,          // load factor
-    true            // access-order (LRU)
-) {
-    override fun removeEldestEntry(eldest: ...) = size > maxSize
-}
+**Justificación:**
+- ❌ maxSize=5 → Cachea datos de 5 usuarios diferentes
+- ❌ Usuario solo consulta sus propias estadísticas
+- ❌ Room ya persiste datos (más eficiente)
+- ❌ StateFlow en ViewModel mantiene datos en memoria mientras app abierta
+- ✅ Remover = Menos código, menos memoria, igual de rápido
+
+**Arquitectura Final (simplificada):**
 ```
-→ LinkedHashMap con access-order = automáticamente remueve entrada menos usada
-
-**Operaciones:**
-- `get(userId)` → línea 54-72 — Obtener si existe y no expiró (TTL=15min)
-- `put(userId, stats)` → línea 74-78 — Guardar en caché
-- `invalidate(userId)` → línea 80-84 — Borrar entrada
-- `clear()` → línea 86-90 — Borrar todo
-
-**Performance (Línea 60-62):**
+Room Database (50ms)  ← Caché persistente
+    ↓
+Firestore (500ms)     ← Source of truth
+    ↓
+StateFlow (ViewModel) ← Vive mientras app está abierta
 ```
-LRU HIT: 1ms (desde RAM)
-Room MISS: 50ms (desde DB)
-Firebase MISS: 500ms (desde red)
-```
-
-**Justificación de LRU:**
-- ✅ Evita recálculos redundantes (5 veces abre pantalla = 1 sync)
-- ✅ Controla memoria (máximo 5 entries de ~1KB cada)
-- ✅ TTL automático (15 minutos antes de expirar)
 
 ---
 
@@ -270,69 +264,98 @@ Ahorro:   ~50% de memoria
 
 #### MyStatsRepository.kt
 **Ruta:** `app/src/main/java/com/uniandes/sport/data/repositories/MyStatsRepository.kt`  
-**Propósito:** Orquestación de datos con cache-first pattern  
+**Propósito:** Orquestación de datos con cache-first pattern + Firestore subcollections + manejo de usuarios nuevos  
 **FEATURES:**
 - **Caching (Requisito c)** → Línea 45-100
-- **Eventual Connectivity (Requisito d)** → Línea 57, 95-98
-- **Multi-threading (Requisito a)** → Línea 73-80
+- **Eventual Connectivity (Requisito d)** → Línea 57, 95-98, 211-238
+- **Multi-threading (Requisito a)** → Línea 61 (fetchFromFirestoreSubcollections)
 
-**getStats() — Cache-First Flow (Línea 45-100):**
+**getStats() — Room-First Flow (Línea 45-130):**
 
 ```
-1. Intentar LRU Cache (1ms)
-   ├─ HIT → emit() y return ✅
+1. Room Database (50ms) ✅ ← Caché persistente
+   ├─ HIT → emit() inmediatamente
    └─ MISS → continuar
 
-2. Fallback a Room DB (50ms)
-   ├─ Existe → emit() y revisar TTL
-   └─ No existe → continuar
+2. Check TTL (15 min)
+   ├─ Fresca → return (no sincronizar)
+   └─ Vieja → continuar
 
-3. Sincronizar Firestore (500ms)
-   ├─ SUCCESS → guardar en LRU + Room
-   └─ ERROR → re-emitir caché como fallback
+3. Sincronizar Firestore Subcollections (500ms)
+   ├─ SUCCESS + Usuario tiene datos → guardar en Room
+   ├─ Usuario NUEVO (sin datos) → emit(null)
+   └─ ERROR → re-emitir Room como fallback
 
 4. FEATURE: Eventual Connectivity
    ├─ syncStatus: IDLE / SYNCING / ERROR
    └─ UI muestra indicadores
 ```
 
-**Línea 47-51 (LRU HIT):**
+**NEW: Estructura Simplificada (sin LRU)**
+- ❌ Removido: UserStatsLRUCache (redundante para usuario individual)
+- ✅ Mantenido: Room Database (caché persistente)
+- ✅ Mantenido: StateFlow en ViewModel (datos en memoria mientras app activa)
+
+**Performance:**
+- Room HIT: 50ms (vs LRU 1ms, pero ambos < imperceptible)
+- Firestore SYNC: 500ms (igual que antes)
+- Resultado: Igual de rápido, menos memoria, más simple
+
+**NEW: fetchFromFirestoreSubcollections() (Línea 172-238):**
+
+**FIRESTORE STRUCTURE (Subcollections):**
+```
+users/{userId}
+  ├─ stats/{statsId}         → UserStatsEntity
+  ├─ badges/{badgeId}        → BadgeEntity
+  ├─ activities/{activityId} → ActivityLogEntity
+  └─ streaks/{streakId}      → StreakEntity
+```
+
+**CASOS MANEJADOS (NO VALORES DEFAULT):**
+- **Caso 1: Usuario NUEVO** (sin datos en Room)
+  - Línea 131-132: emit(null)
+  - UI muestra: "📊 No hay suficientes datos para mostrar tus estadísticas"
+  - ✅ No broken UI, mensaje amigable
+
+- **Caso 2: Usuario con DATOS en Room pero SIN subcollections en Firestore**
+  - Línea 195-199: Crear subcollections en Firestore
+  - Línea 200: Devolver datos reales con hasRealData=true
+  - UI muestra: Datos reales del usuario (no defaults)
+  - ✅ Datos se sincronizan cuando el usuario tiene actividad
+
+- **Caso 3: Usuario con DATOS en Room Y Firestore**
+  - Línea 188: TODO: Implementar lectura real
+  - Devolver UserStatsEntity poblado con hasRealData=true
+  - ✅ Sincronización normal
+
+**Línea 195-201 (Key Feature: Crear subcollections + No mostrar defaults):**
 ```kotlin
-var stats = if (!forceRefresh) {
-    userStatsLRUCache.get(userId)  // 1ms
-} else {
-    userStatsLRUCache.invalidate(userId)
-    null
+if (localStats != null && localStats.hasRealData) {
+    // Usuario tiene datos reales en Room pero no en Firestore
+    createFirestoreSubcollections(userId, localStats)
+    return localStats.copy(lastSyncAt = System.currentTimeMillis(), syncStatus = "IDLE")
 }
 ```
+→ Muestra datos reales, crea subcollections en background
 
-**Línea 53-56 (LRU MISS → Room):**
-```kotlin
-stats = statsDatabase.userStatsDao()
-    .getStats(userId).run { ... }  // 50ms
-```
-
-**Línea 57-80 (Sync from Firestore):**
-```kotlin
-_syncStatus.value = "SYNCING"  // UI feedback
-// ... fetch datos ...
-_syncStatus.value = "IDLE"
-```
-
-**Línea 90-98 (Error Handling):**
+**Línea 205-216 (Error handling sin valores default):**
 ```kotlin
 catch (e: Exception) {
-    _syncStatus.value = "ERROR"
-    if (stats != null) emit(stats)  // Fallback caché
+    if (localStats?.hasRealData == true) {
+        return localStats  // Mostrar datos reales si están disponibles
+    }
+    return null            // Usuario nuevo, no hay fallback
 }
 ```
+→ FEATURE: Eventual Connectivity — Si error, mostrar datos locales; si usuario nuevo, mostrar mensaje
 
-**getBadges() (Línea 102-125):**
-```
-1. ArrayMap HIT → emit() ✅
-2. Room MISS → cargar en ArrayMap
-3. Emitir lista
-```
+**NEW: createFirestoreSubcollections() (Línea 219-244):**
+- Crea subcollections en Firestore para usuarios con datos pero sin subcollections
+- No falla si hay error (datos quedan en local)
+- Ocurre en background sin bloquear UI
+
+**getBadges() (Línea 135-182):** Similar pattern, ArrayMap then Room
 
 ---
 
@@ -490,7 +513,7 @@ private fun formatRelativeTime(timestamp: Long): String {
 
 #### MyStatsScreen.kt
 **Ruta:** `app/src/main/java/com/uniandes/sport/ui/screens/stats/MyStatsScreen.kt`  
-**Propósito:** Pantalla principal de estadísticas  
+**Propósito:** Pantalla principal de estadísticas personalizadas  
 **FEATURES:** Multi-threading (a) + Caching (c) + Eventual Connectivity (d)
 
 **collectAsState() (Línea 41-45):**
@@ -502,7 +525,25 @@ val syncStatus by viewModel.syncStatus.collectAsState()
 ```
 → Compose recompone automáticamente cuando cambian valores
 
-**SyncStatusBar (Línea 60-67):**
+**NEW: Manejo de Usuario Nuevo (Línea 67-85):**
+```kotlin
+if (stats == null) {
+    // Usuario nuevo o sin datos
+    Column(...) {
+        Text("📊 No hay suficientes datos para mostrar tus estadísticas")
+        Text("Participa en eventos, sube posts y corre...")
+    }
+    return@Scaffold
+}
+```
+→ FEATURE: No mostrar valores default
+→ UI amigable que invita al usuario a participar
+
+**LazyColumn (Línea 87+):**
+- Solo se muestra si stats != null
+- Secciones: SyncStatusBar, Profile, Badges, Stats, Charts
+
+**SyncStatusBar (Línea 103-110):**
 ```kotlin
 SyncStatusBar(
     syncStatus = syncStatus,
@@ -522,7 +563,7 @@ SyncStatusBar(
 | **WorkManager** | StatsDatabase.kt | 47-62 | Double-checked locking con @Volatile |
 | **Coroutines** | MyStatsViewModel.kt | 53-54 | viewModelScope.launch sin bloquear UI |
 | **Room async** | UserStatsDao.kt | 36 | getStats() devuelve Flow (async query) |
-| **Sync background** | MyStatsRepository.kt | 57-80 | Sincronización ocurre en background |
+| **Multi-threading** | MyStatsRepository.kt | 61 | Coroutines en background sin bloquear UI |
 
 ---
 
@@ -543,8 +584,8 @@ SyncStatusBar(
 
 | Requisito | Archivo | Línea(s) | Explicación |
 |-----------|---------|----------|-------------|
-| **LRU Cache** | UserStatsLRUCache.kt | 29-90 | LinkedHashMap with LRU eviction |
-| **ArrayMap Cache** | BadgeArrayMapCache.kt | 43-126 | ArrayMap para badges (memoria eficiente) |
+| **LRU Cache** | ❌ Eliminado | — | Redundante para usuario individual |
+| **Room Cache** | MyStatsRepository.kt | 45-65 | Caché persistente (50ms) |
 | **Cache-first flow** | MyStatsRepository.kt | 45-100 | Emit caché primero, sync en background |
 | **TTL validation** | UserStatsLRUCache.kt | 36-37 | Expirar después de 15 min |
 | **StateFlow** | MyStatsViewModel.kt | 40-48 | Reactive updates a Compose |
@@ -557,7 +598,7 @@ SyncStatusBar(
 |-----------|---------|----------|-------------|
 | **Sync Status** | MyStatsRepository.kt | 57, 95-98 | IDLE / SYNCING / ERROR states |
 | **UI Indicators** | SyncStatusBar.kt | 40-67 | 🟢 Conectado vs 🔴 Sin conexión |
-| **Fallback caché** | MyStatsRepository.kt | 90-98 | Re-emitir caché si error |
+| **Fallback caché** | MyStatsRepository.kt | 129-133 | Re-emitir caché si error, null si usuario nuevo |
 | **Manual sync** | MyStatsScreen.kt | 63-66 | Botón "Sincronizar ahora" |
 | **Timestamp** | SyncStatusBar.kt | 70-85 | "Última sincronización: hace 2 min" |
 
@@ -565,25 +606,96 @@ SyncStatusBar(
 
 ## 📊 Decisiones de Diseño Documentadas
 
-### **1. LRU Cache vs ArrayMap**
+### **1. Eliminar UserStatsLRUCache — Simplicidad sobre Micro-optimización**
 
-**Decisión:** Usar ambas en estrategia híbrida
+**Problema Original:** 🤔 LRU caché de 5 usuarios pero usuario individual solo consulta SUS datos
 
-**LRU Cache (UserStatsLRUCache.kt líneas 29-90):**
-- **Cuándo:** Estadísticas del usuario (variable, frecuentemente accedidas)
-- **Patrón:** LinkedHashMap con access-order LRU
-- **TTL:** 15 minutos
-- **Size:** Max 5 entries
-- **Ventaja:** Si usuario abre pantalla 5 veces, solo 1 sync de Firestore
-- **Ahorro:** 4 × (500ms - 1ms) = 1996ms ⚡
+**Decisión:** ❌ Remover UserStatsLRUCache
 
-**ArrayMap Cache (BadgeArrayMapCache.kt líneas 43-126):**
-- **Cuándo:** Badges (18 fijos, pocas lookups)
-- **Patrón:** androidx.collection.ArrayMap
-- **TTL:** 30 minutos
-- **Size:** Fijo 18 entries
-- **Ventaja:** Menos memoria que HashMap (no hash buckets)
-- **Ahorro:** ~50% vs HashMap para 18 items
+**Justificación:**
+- Usuario individual no consulta múltiples usuarios simultáneamente
+- Room Database ya persiste datos (caché + rápido)
+- StateFlow en ViewModel mantiene datos en RAM mientras app abierta
+- Diferencia de performance: 1ms (LRU) vs 50ms (Room) es imperceptible
+- Menos código = Menos bugs = Más mantenible
+
+**Arquitectura Final:**
+```
+Room Database (50ms)    ← Caché persistente
+    ↓
+Firestore (500ms)       ← Source of truth
+    ↓
+StateFlow (ViewModel)   ← Vive mientras app activa
+```
+
+**Performance Impacto:**
+- ✅ Igual de rápido para usuario individual
+- ✅ Menos memoria (no LinkedHashMap de 5 usuarios)
+- ✅ Código más simple y más fácil de mantener
+- ❌ Si necesitamos multi-cuenta en futuro, volver a agregar
+
+---
+
+### **2. NO Mostrar Valores Default — Best Practice**
+
+**Problema Original:** ❌ Mostrar `totalKm=0`, `totalEvents=0` para usuarios nuevos
+
+**Solución:** ✅ Mostrar mensaje amigable en su lugar
+```
+📊 No hay suficientes datos para mostrar tus estadísticas
+Participa en eventos, sube posts en la comunidad y corre para ver tus estadísticas aquí.
+```
+
+**Implementación:**
+- **UserStatsEntity.kt** línea 34: `hasRealData: Boolean = false`
+- **MyStatsRepository.kt** línea 205-216: Devolver null si usuario nuevo
+- **MyStatsScreen.kt** línea 67-85: Mostrar mensaje si stats == null
+
+**Ventajas:**
+- ✅ No confunde al usuario con "0 eventos" cuando es usuario nuevo
+- ✅ Invita al usuario a participar
+- ✅ UX clara: datos reales vs usuario nuevo
+
+---
+
+### **3. Crear Subcollections en Firestore para Usuarios Existentes**
+
+**Caso:** Usuario tiene datos en Room pero NO tiene subcollections en Firestore
+
+**Solución:**
+- Línea 195-201: Detectar caso, crear subcollections automáticamente
+- Línea 219-244: `createFirestoreSubcollections()` en background
+- Devolver datos reales (no defaults)
+
+**Flujo:**
+```
+Usuario con 5 eventos, 3 posts, 10 km
+├─ Room: UserStatsEntity (hasRealData=true)
+├─ Firestore: No existen subcollections
+├─ Action: Crear subcollections en background
+└─ UI: Mostrar datos reales (5 eventos, 3 posts, 10 km)
+```
+
+---
+
+### **4. LRU vs ArrayMap (Solo se mantiene ArrayMap)**
+
+**LRU Cache (ELIMINADO):**
+- ❌ Redundante para usuario individual
+- ❌ Removido en favor de Room + StateFlow
+
+**ArrayMap Cache (MANTENIDO - BadgeArrayMapCache.kt líneas 43-126):**
+- ✅ Pocas entradas (máximo 18 badges predefinidos)
+- ✅ Más eficiente en memoria que HashMap para <50 items
+- ✅ Lookup O(log n) instantáneo con n=18
+- ✅ 50% menos memoria vs HashMap
+- ✅ TTL: 30 minutos
+
+**Justificación de mantener ArrayMap:**
+- Badges son data estática y se carga una sola vez al app startup
+- Lookup por ID es muy común (mostrar badge en UI)
+- 18 items fijos justifican el uso de ArrayMap
+- No hay razón para removerlo
 
 ---
 
