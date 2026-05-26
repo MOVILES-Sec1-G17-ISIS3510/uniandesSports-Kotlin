@@ -2,10 +2,14 @@ package com.uniandes.sport.data.repositories
 
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.uniandes.sport.data.cache.BadgeArrayMapCache
 import com.uniandes.sport.data.database.StatsDatabase
 import com.uniandes.sport.data.entities.BadgeEntity
 import com.uniandes.sport.data.entities.UserStatsEntity
+import com.uniandes.sport.models.ActiveChallengeData
+import com.uniandes.sport.models.RunDataPoint
+import com.uniandes.sport.models.SportBreakdownItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +24,12 @@ interface MyStatsRepositoryInterface {
     fun getStats(userId: String, forceRefresh: Boolean = false): Flow<UserStatsEntity>
     fun getBadges(userId: String): Flow<List<BadgeEntity>>
     fun getSyncStatus(): Flow<String>
+    /** Last ≤10 run sessions in chronological order (oldest → newest). */
+    fun getRecentRuns(userId: String): Flow<List<RunDataPoint>>
+    /** Active challenges the user is participating in, with their personal progress. */
+    fun getActiveChallenges(userId: String): Flow<List<ActiveChallengeData>>
+    /** Events the user joined, grouped and counted by sport. */
+    fun getSportBreakdown(userId: String): Flow<List<SportBreakdownItem>>
 }
 
 /**
@@ -418,6 +428,133 @@ class MyStatsRepository(
         syncStatus = syncStatus,
         hasRealData = false
     )
+
+    // ─── Enriched data: runs, challenges, sport breakdown ────────────────────
+
+    /**
+     * Fetches the last 10 run sessions for the user from Firestore, reversed into
+     * chronological order so the chart renders left = oldest → right = newest.
+     */
+    override fun getRecentRuns(userId: String): Flow<List<RunDataPoint>> = flow {
+        if (userId.isBlank()) { emit(emptyList()); return@flow }
+        try {
+            val db = FirebaseFirestore.getInstance()
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("runs")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(10)
+                .get()
+                .await()
+
+            val runs = snapshot.documents.mapNotNull { doc ->
+                try {
+                    RunDataPoint(
+                        distanceKm = (doc.getDouble("distanceKm") ?: 0.0).toFloat(),
+                        timestamp  = doc.getLong("timestamp") ?: 0L,
+                        pace       = doc.getString("pace") ?: ""
+                    )
+                } catch (e: Exception) { null }
+            }.reversed()  // oldest first → looks natural in a bar chart
+
+            Log.d("📊 MYSTATS:", "🏃 Recent runs: ${runs.size}")
+            emit(runs)
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error getRecentRuns: ${e.message}")
+            emit(emptyList())
+        }
+    }
+
+    /**
+     * Fetches active challenges the user participates in and maps them to
+     * [ActiveChallengeData] with the user's personal progress (0–100 scale).
+     */
+    override fun getActiveChallenges(userId: String): Flow<List<ActiveChallengeData>> = flow {
+        if (userId.isBlank()) { emit(emptyList()); return@flow }
+        try {
+            val db = FirebaseFirestore.getInstance()
+            val snapshot = db.collection("challenges")
+                .whereEqualTo("status", "active")
+                .whereArrayContains("participants", userId)
+                .get()
+                .await()
+
+            val challenges = snapshot.documents.mapNotNull { doc ->
+                try {
+                    @Suppress("UNCHECKED_CAST")
+                    val progressByUser = doc.get("progressByUser") as? Map<String, Any>
+                        ?: emptyMap()
+                    val userProg: Double = when (val raw = progressByUser[userId]) {
+                        is Double -> raw
+                        is Long   -> raw.toDouble()
+                        is Number -> raw.toDouble()
+                        else      -> 0.0
+                    }
+                    ActiveChallengeData(
+                        id           = doc.id,
+                        title        = doc.getString("title") ?: "",
+                        sport        = doc.getString("sport") ?: "",
+                        goalLabel    = doc.getString("goalLabel") ?: "",
+                        userProgress = userProg,
+                        endDate      = doc.getTimestamp("endDate")?.toDate()?.time
+                    )
+                } catch (e: Exception) {
+                    Log.e("📊 MYSTATS:", "Error parsing challenge ${doc.id}: ${e.message}")
+                    null
+                }
+            }
+
+            Log.d("📊 MYSTATS:", "🎯 Active challenges: ${challenges.size}")
+            emit(challenges)
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error getActiveChallenges: ${e.message}")
+            emit(emptyList())
+        }
+    }
+
+    /**
+     * Counts how many events the user has joined per sport, using the same
+     * collectionGroup("members") strategy as countUserEvents().
+     * Returns a list sorted by count descending (most played sport first).
+     */
+    override fun getSportBreakdown(userId: String): Flow<List<SportBreakdownItem>> = flow {
+        if (userId.isBlank()) { emit(emptyList()); return@flow }
+        try {
+            val db = FirebaseFirestore.getInstance()
+
+            val memberships = db.collectionGroup("members")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+
+            // Keep only docs whose path is  events/{eventId}/members/{…}
+            val eventRefs = memberships.documents
+                .filter { doc -> doc.reference.parent.parent?.parent?.id == "events" }
+                .mapNotNull { doc -> doc.reference.parent.parent }
+
+            val sportCounts = mutableMapOf<String, Int>()
+            for (eventRef in eventRefs) {
+                try {
+                    val eventDoc = eventRef.get().await()
+                    val sport = eventDoc.getString("sport")
+                        ?.takeIf { it.isNotBlank() } ?: "Other"
+                    sportCounts[sport] = (sportCounts[sport] ?: 0) + 1
+                } catch (_: Exception) { /* skip inaccessible event */ }
+            }
+
+            val breakdown = sportCounts.entries
+                .sortedByDescending { it.value }
+                .map { SportBreakdownItem(sport = it.key, count = it.value) }
+
+            Log.d("📊 MYSTATS:", "⚽ Sport breakdown: ${breakdown.size} sports, ${eventRefs.size} events")
+            emit(breakdown)
+        } catch (e: Exception) {
+            Log.e("📊 MYSTATS:", "Error getSportBreakdown: ${e.message}")
+            emit(emptyList())
+        }
+    }
+
+    // ─── Cache diagnostics ────────────────────────────────────────────────────
 
     fun printCacheStats() {
         Log.d("CACHE_STATS", badgeArrayMapCache.getStats())
