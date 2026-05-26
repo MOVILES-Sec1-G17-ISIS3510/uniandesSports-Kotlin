@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
     object Comunidades : Screen("social")
     object Profesores : Screen("coaches")
     object Perfil : Screen("profile")
+    object MyStats : Screen("my_stats")
     object Torneos : Screen("tournaments")
     object Clima : Screen("weather")
     object Strava : Screen("strava")

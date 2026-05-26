@@ -130,4 +130,17 @@ class MyStatsViewModel(
             // TODO: implementar en repository
         }
     }
+
+    companion object {
+        fun provideFactory(
+            repository: MyStatsRepository,
+            userId: String
+        ): androidx.lifecycle.ViewModelProvider.Factory = 
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    return MyStatsViewModel(repository, userId) as T
+                }
+            }
+    }
 }

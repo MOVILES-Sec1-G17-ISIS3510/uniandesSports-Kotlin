@@ -111,6 +111,21 @@ fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
+        composable(Screen.MyStats.route) {
+            com.uniandes.sport.ui.screens.stats.MyStatsScreen(
+                viewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    factory = com.uniandes.sport.viewmodels.stats.MyStatsViewModel.provideFactory(
+                        com.uniandes.sport.data.repositories.MyStatsRepository(
+                            com.uniandes.sport.data.database.StatsDatabase.getDatabase(navController.context),
+                            com.uniandes.sport.data.cache.BadgeArrayMapCache()
+                        ),
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                    )
+                ),
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
         composable(Screen.Torneos.route) {
             TorneosScreen(
                 onNavigate = { route -> navController.navigate(route) },
