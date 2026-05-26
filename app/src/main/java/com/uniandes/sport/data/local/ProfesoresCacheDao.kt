@@ -18,6 +18,9 @@ interface ProfesoresCacheDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProfesores(items: List<CachedProfesorEntity>)
 
+    @Query("SELECT * FROM cached_profesores WHERE id = :id")
+    suspend fun getProfesorById(id: String): CachedProfesorEntity?
+
     @Query("DELETE FROM cached_profesores")
     suspend fun clearProfesores()
 

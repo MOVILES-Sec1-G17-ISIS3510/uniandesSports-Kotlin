@@ -193,10 +193,10 @@ fun AppNavigation(
             })
         ) { backStackEntry ->
             val coachIds = backStackEntry.arguments?.getString("coachIds") ?: ""
-            val profesoresViewModel: FirestoreProfesoresViewModel = viewModel()
+            val comparisonViewModel: com.uniandes.sport.viewmodels.profesores.CoachComparisonViewModel = viewModel()
             CoachComparisonScreen(
                 coachIds = coachIds,
-                profesoresViewModel = profesoresViewModel,
+                viewModel = comparisonViewModel,
                 onNavigateBack = { navController.popBackStack() },
                 onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) }
             )
