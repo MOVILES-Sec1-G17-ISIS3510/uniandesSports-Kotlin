@@ -24,6 +24,8 @@ import com.uniandes.sport.models.warmup.WarmupExercise
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.theme.ArchivoFamily
+import com.uniandes.sport.viewmodels.log.FirebaseLogViewModel
+import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.viewmodels.warmup.WarmupRoutinesViewModel
 import kotlinx.coroutines.launch
 
@@ -37,7 +39,8 @@ fun WarmupExercisesScreen(
     category: String,
     intensity: String,
     onNavigateBack: () -> Unit,
-    viewModel: WarmupRoutinesViewModel = viewModel()
+    viewModel: WarmupRoutinesViewModel = viewModel(),
+    logViewModel: LogViewModelInterface = viewModel<FirebaseLogViewModel>()
 ) {
     val exercises by viewModel.selectedExercises.collectAsState()
     val pool by viewModel.exercisesPool.collectAsState()
@@ -115,7 +118,19 @@ fun WarmupExercisesScreen(
                 else -> ExercisesPager(
                     exercises = exercises,
                     poolSize = pool.size,
-                    onShuffle = { viewModel.shuffle() }
+                    onShuffle = {
+                        // BQ Type 3: shuffle indica engagement profundo en la combinacion
+                        // (el usuario no solo vio sino que pidio mas ejercicios del mismo set)
+                        logViewModel.log(
+                            screen = "WarmupExercisesScreen",
+                            action = "warmup_shuffle_clicked",
+                            params = mapOf(
+                                "category" to category,
+                                "intensity" to intensity
+                            )
+                        )
+                        viewModel.shuffle()
+                    }
                 )
             }
             }

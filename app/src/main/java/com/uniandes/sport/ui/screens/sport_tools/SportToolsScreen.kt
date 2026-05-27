@@ -1,6 +1,5 @@
 package com.uniandes.sport.ui.screens.sport_tools
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,8 +8,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.*
@@ -20,16 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.theme.ArchivoFamily
 
-// vista principal de sport tools: 4 cards pastel (calisthenics, distance tracker,
-// warm-up, ai nutrition). solo warm-up es funcional en esta fase; las otras
-// muestran un toast "coming soon" como en flutter
+// vista principal de sport tools: 2 cards pastel (warm-up routines, ai nutrition).
+// el grid se mantiene minimal mostrando solo las features funcionales del sprint
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SportToolsScreen(
@@ -37,8 +32,6 @@ fun SportToolsScreen(
     onNavigateToWarmup: () -> Unit,
     onNavigateToNutrition: () -> Unit
 ) {
-    val context = LocalContext.current
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -79,24 +72,6 @@ fun SportToolsScreen(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-            ToolCard(
-                title = "AI Calisthenics Assistant",
-                icon = Icons.Default.FitnessCenter,
-                pastel = Color(0xFFFDE6E8),
-                accent = Color(0xFFAA4452),
-                onClick = {
-                    Toast.makeText(context, "AI Calisthenics — coming soon", Toast.LENGTH_SHORT).show()
-                }
-            )
-            ToolCard(
-                title = "Distance Tracker",
-                icon = Icons.Default.Map,
-                pastel = Color(0xFFE2F1DC),
-                accent = Color(0xFF4F7A40),
-                onClick = {
-                    Toast.makeText(context, "Distance Tracker — coming soon", Toast.LENGTH_SHORT).show()
-                }
-            )
             ToolCard(
                 title = "Warm-Up Routines",
                 icon = Icons.Default.SelfImprovement,

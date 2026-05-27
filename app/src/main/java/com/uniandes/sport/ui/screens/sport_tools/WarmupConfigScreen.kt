@@ -19,6 +19,8 @@ import com.uniandes.sport.data.preferences.WarmupPreferencesRepository
 import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.theme.ArchivoFamily
+import com.uniandes.sport.viewmodels.log.FirebaseLogViewModel
+import com.uniandes.sport.viewmodels.log.LogViewModelInterface
 import com.uniandes.sport.viewmodels.warmup.WarmupRoutinesViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -37,7 +39,8 @@ private val INTENSITIES = listOf("Low", "High")
 fun WarmupConfigScreen(
     onNavigateBack: () -> Unit,
     onNavigateToExercises: (category: String, intensity: String) -> Unit,
-    viewModel: WarmupRoutinesViewModel = viewModel()
+    viewModel: WarmupRoutinesViewModel = viewModel(),
+    logViewModel: LogViewModelInterface = viewModel<FirebaseLogViewModel>()
 ) {
     val context = LocalContext.current
     val isOnline = rememberIsOnline()
@@ -146,6 +149,18 @@ fun WarmupConfigScreen(
                             intensity = selectedIntensity,
                             isOnline = isOnline
                         ) {
+                            // BQ Type 3: registrar la combinacion usada para medir demanda
+                            // por (category, intensity) y poder decidir cuales invertir/deprecar
+                            logViewModel.log(
+                                screen = "WarmupConfigScreen",
+                                action = "warmup_combination_used",
+                                params = mapOf(
+                                    "category" to selectedCategory,
+                                    "intensity" to selectedIntensity,
+                                    "result_count" to viewModel.exercisesPool.value.size.toString(),
+                                    "is_online" to isOnline.toString()
+                                )
+                            )
                             val cat = URLEncoder.encode(selectedCategory, "UTF-8")
                             val int = URLEncoder.encode(selectedIntensity, "UTF-8")
                             onNavigateToExercises(cat, int)
