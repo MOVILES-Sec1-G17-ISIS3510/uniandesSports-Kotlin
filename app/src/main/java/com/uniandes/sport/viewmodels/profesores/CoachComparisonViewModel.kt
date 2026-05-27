@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.repositories.CoachComparisonRepository
 import com.uniandes.sport.repositories.CoachFetchResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,13 +43,17 @@ class CoachComparisonViewModel(application: Application) : AndroidViewModel(appl
             return
         }
 
+        // Save last compared coach IDs to SharedPreferences exclusively for comparison history
+        com.uniandes.sport.data.local.CoachComparisonPreferences.saveLastComparedIds(getApplication(), coachIdsStr)
+
         _uiState.value = CoachComparisonUiState.Loading
 
-        viewModelScope.launch {
+        // Parent Coroutine running on UI/Main thread
+        viewModelScope.launch(Dispatchers.Main) {
             try {
-                // Fetch coaches simultaneously using Kotlin Coroutines async/await
+                // Nested Child Coroutines running on Input/Output thread pool (Dispatchers.IO)
                 val deferredList = ids.map { id ->
-                    async {
+                    async(Dispatchers.IO) {
                         repository.fetchCoach(id)
                     }
                 }

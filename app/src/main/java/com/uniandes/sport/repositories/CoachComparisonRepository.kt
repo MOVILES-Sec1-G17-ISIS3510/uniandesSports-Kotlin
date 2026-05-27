@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.uniandes.sport.cache.CoachComparisonCache
 import com.uniandes.sport.data.local.CachedProfesorEntity
 import com.uniandes.sport.data.local.ProfesoresLocalRepository
 import com.uniandes.sport.data.local.toModel
@@ -37,41 +38,56 @@ class CoachComparisonRepository private constructor(
     }
 
     suspend fun fetchCoach(id: String): CoachFetchResult {
+        // 1. Check true Caching Strategy (In-Memory LRU Cache) first
+        val memoryCached = CoachComparisonCache.get(id)
+        if (memoryCached != null) {
+            Log.d("CoachComparisonRepo", "In-Memory LRU Cache HIT for coach $id")
+            return CoachFetchResult.Success(memoryCached, isFromCache = true)
+        }
+
         val isOnline = isNetworkConnected()
         val localCacheEntity = localRepository.getCachedProfesorEntity(id)
 
         if (isOnline) {
-            // Check if cache is fresh (less than 10 minutes old)
+            // Check if local database cache is fresh (less than 10 minutes old)
             val isFresh = localCacheEntity != null && (System.currentTimeMillis() - localCacheEntity.cachedAt < 10 * 60 * 1000L)
             if (isFresh && localCacheEntity != null) {
-                Log.d("CoachComparisonRepo", "Cache HIT (fresh < 10m) for coach $id")
-                return CoachFetchResult.Success(localCacheEntity.toModel(), isFromCache = true)
+                Log.d("CoachComparisonRepo", "Local DB HIT (fresh < 10m) for coach $id")
+                val profesor = localCacheEntity.toModel()
+                // Update in-memory LRU cache
+                CoachComparisonCache.put(id, profesor)
+                return CoachFetchResult.Success(profesor, isFromCache = true)
             }
 
             // Fetch from Firestore
             try {
-                Log.d("CoachComparisonRepo", "Cache MISS or stale. Fetching coach $id from Firestore...")
+                Log.d("CoachComparisonRepo", "Local DB MISS or stale. Fetching coach $id from Firestore...")
                 val doc = firestore.collection("profesores").document(id).get().await()
                 if (doc.exists()) {
                     val profesor = doc.toObject(Profesor::class.java)?.apply { this.id = doc.id }
                     if (profesor != null) {
                         localRepository.upsertProfesor(profesor)
-                        Log.d("CoachComparisonRepo", "Successfully fetched coach $id from Firestore and updated Room cache")
+                        Log.d("CoachComparisonRepo", "Successfully fetched coach $id from Firestore and updated Room storage")
+                        // Update in-memory LRU cache
+                        CoachComparisonCache.put(id, profesor)
                         return CoachFetchResult.Success(profesor, isFromCache = false)
                     }
                 }
             } catch (e: Exception) {
-                Log.e("CoachComparisonRepo", "Firestore fetch failed for coach $id. Falling back to local cache.", e)
+                Log.e("CoachComparisonRepo", "Firestore fetch failed for coach $id. Falling back to local db storage.", e)
             }
         }
 
-        // Offline or Firestore failed -> fallback to cache (stale or otherwise)
+        // Offline or Firestore failed -> fallback to local db storage (stale or otherwise)
         return if (localCacheEntity != null) {
             Log.d("CoachComparisonRepo", "Fallback: Returning cached coach $id (Online: $isOnline)")
-            CoachFetchResult.Success(localCacheEntity.toModel(), isFromCache = true)
+            val profesor = localCacheEntity.toModel()
+            // Update in-memory LRU cache
+            CoachComparisonCache.put(id, profesor)
+            return CoachFetchResult.Success(profesor, isFromCache = true)
         } else {
-            Log.d("CoachComparisonRepo", "Failure: No internet and no cached data for coach $id")
-            CoachFetchResult.Failure(Exception("No connection and no cached data available for coach $id"))
+            Log.d("CoachComparisonRepo", "Failure: No internet and no local db data for coach $id")
+            CoachFetchResult.Failure(Exception("No connection and no local db data available for coach $id"))
         }
     }
 

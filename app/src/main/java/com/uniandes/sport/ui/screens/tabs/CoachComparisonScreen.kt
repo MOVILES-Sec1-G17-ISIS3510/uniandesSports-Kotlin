@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -194,6 +196,11 @@ fun ComparisonMatrixContent(
         comparedCoaches.map { it.rankInSport }.filter { it > 0 }.minOrNull() ?: 99999
     }
 
+    val context = LocalContext.current
+    var highlightOptimal by remember {
+        mutableStateOf(com.uniandes.sport.data.local.CoachComparisonPreferences.getHighlightOptimal(context))
+    }
+
     val scrollStateVertical = rememberScrollState()
     val scrollStateHorizontal = rememberScrollState()
 
@@ -241,22 +248,49 @@ fun ComparisonMatrixContent(
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
         ) {
             Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.Compare,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Comparing ${comparedCoaches.size} coaches. Glowing borders and badges highlight the optimal selections.",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Compare,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Comparing ${comparedCoaches.size} coaches.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                
+                // Toggle switch exclusive to compare professors
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Highlights",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Switch(
+                        checked = highlightOptimal,
+                        onCheckedChange = {
+                            highlightOptimal = it
+                            com.uniandes.sport.data.local.CoachComparisonPreferences.saveHighlightOptimal(context, it)
+                        },
+                        modifier = Modifier.scale(0.75f)
+                    )
+                }
             }
         }
 
@@ -280,13 +314,13 @@ fun ComparisonMatrixContent(
                 Column(
                     modifier = Modifier.width(labelColumnWidth)
                 ) {
-                    CellHeader(height = 175.dp, label = "Coaches")
+                    CellHeader(height = 180.dp, label = "Coaches")
                     CellLabel(height = 56.dp, label = "Sport")
-                    CellLabel(height = 56.dp, label = "Price / hr")
-                    CellLabel(height = 56.dp, label = "Rating")
-                    CellLabel(height = 56.dp, label = "Experience")
-                    CellLabel(height = 100.dp, label = "Specialty")
-                    CellLabel(height = 56.dp, label = "Sport Rank")
+                    CellLabel(height = 72.dp, label = "Price / hr")
+                    CellLabel(height = 72.dp, label = "Rating")
+                    CellLabel(height = 72.dp, label = "Experience")
+                    CellLabel(height = 120.dp, label = "Specialty")
+                    CellLabel(height = 72.dp, label = "Sport Rank")
                     CellLabel(height = 56.dp, label = "Sessions")
                     CellLabel(height = 56.dp, label = "Wins")
                     CellLabel(height = 56.dp, label = "Verified")
@@ -305,7 +339,7 @@ fun ComparisonMatrixContent(
                             // Coach Header: Profile Picture, Name and Booking Button
                             Box(
                                 modifier = Modifier
-                                    .height(175.dp)
+                                    .height(180.dp)
                                     .fillMaxWidth()
                                     .background(
                                         Brush.verticalGradient(
@@ -364,9 +398,9 @@ fun ComparisonMatrixContent(
 
                             // Price per hour (Lowest is best)
                             val coachPriceVal = parsePrice(coach.precio)
-                            val isBestPrice = coachPriceVal == lowestPrice && lowestPrice != 99999
+                            val isBestPrice = highlightOptimal && coachPriceVal == lowestPrice && lowestPrice != 99999
                             CellContent(
-                                height = 56.dp,
+                                height = 72.dp,
                                 text = coach.precio,
                                 isHighlighted = isBestPrice,
                                 highlightBgColor = Color(0xFFE8F5E9),
@@ -376,9 +410,9 @@ fun ComparisonMatrixContent(
                             )
 
                             // Rating (Highest is best)
-                            val isBestRating = coach.rating == highestRating && highestRating > 0.0
+                            val isBestRating = highlightOptimal && coach.rating == highestRating && highestRating > 0.0
                             CellContent(
-                                height = 56.dp,
+                                height = 72.dp,
                                 text = if (coach.totalReviews > 0) {
                                     "${String.format(Locale.US, "%.1f", coach.rating)} (${coach.totalReviews})"
                                 } else {
@@ -401,9 +435,9 @@ fun ComparisonMatrixContent(
 
                             // Experience (Most experience is best)
                             val expYears = parseExperience(coach.experiencia)
-                            val isBestExp = expYears == mostExperience && mostExperience > 0
+                            val isBestExp = highlightOptimal && expYears == mostExperience && mostExperience > 0
                             CellContent(
-                                height = 56.dp,
+                                height = 72.dp,
                                 text = coach.experiencia,
                                 isHighlighted = isBestExp,
                                 highlightBgColor = Color(0xFFE3F2FD),
@@ -414,15 +448,15 @@ fun ComparisonMatrixContent(
 
                             // Specialty
                             CellContent(
-                                height = 100.dp,
+                                height = 120.dp,
                                 text = coach.especialidad,
                                 maxLines = 4
                             )
 
                             // Rank in sport (Lowest number rank is best, e.g. #1)
-                            val isBestRank = coach.rankInSport == bestRank && bestRank != 99999
+                            val isBestRank = highlightOptimal && coach.rankInSport == bestRank && bestRank != 99999
                             CellContent(
-                                height = 56.dp,
+                                height = 72.dp,
                                 text = "#${coach.rankInSport}",
                                 isHighlighted = isBestRank,
                                 highlightBgColor = Color(0xFFF3E5F5),
@@ -544,14 +578,16 @@ fun CellContent(
             .fillMaxWidth()
             .border(borderStroke)
             .then(bgModifier)
-            .padding(6.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
         ) {
             Row(
+                modifier = Modifier.wrapContentSize(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -561,7 +597,7 @@ fun CellContent(
                 }
                 Text(
                     text = text,
-                    fontSize = 11.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
                     color = textColor,
                     textAlign = TextAlign.Center,
@@ -570,18 +606,19 @@ fun CellContent(
                 )
             }
             if (badgeText != null) {
-                Spacer(modifier = Modifier.height(2.dp))
                 Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = highlightStrokeColor,
-                    modifier = Modifier.height(13.dp)
+                    modifier = Modifier.wrapContentSize()
                 ) {
                     Text(
                         text = badgeText.uppercase(),
                         color = Color.White,
-                        fontSize = 7.sp,
+                        fontSize = 7.5.sp,
                         fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
                     )
                 }
             }
