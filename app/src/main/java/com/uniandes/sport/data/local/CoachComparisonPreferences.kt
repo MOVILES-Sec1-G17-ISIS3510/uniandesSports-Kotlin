@@ -5,6 +5,13 @@ import android.content.Context
 private const val PREFS_NAME = "coach_comparison_prefs"
 private const val KEY_LAST_COMPARED_IDS = "last_compared_ids"
 private const val KEY_HIGHLIGHT_OPTIMAL = "highlight_optimal"
+private const val KEY_COMPARISON_HISTORY = "comparison_history"
+
+data class ComparisonHistoryEntry(
+    val ids: String,
+    val names: String,
+    val timestamp: Long
+)
 
 /**
  * SharedPreferences storage implemented EXCLUSIVELY for the Coach Comparison feature.
@@ -40,4 +47,34 @@ object CoachComparisonPreferences {
      */
     fun getHighlightOptimal(context: Context): Boolean =
         prefs(context).getBoolean(KEY_HIGHLIGHT_OPTIMAL, true)
+
+    /**
+     * Retrieves the list of recent comparisons from preferences.
+     */
+    fun getComparisonHistory(context: Context): List<ComparisonHistoryEntry> {
+        val historyStr = prefs(context).getString(KEY_COMPARISON_HISTORY, "") ?: ""
+        if (historyStr.isBlank()) return emptyList()
+        return historyStr.split(";").mapNotNull { entry ->
+            val parts = entry.split("|")
+            if (parts.size >= 3) {
+                ComparisonHistoryEntry(
+                    ids = parts[0],
+                    names = parts[1],
+                    timestamp = parts[2].toLongOrNull() ?: System.currentTimeMillis()
+                )
+            } else null
+        }
+    }
+
+    /**
+     * Adds a comparison entry to history, maintaining up to 5 items and avoiding duplicates.
+     */
+    fun addComparisonToHistory(context: Context, idsCsv: String, namesCsv: String) {
+        val currentHistory = getComparisonHistory(context).toMutableList()
+        currentHistory.removeAll { it.ids == idsCsv }
+        currentHistory.add(0, ComparisonHistoryEntry(idsCsv, namesCsv, System.currentTimeMillis()))
+        val updatedList = currentHistory.take(5)
+        val historyStr = updatedList.joinToString(";") { "${it.ids}|${it.names}|${it.timestamp}" }
+        prefs(context).edit().putString(KEY_COMPARISON_HISTORY, historyStr).apply()
+    }
 }

@@ -2,19 +2,17 @@ package com.uniandes.sport.ui.screens.tabs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Compare
-import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +32,7 @@ import com.uniandes.sport.models.Profesor
 import com.uniandes.sport.ui.components.CoachAvatar
 import com.uniandes.sport.viewmodels.profesores.CoachComparisonViewModel
 import com.uniandes.sport.viewmodels.profesores.CoachComparisonUiState
+import com.uniandes.sport.viewmodels.profesores.ComparisonInsights
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,9 +41,11 @@ fun CoachComparisonScreen(
     coachIds: String,
     viewModel: CoachComparisonViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onNavigateBack: () -> Unit,
-    onBookClass: (String) -> Unit
+    onBookClass: (String) -> Unit,
+    onViewProfile: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val insights by viewModel.insights.collectAsState()
 
     LaunchedEffect(coachIds) {
         viewModel.loadComparison(coachIds)
@@ -54,15 +55,12 @@ fun CoachComparisonScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("Coach Comparison", fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        Text(
-                            "SIDE-BY-SIDE MATRIX",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = "Comparison",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -148,7 +146,9 @@ fun CoachComparisonScreen(
                     ComparisonMatrixContent(
                         comparedCoaches = state.coaches,
                         isOffline = state.isOffline,
-                        onBookClass = onBookClass
+                        onBookClass = onBookClass,
+                        onViewProfile = onViewProfile,
+                        insights = insights
                     )
                 }
             }
@@ -160,54 +160,29 @@ fun CoachComparisonScreen(
 fun ComparisonMatrixContent(
     comparedCoaches: List<Profesor>,
     isOffline: Boolean,
-    onBookClass: (String) -> Unit
+    onBookClass: (String) -> Unit,
+    onViewProfile: (String) -> Unit,
+    insights: ComparisonInsights = ComparisonInsights()
 ) {
-    // Responsive design parameters
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
-    
-    // Adapt layout sizes dynamically for tablet vs. phone viewports
-    val isTablet = screenWidth > 600.dp
-    val labelColumnWidth = if (isTablet) 140.dp else 115.dp
-    val columnWidthMin = if (isTablet) 180.dp else 145.dp
-    val paddingHorizontal = 32.dp // 16.dp margin on each side of the screen
-    val availableWidth = screenWidth - labelColumnWidth - paddingHorizontal
 
-    // Calculate dynamic column width: divide available space equally if they fit, else fallback to columnWidthMin
-    val columnWidth = remember(comparedCoaches.size, availableWidth, columnWidthMin) {
-        if (comparedCoaches.isEmpty()) columnWidthMin
-        else {
-            val calculated = availableWidth / comparedCoaches.size
-            if (calculated >= columnWidthMin) calculated else columnWidthMin
-        }
-    }
+    // Insights are computed asynchronously on Dispatchers.Default (background thread)
+    // in CoachComparisonViewModel.computeInsightsAsync()
+    val bestPriceCoach = insights.bestPriceCoach
+    val bestRatingCoach = insights.bestRatingCoach
+    val bestExpCoach = insights.mostExperiencedCoach
+    val bestWinsCoach = insights.mostWinsCoach
 
-    // Calculations to determine best-in-class metrics
-    val lowestPrice = remember(comparedCoaches) {
-        comparedCoaches.map { parsePrice(it.precio) }.minOrNull() ?: 99999
-    }
-    val highestRating = remember(comparedCoaches) {
-        comparedCoaches.map { it.rating }.maxOrNull() ?: 0.0
-    }
-    val mostExperience = remember(comparedCoaches) {
-        comparedCoaches.map { parseExperience(it.experiencia) }.maxOrNull() ?: 0
-    }
-    val bestRank = remember(comparedCoaches) {
-        comparedCoaches.map { it.rankInSport }.filter { it > 0 }.minOrNull() ?: 99999
-    }
-
-    val context = LocalContext.current
-    var highlightOptimal by remember {
-        mutableStateOf(com.uniandes.sport.data.local.CoachComparisonPreferences.getHighlightOptimal(context))
-    }
+    var selectedChip by remember { mutableStateOf<String?>(null) }
 
     val scrollStateVertical = rememberScrollState()
-    val scrollStateHorizontal = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollStateVertical)
+            .padding(bottom = 24.dp)
     ) {
         // Non-intrusive offline fallback banner
         if (isOffline) {
@@ -238,387 +213,155 @@ fun ComparisonMatrixContent(
             }
         }
 
-        // Premium Header Info Card
+        // Horizontal Category Chips Row
+        ChipsHeaderRow(
+            selectedChip = selectedChip,
+            onChipSelected = { label -> selectedChip = if (selectedChip == label) null else label }
+        )
+
+        // Best-in-class highlights panel (pill highlights in image 1)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // First Row: Best rated and Best value
                 Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Compare,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Comparing ${comparedCoaches.size} coaches.",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                
-                // Toggle switch exclusive to compare professors
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "Highlights",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Switch(
-                        checked = highlightOptimal,
-                        onCheckedChange = {
-                            highlightOptimal = it
-                            com.uniandes.sport.data.local.CoachComparisonPreferences.saveHighlightOptimal(context, it)
-                        },
-                        modifier = Modifier.scale(0.75f)
-                    )
-                }
-            }
-        }
-
-        // Glassmorphic Comparison Matrix Container
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 32.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            ),
-            shadowElevation = 6.dp
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // 1. Sticky Left Column (Row Headers)
-                Column(
-                    modifier = Modifier.width(labelColumnWidth)
-                ) {
-                    CellHeader(height = 180.dp, label = "Coaches")
-                    CellLabel(height = 56.dp, label = "Sport")
-                    CellLabel(height = 72.dp, label = "Price / hr")
-                    CellLabel(height = 72.dp, label = "Rating")
-                    CellLabel(height = 72.dp, label = "Experience")
-                    CellLabel(height = 120.dp, label = "Specialty")
-                    CellLabel(height = 72.dp, label = "Sport Rank")
-                    CellLabel(height = 56.dp, label = "Sessions")
-                    CellLabel(height = 56.dp, label = "Wins")
-                    CellLabel(height = 56.dp, label = "Verified")
-                }
-
-                // 2. Horizontally Scrollable Columns for the Coaches
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(scrollStateHorizontal)
-                ) {
-                    comparedCoaches.forEach { coach ->
-                        Column(
-                            modifier = Modifier.width(columnWidth)
-                        ) {
-                            // Coach Header: Profile Picture, Name and Booking Button
-                            Box(
-                                modifier = Modifier
-                                    .height(180.dp)
-                                    .fillMaxWidth()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    )
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(contentAlignment = Alignment.BottomEnd) {
-                                        CoachAvatar(profesor = coach, size = 60.dp)
-                                        if (coach.verified) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "Verified",
-                                                tint = Color(0xFF3B82F6),
-                                                modifier = Modifier
-                                                    .size(18.dp)
-                                                    .background(MaterialTheme.colorScheme.surface, CircleShape)
-                                                    .padding(1.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = coach.nombre,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 13.sp,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
-                                        onClick = { onBookClass(coach.id) },
-                                        contentPadding = PaddingValues(horizontal = 14.dp),
-                                        modifier = Modifier.height(34.dp),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.tertiary,
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Text("Book", fontSize = 11.sp, fontWeight = FontWeight.Black)
-                                    }
-                                }
-                            }
-
-                            // Sport Row
-                            CellContent(height = 56.dp, text = coach.deporte)
-
-                            // Price per hour (Lowest is best)
-                            val coachPriceVal = parsePrice(coach.precio)
-                            val isBestPrice = highlightOptimal && coachPriceVal == lowestPrice && lowestPrice != 99999
-                            CellContent(
-                                height = 72.dp,
-                                text = coach.precio,
-                                isHighlighted = isBestPrice,
-                                highlightBgColor = Color(0xFFE8F5E9),
-                                highlightStrokeColor = Color(0xFF4CAF50),
-                                textColor = if (isBestPrice) Color(0xFF1B5E20) else Color.Unspecified,
-                                badgeText = if (isBestPrice) "Best Price" else null
-                            )
-
-                            // Rating (Highest is best)
-                            val isBestRating = highlightOptimal && coach.rating == highestRating && highestRating > 0.0
-                            CellContent(
-                                height = 72.dp,
-                                text = if (coach.totalReviews > 0) {
-                                    "${String.format(Locale.US, "%.1f", coach.rating)} (${coach.totalReviews})"
-                                } else {
-                                    "New"
-                                },
-                                isHighlighted = isBestRating,
-                                highlightBgColor = Color(0xFFFFFDE7),
-                                highlightStrokeColor = Color(0xFFFFC107),
-                                textColor = if (isBestRating) Color(0xFFE65100) else Color.Unspecified,
-                                icon = {
-                                    Icon(
-                                        Icons.Default.Star,
-                                        null,
-                                        tint = Color(0xFFF59E0B),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                },
-                                badgeText = if (isBestRating) "Top Rated" else null
-                            )
-
-                            // Experience (Most experience is best)
-                            val expYears = parseExperience(coach.experiencia)
-                            val isBestExp = highlightOptimal && expYears == mostExperience && mostExperience > 0
-                            CellContent(
-                                height = 72.dp,
-                                text = coach.experiencia,
-                                isHighlighted = isBestExp,
-                                highlightBgColor = Color(0xFFE3F2FD),
-                                highlightStrokeColor = Color(0xFF2196F3),
-                                textColor = if (isBestExp) Color(0xFF0D47A1) else Color.Unspecified,
-                                badgeText = if (isBestExp) "Top Exp" else null
-                            )
-
-                            // Specialty
-                            CellContent(
-                                height = 120.dp,
-                                text = coach.especialidad,
-                                maxLines = 4
-                            )
-
-                            // Rank in sport (Lowest number rank is best, e.g. #1)
-                            val isBestRank = highlightOptimal && coach.rankInSport == bestRank && bestRank != 99999
-                            CellContent(
-                                height = 72.dp,
-                                text = "#${coach.rankInSport}",
-                                isHighlighted = isBestRank,
-                                highlightBgColor = Color(0xFFF3E5F5),
-                                highlightStrokeColor = Color(0xFF9C27B0),
-                                textColor = if (isBestRank) Color(0xFF4A148C) else Color.Unspecified,
-                                badgeText = if (isBestRank) "Leader" else null
-                            )
-
-                            // Sessions Delivered
-                            CellContent(height = 56.dp, text = coach.sessionsDelivered.toString())
-
-                            // Tournament Wins
-                            CellContent(height = 56.dp, text = coach.tournamentWins.toString())
-
-                            // Verification status
-                            Box(
-                                modifier = Modifier
-                                    .height(56.dp)
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (coach.verified) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Yes",
-                                        tint = Color(0xFF10B981),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                } else {
-                                    Text(
-                                        text = "No",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
+                    if (bestRatingCoach != null) {
+                        HighlightPill(
+                            icon = "⭐",
+                            title = "Best rated",
+                            coachName = bestRatingCoach.nombre.split(" ").firstOrNull() ?: bestRatingCoach.nombre,
+                            borderColor = Color(0xFFFCD34D),
+                            bgColor = Color(0xFFFEF3C7),
+                            textColor = Color(0xFFB45309),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (bestPriceCoach != null) {
+                        HighlightPill(
+                            icon = "$",
+                            title = "Best value",
+                            coachName = bestPriceCoach.nombre.split(" ").firstOrNull() ?: bestPriceCoach.nombre,
+                            borderColor = Color(0xFFA7F3D0),
+                            bgColor = Color(0xFFECFDF5),
+                            textColor = Color(0xFF047857),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
+
+                // Second Row: Most experienced
+                if (bestExpCoach != null) {
+                    HighlightPill(
+                        icon = "🎓",
+                        title = "Most experienced",
+                        coachName = bestExpCoach.nombre.split(" ").firstOrNull() ?: bestExpCoach.nombre,
+                        borderColor = Color(0xFFBFDBFE),
+                        bgColor = Color(0xFFEFF6FF),
+                        textColor = Color(0xFF1D4ED8)
+                    )
+                }
+
+                // Third Row: Most wins
+                if (bestWinsCoach != null) {
+                    HighlightPill(
+                        icon = "🏆",
+                        title = "Most wins",
+                        coachName = bestWinsCoach.nombre.split(" ").firstOrNull() ?: bestWinsCoach.nombre,
+                        borderColor = Color(0xFFFECACA),
+                        bgColor = Color(0xFFFEF2F2),
+                        textColor = Color(0xFFB91C1C)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Side-by-side Coach Cards Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            comparedCoaches.forEach { coach ->
+                val cardWidth = if (comparedCoaches.size > 2) 200.dp else (screenWidth - 48.dp) / 2
+                CoachComparisonColumnCard(
+                    coach = coach,
+                    modifier = Modifier.width(cardWidth),
+                    onBookClass = onBookClass,
+                    onViewProfile = onViewProfile,
+                    highlightedAttribute = selectedChip
+                )
             }
         }
     }
 }
 
-// Aligned Table cells components
-
 @Composable
-fun CellHeader(height: androidx.compose.ui.unit.Dp, label: String) {
-    Box(
-        modifier = Modifier
-            .height(height)
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-            .padding(12.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Text(
-            text = label.uppercase(),
-            fontWeight = FontWeight.Black,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.primary,
-            letterSpacing = 0.5.sp
-        )
-    }
-}
-
-@Composable
-fun CellLabel(height: androidx.compose.ui.unit.Dp, label: String) {
-    Box(
-        modifier = Modifier
-            .height(height)
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f))
-            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Text(
-            text = label,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-fun CellContent(
-    height: androidx.compose.ui.unit.Dp,
-    text: String,
-    isHighlighted: Boolean = false,
-    highlightBgColor: Color = Color.Transparent,
-    highlightStrokeColor: Color = Color.Transparent,
-    textColor: Color = Color.Unspecified,
-    badgeText: String? = null,
-    icon: @Composable (() -> Unit)? = null,
-    maxLines: Int = 1
+fun ChipsHeaderRow(
+    selectedChip: String? = null,
+    onChipSelected: (String) -> Unit = {}
 ) {
-    val borderStroke = if (isHighlighted && highlightStrokeColor != Color.Transparent) {
-        androidx.compose.foundation.BorderStroke(1.5.dp, highlightStrokeColor)
-    } else {
-        androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-    }
-
-    val bgModifier = if (isHighlighted && highlightBgColor != Color.Transparent) {
-        Modifier.background(highlightBgColor)
-    } else {
-        Modifier.background(MaterialTheme.colorScheme.surface)
-    }
-
-    Box(
+    val chips = listOf(
+        "Rating" to Icons.Default.Star,
+        "Reviews" to Icons.Default.Chat,
+        "Price" to Icons.Default.AttachMoney,
+        "Sessions" to Icons.Default.CalendarToday,
+        "Wins" to Icons.Default.EmojiEvents,
+        "Rank" to Icons.Default.Leaderboard,
+        "Experience" to Icons.Default.School
+    )
+    LazyRow(
         modifier = Modifier
-            .height(height)
             .fillMaxWidth()
-            .border(borderStroke)
-            .then(bgModifier)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
-        ) {
-            Row(
-                modifier = Modifier.wrapContentSize(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+        items(chips) { (label, icon) ->
+            val isSelected = selectedChip == label
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelected) Color(0xFF009688) else Color(0xFFE2F0EC),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (isSelected) 1.5.dp else 0.5.dp,
+                    if (isSelected) Color(0xFF00796B) else Color(0xFFB5DFD5)
+                ),
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .clickable { onChipSelected(label) }
             ) {
-                if (icon != null) {
-                    icon()
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                Text(
-                    text = text,
-                    fontSize = 11.sp,
-                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-                    color = textColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = maxLines,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (badgeText != null) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = highlightStrokeColor,
-                    modifier = Modifier.wrapContentSize()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) Color.White
+                               else if (label == "Rating") Color(0xFFFFB300)
+                               else Color(0xFF0F766E),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = badgeText.uppercase(),
-                        color = Color.White,
-                        fontSize = 7.5.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
+                        text = label,
+                        color = if (isSelected) Color.White else Color(0xFF0F766E),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -626,10 +369,252 @@ fun CellContent(
     }
 }
 
-private fun parsePrice(priceStr: String): Int {
-    return priceStr.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 99999
+@Composable
+fun HighlightPill(
+    icon: String,
+    title: String,
+    coachName: String,
+    borderColor: Color,
+    bgColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(text = icon, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = title,
+                color = textColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = " • ",
+                color = textColor,
+                fontSize = 12.sp
+            )
+            Text(
+                text = coachName,
+                color = textColor.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
 }
 
-private fun parseExperience(expStr: String): Int {
-    return expStr.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0
+@Composable
+fun CoachComparisonColumnCard(
+    coach: Profesor,
+    modifier: Modifier = Modifier,
+    onBookClass: (String) -> Unit,
+    onViewProfile: (String) -> Unit,
+    highlightedAttribute: String? = null
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Coach image avatar
+            CoachAvatar(
+                profesor = coach,
+                size = 64.dp
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Name with verified badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = coach.nombre,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (coach.verified) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Verified",
+                        tint = Color(0xFF3B82F6),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            
+            Text(
+                text = coach.deporte,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Attributes vertical list
+            // 1. Rating
+            CoachAttributeRow(
+                icon = Icons.Default.Star,
+                iconTint = Color(0xFFFFB300),
+                label = "Rating",
+                value = if (coach.totalReviews > 0) "${coach.rating}" else "-",
+                isHighlighted = highlightedAttribute == "Rating"
+            )
+            
+            // 2. Reviews
+            CoachAttributeRow(
+                icon = Icons.Default.Chat,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Reviews",
+                value = "${coach.totalReviews}",
+                isHighlighted = highlightedAttribute == "Reviews"
+            )
+            
+            // 3. Price
+            CoachAttributeRow(
+                icon = Icons.Default.AttachMoney,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Price",
+                value = coach.precio,
+                isHighlighted = highlightedAttribute == "Price"
+            )
+            
+            // 4. Sessions
+            CoachAttributeRow(
+                icon = Icons.Default.CalendarToday,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Sessions",
+                value = if (coach.sessionsDelivered > 0) "${coach.sessionsDelivered}" else "-",
+                isHighlighted = highlightedAttribute == "Sessions"
+            )
+            
+            // 5. Wins
+            CoachAttributeRow(
+                icon = Icons.Default.EmojiEvents,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Wins",
+                value = "${coach.tournamentWins}",
+                isHighlighted = highlightedAttribute == "Wins"
+            )
+            
+            // 6. Rank
+            CoachAttributeRow(
+                icon = Icons.Default.Leaderboard,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Rank",
+                value = "#${coach.rankInSport} / ${coach.totalReviews.coerceAtLeast(1)}",
+                isHighlighted = highlightedAttribute == "Rank"
+            )
+            
+            // 7. Experience
+            CoachAttributeRow(
+                icon = Icons.Default.School,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "Experience",
+                value = coach.experiencia,
+                isHighlighted = highlightedAttribute == "Experience"
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // View Profile Button
+            Button(
+                onClick = { onViewProfile(coach.id) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF009688)), // Teal
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "View Profile",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CoachAttributeRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    label: String,
+    value: String,
+    isHighlighted: Boolean = false
+) {
+    val bgColor = if (isHighlighted) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bgColor, RoundedCornerShape(8.dp))
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isHighlighted) Color(0xFF009688) else iconTint,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+        Text(
+            text = value,
+            color = if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+            fontSize = if (isHighlighted) 14.sp else 13.sp,
+            modifier = Modifier.padding(start = 24.dp)
+        )
+    }
 }

@@ -1,6 +1,7 @@
 package com.uniandes.sport.viewmodels.profesores
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.uniandes.sport.models.Profesor
@@ -13,6 +14,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Holds pre-computed best-in-class insights calculated on a background thread
+ * (Dispatchers.Default) to avoid blocking the UI thread.
+ *
+ * MULTITHREADING: This data class is the result of CPU-bound comparisons
+ * done asynchronously — not on the main thread.
+ */
+data class ComparisonInsights(
+    val bestRatingCoach: Profesor? = null,
+    val bestPriceCoach: Profesor? = null,
+    val mostExperiencedCoach: Profesor? = null,
+    val mostWinsCoach: Profesor? = null,
+    val highestRating: Double = 0.0,
+    val lowestPrice: Int = 99999,
+    val mostExperience: Int = 0,
+    val mostWins: Int = 0,
+    val computedOnThread: String = "" // Debug: which thread computed this
+)
 
 sealed interface CoachComparisonUiState {
     object Loading : CoachComparisonUiState
@@ -35,6 +56,10 @@ class CoachComparisonViewModel(application: Application) : AndroidViewModel(appl
 
     private val _uiState = MutableStateFlow<CoachComparisonUiState>(CoachComparisonUiState.Loading)
     val uiState: StateFlow<CoachComparisonUiState> = _uiState.asStateFlow()
+
+    /** Insights computed asynchronously on Dispatchers.Default (background CPU thread) */
+    private val _insights = MutableStateFlow(ComparisonInsights())
+    val insights: StateFlow<ComparisonInsights> = _insights.asStateFlow()
 
     fun loadComparison(coachIdsStr: String) {
         val ids = coachIdsStr.split(",").filter { it.isNotBlank() }
@@ -87,10 +112,63 @@ class CoachComparisonViewModel(application: Application) : AndroidViewModel(appl
                         coaches = successfulCoaches,
                         isOffline = isOfflineFallback
                     )
+                    val idsCsv = successfulCoaches.joinToString(",") { it.id }
+                    val namesCsv = successfulCoaches.joinToString(", ") { it.nombre.split(" ").firstOrNull() ?: it.nombre }
+                    com.uniandes.sport.data.local.CoachComparisonPreferences.addComparisonToHistory(getApplication(), idsCsv, namesCsv)
+
+                    // MULTITHREADING: Compute insights on Dispatchers.Default (CPU-bound background thread)
+                    // This keeps the UI responsive while metrics are being calculated.
+                    computeInsightsAsync(successfulCoaches)
                 }
             } catch (e: Exception) {
                 _uiState.value = CoachComparisonUiState.Error(e.message ?: "An unexpected error occurred.")
             }
         }
+    }
+
+    /**
+     * MULTITHREADING: Runs best-in-class insight calculations on Dispatchers.Default.
+     * Dispatchers.Default uses a thread pool optimized for CPU-intensive work,
+     * keeping the main (UI) thread free for rendering.
+     */
+    private fun computeInsightsAsync(coaches: List<Profesor>) {
+        viewModelScope.launch {
+            val computed = withContext(Dispatchers.Default) {
+                val threadName = Thread.currentThread().name
+                Log.d("COMPARISON_INSIGHTS", "Computing insights on thread: $threadName")
+
+                val prices = coaches.map { parsePrice(it.precio) }
+                val lowestPrice = prices.minOrNull() ?: 99999
+                val highestRating = coaches.maxOfOrNull { it.rating } ?: 0.0
+                val experiences = coaches.map { parseExperience(it.experiencia) }
+                val mostExp = experiences.maxOrNull() ?: 0
+                val mostWins = coaches.maxOfOrNull { it.tournamentWins } ?: 0
+
+                ComparisonInsights(
+                    bestRatingCoach = coaches.firstOrNull { it.rating == highestRating && highestRating > 0.0 },
+                    bestPriceCoach = coaches.firstOrNull { parsePrice(it.precio) == lowestPrice && lowestPrice != 99999 },
+                    mostExperiencedCoach = coaches.firstOrNull { parseExperience(it.experiencia) == mostExp && mostExp > 0 },
+                    mostWinsCoach = coaches.firstOrNull { it.tournamentWins == mostWins && mostWins > 0 },
+                    highestRating = highestRating,
+                    lowestPrice = lowestPrice,
+                    mostExperience = mostExp,
+                    mostWins = mostWins,
+                    computedOnThread = threadName
+                )
+            }
+            // Post result back to the UI thread via StateFlow
+            _insights.value = computed
+            Log.d("COMPARISON_INSIGHTS", "Insights posted to UI from thread: ${Thread.currentThread().name}")
+        }
+    }
+
+    /** Parse price string to integer for comparison */
+    private fun parsePrice(priceStr: String): Int {
+        return priceStr.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 99999
+    }
+
+    /** Parse experience string to integer years for comparison */
+    private fun parseExperience(expStr: String): Int {
+        return expStr.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0
     }
 }

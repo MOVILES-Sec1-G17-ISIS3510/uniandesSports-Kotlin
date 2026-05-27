@@ -198,7 +198,8 @@ fun AppNavigation(
                 coachIds = coachIds,
                 viewModel = comparisonViewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) }
+                onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) },
+                onViewProfile = { id -> navController.navigate(Screen.CoachProfile.route.replace("{profesorId}", id)) }
             )
         }
 
