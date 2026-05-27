@@ -53,13 +53,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private val themePrefsKey = "theme_mode"
     private val initialTabState = mutableStateOf(0)
     private val pendingOpenMatchEventIdState = mutableStateOf<String?>(null)
-    private val pendingCoachRequestState = mutableStateOf(false)
+    private val pendingCoachRequestState     = mutableStateOf(false)
+    private val pendingStatsInsightState     = mutableStateOf(false)
 
     companion object {
-        const val EXTRA_NOTIFICATION_TYPE = "notification_type"
-        const val EXTRA_EVENT_ID = "event_id"
-        private const val PLAY_TAB_INDEX = 2
-        private const val COACHES_TAB_INDEX = 4
+        const val EXTRA_NOTIFICATION_TYPE          = "notification_type"
+        const val EXTRA_EVENT_ID                   = "event_id"
+        const val NOTIFICATION_TYPE_STATS_INSIGHT  = "stats_insight"
+        private const val PLAY_TAB_INDEX           = 2
+        private const val COACHES_TAB_INDEX        = 4
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -190,6 +192,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             onOpenMatchConsumed = { pendingOpenMatchEventIdState.value = null },
                             pendingCoachRequest = pendingCoachRequestState.value,
                             onCoachRequestConsumed = { pendingCoachRequestState.value = false },
+                            pendingStatsInsight = pendingStatsInsightState.value,
+                            onStatsInsightConsumed = { pendingStatsInsightState.value = false },
                             themeMode = themeModeState.value,
                             onThemeChange = {
                                 themeModeState.value = it
@@ -270,6 +274,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             initialTabState.value = COACHES_TAB_INDEX
             pendingCoachRequestState.value = true
             Log.d("FCM_NAV", "Coach request received, triggering navigation")
+        } else if (notificationType == NOTIFICATION_TYPE_STATS_INSIGHT) {
+            // Navigate to MyStats — ViewModel will find the stored result and show the dialog
+            pendingStatsInsightState.value = true
+            Log.d("FCM_NAV", "Stats insight notification tapped, navigating to MyStats")
         }
     }
     override fun onResume() {

@@ -38,6 +38,8 @@ fun MainScaffold(
     onOpenMatchConsumed: () -> Unit = {},
     pendingCoachRequest: Boolean = false,
     onCoachRequestConsumed: () -> Unit = {},
+    pendingStatsInsight: Boolean = false,
+    onStatsInsightConsumed: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeChange: (ThemeMode) -> Unit = {},
     onExitApp: () -> Unit = {}
@@ -86,6 +88,17 @@ fun MainScaffold(
                 restoreState = true
             }
             onCoachRequestConsumed()
+        }
+    }
+
+    // React to AI stats insight notification tap — navigate to MyStats.
+    // The ViewModel will find the stored result in StatsInsightResultStore and show the dialog.
+    LaunchedEffect(pendingStatsInsight) {
+        if (pendingStatsInsight) {
+            navController.navigate(Screen.MyStats.route) {
+                launchSingleTop = true
+            }
+            onStatsInsightConsumed()
         }
     }
 

@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import com.uniandes.sport.utils.observeConnectivityAsFlow
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -112,14 +114,17 @@ fun AppNavigation(
             )
         }
         composable(Screen.MyStats.route) {
+            val context = LocalContext.current
+            val connectivityFlow = remember { context.observeConnectivityAsFlow() }
             com.uniandes.sport.ui.screens.stats.MyStatsScreen(
                 viewModel = androidx.lifecycle.viewmodel.compose.viewModel(
                     factory = com.uniandes.sport.viewmodels.stats.MyStatsViewModel.provideFactory(
                         com.uniandes.sport.data.repositories.MyStatsRepository(
-                            com.uniandes.sport.data.database.StatsDatabase.getDatabase(navController.context),
+                            com.uniandes.sport.data.database.StatsDatabase.getDatabase(context),
                             com.uniandes.sport.data.cache.BadgeArrayMapCache()
                         ),
-                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                        connectivityFlow = connectivityFlow
                     )
                 ),
                 onNavigate = { route -> navController.navigate(route) },

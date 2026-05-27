@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,19 +41,26 @@ import androidx.compose.material.icons.filled.SportsTennis
 import androidx.compose.material.icons.filled.SportsVolleyball
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +77,7 @@ import com.uniandes.sport.models.EventSummary
 import com.uniandes.sport.models.RunDataPoint
 import com.uniandes.sport.models.SportBreakdownItem
 import com.uniandes.sport.ui.screens.stats.components.SyncStatusBar
+import com.uniandes.sport.viewmodels.stats.InsightState
 import com.uniandes.sport.viewmodels.stats.MyStatsViewModelInterface
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -117,12 +126,21 @@ fun MyStatsScreen(
     val badges          by viewModel.badges.collectAsState()
     val syncStatus      by viewModel.syncStatus.collectAsState()
     val isLoading       by viewModel.isLoading.collectAsState()
+    val isOnline        by viewModel.isOnline.collectAsState()
+    val insightState    by viewModel.insightState.collectAsState()
     val recentRuns      by viewModel.recentRuns.collectAsState()
     val challengeStats  by viewModel.challengeStats.collectAsState()
     val joinedEvents    by viewModel.joinedEvents.collectAsState()
     val sportBreakdown  by viewModel.sportBreakdown.collectAsState()
 
     Log.d("📊 MYSTATS:", "🖼️ Render: events=${stats.totalEvents} posts=${stats.totalPosts} km=${stats.totalKm} badges=${badges.size}")
+
+    // Every time this screen enters composition (including notification deep-link when
+    // launchSingleTop reuses the ViewModel without re-running init), pick up any stored
+    // AI insight result from SharedPrefs.
+    LaunchedEffect(Unit) {
+        viewModel.loadStoredInsight()
+    }
 
     Scaffold(
         topBar = {
@@ -148,11 +166,21 @@ fun MyStatsScreen(
             // ── Sync status ───────────────────────────────────────────────────
             item {
                 SyncStatusBar(
-                    isOnline     = true,
+                    isOnline     = isOnline,
                     syncStatus   = syncStatus,
                     lastSyncTime = if (stats.lastSyncAt > 0) stats.lastSyncAt else null,
                     onSync       = { viewModel.refreshStats(forceSync = true) },
                     isLoading    = isLoading
+                )
+            }
+
+            // ── AI Coach insight ──────────────────────────────────────────────
+            item {
+                InsightSection(
+                    insightState = insightState,
+                    isOnline     = isOnline,
+                    onRequest    = { viewModel.requestInsight() },
+                    onClear      = { viewModel.dismissInsight() }
                 )
             }
 
@@ -699,6 +727,177 @@ private fun BadgeCell(def: BadgeDef, earned: Boolean, modifier: Modifier = Modif
     }
 }
 
+// ── AI Coach section (button + inline result) ─────────────────────────────────
+
+@Composable
+private fun InsightSection(
+    insightState: InsightState,
+    isOnline:     Boolean,
+    onRequest:    () -> Unit,
+    onClear:      () -> Unit
+) {
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        colors    = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        ),
+        shape     = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(
+            modifier            = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // ── Header ────────────────────────────────────────────────────────
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier         = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents, null,
+                        tint     = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "AI Coach",
+                        style      = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color      = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        when (insightState) {
+                            is InsightState.Ready   -> "Generated ${formatRelativeTime(insightState.generatedAt)}"
+                            is InsightState.Loading -> "Generating your report…"
+                            is InsightState.Queued  -> "Queued — waiting for connection"
+                            else                    -> "Personalized progress feedback"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // ── State-specific content ────────────────────────────────────────
+            when (insightState) {
+
+                // ── Idle ──────────────────────────────────────────────────────
+                is InsightState.Idle -> {
+                    Button(onClick = onRequest, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Star, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isOnline) "How am I doing?" else "How am I doing?  (queues offline)")
+                    }
+                }
+
+                // ── Loading ───────────────────────────────────────────────────
+                is InsightState.Loading -> {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(22.dp),
+                            strokeWidth = 2.5.dp,
+                            color       = MaterialTheme.colorScheme.tertiary
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "Getting your personalized insights…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+
+                // ── Queued ────────────────────────────────────────────────────
+                is InsightState.Queued -> {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            Icons.Default.CheckCircle, null,
+                            tint     = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Request saved! You'll get a notification once your AI coach is ready.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+
+                // ── Error ─────────────────────────────────────────────────────
+                is InsightState.Error -> {
+                    Text(
+                        text      = insightState.message,
+                        style     = MaterialTheme.typography.bodySmall,
+                        color     = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier  = Modifier.fillMaxWidth()
+                    )
+                    Button(onClick = onRequest, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Star, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Try again")
+                    }
+                }
+
+                // ── Ready — inline result ─────────────────────────────────────
+                is InsightState.Ready -> {
+                    // Divider
+                    androidx.compose.material3.HorizontalDivider(
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
+                    )
+
+                    // AI text — full, not truncated
+                    Text(
+                        text      = insightState.text,
+                        style     = MaterialTheme.typography.bodyMedium,
+                        color     = MaterialTheme.colorScheme.onTertiaryContainer,
+                        lineHeight = 22.sp
+                    )
+
+                    // Footer row: regenerate + clear
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick  = onRequest,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.TrendingUp, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (isOnline) "Regenerate" else "Regenerate (offline)",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        TextButton(onClick = onClear) {
+                            Text(
+                                "Clear",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 /**
@@ -729,4 +928,17 @@ private fun sportIcon(sport: String): ImageVector = when (sport.lowercase(Locale
 private fun formatShortDate(timestamp: Long): String {
     if (timestamp == 0L) return ""
     return SimpleDateFormat("dd/MM", Locale.getDefault()).format(Date(timestamp))
+}
+
+/** Converts a Unix timestamp to a human-readable relative time (e.g. "3m ago", "yesterday"). */
+private fun formatRelativeTime(timestamp: Long): String {
+    if (timestamp == 0L) return ""
+    val diff = System.currentTimeMillis() - timestamp
+    return when {
+        diff < 60_000L                -> "seconds ago"
+        diff < 3_600_000L             -> "${diff / 60_000}m ago"
+        diff < 86_400_000L            -> "${diff / 3_600_000}h ago"
+        diff < 172_800_000L           -> "yesterday"
+        else                          -> SimpleDateFormat("dd MMM", Locale.ENGLISH).format(Date(timestamp))
+    }
 }
