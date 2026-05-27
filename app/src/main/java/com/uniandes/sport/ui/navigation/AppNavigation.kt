@@ -205,6 +205,24 @@ fun AppNavigation(
                 onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) }
             )
         }
+
+        composable(
+            route = Screen.CoachComparison.route,
+            arguments = listOf(androidx.navigation.navArgument("coachIds") { 
+                type = androidx.navigation.NavType.StringType 
+            })
+        ) { backStackEntry ->
+            val coachIds = backStackEntry.arguments?.getString("coachIds") ?: ""
+            val comparisonViewModel: com.uniandes.sport.viewmodels.profesores.CoachComparisonViewModel = viewModel()
+            CoachComparisonScreen(
+                coachIds = coachIds,
+                viewModel = comparisonViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) },
+                onViewProfile = { id -> navController.navigate(Screen.CoachProfile.route.replace("{profesorId}", id)) }
+            )
+        }
+
     }
 }
 

@@ -22,6 +22,12 @@ class ProfesoresLocalRepository private constructor(
         dao.upsertProfesores(items.map { it.toEntity() })
     }
 
+    suspend fun getProfesorById(id: String): Profesor? =
+        dao.getProfesorById(id)?.toModel()
+
+    suspend fun getCachedProfesorEntity(id: String): CachedProfesorEntity? =
+        dao.getProfesorById(id)
+
     suspend fun upsertProfesor(profesor: Profesor) {
         dao.upsertProfesores(listOf(profesor.toEntity()))
     }

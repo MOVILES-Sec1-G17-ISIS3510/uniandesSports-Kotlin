@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -89,6 +90,24 @@ fun ProfesoresScreen(
     var showBecomeCoachDialog by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
     var isFabExpanded by remember { mutableStateOf(false) }
+    var selectedCoachesForComparison by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showComparisonSheet by remember { mutableStateOf(false) }
+    var comparisonHistory by remember {
+        mutableStateOf(com.uniandes.sport.data.local.CoachComparisonPreferences.getComparisonHistory(context))
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                comparisonHistory = com.uniandes.sport.data.local.CoachComparisonPreferences.getComparisonHistory(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val smartInsights by bookClassViewModel.smartCoachInsights.collectAsState()
     val userBookings by bookClassViewModel.userBookings.collectAsState()
@@ -395,6 +414,161 @@ fun ProfesoresScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Side-by-side comparison outlined button — opens a picker sheet
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            selectedCoachesForComparison = emptySet()
+                            showComparisonSheet = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF009688)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF009688)
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CompareArrows,
+                                contentDescription = null,
+                                tint = Color(0xFF009688),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Compare coaches side-by-side",
+                                color = Color(0xFF009688),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                // Recent comparisons horizontal carrousel (looks like image 4)
+                if (comparisonHistory.isNotEmpty()) {
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Recent comparisons",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(comparisonHistory) { entry ->
+                                    val coachCount = entry.ids.split(",").filter { it.isNotBlank() }.size
+                                    
+                                    val timeDiff = System.currentTimeMillis() - entry.timestamp
+                                    val timeStr = when {
+                                        timeDiff < 60000 -> "Just now"
+                                        timeDiff < 3600000 -> "${timeDiff / 60000}m ago"
+                                        timeDiff < 86400000 -> "${timeDiff / 3600000}h ago"
+                                        else -> "${timeDiff / 86400000}d ago"
+                                    }
+                                    
+                                    Card(
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        modifier = Modifier
+                                            .width(180.dp)
+                                            .clickable {
+                                                onNavigate(Screen.CoachComparison.route.replace("{coachIds}", entry.ids))
+                                            }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = Color(0xFF009688)
+                                                ) {
+                                                    Text(
+                                                        text = "$coachCount",
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "coaches",
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(start = 4.dp).weight(1f)
+                                                )
+                                                IconButton(
+                                                    onClick = {
+                                                        onNavigate(Screen.CoachComparison.route.replace("{coachIds}", entry.ids))
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Refresh,
+                                                        contentDescription = "Compare again",
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = entry.names,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = timeStr,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Smart Insight Carousel
                 item {
                     if (smartInsights.isNotEmpty()) {
@@ -578,7 +752,10 @@ fun ProfesoresScreen(
                     tint = Color.White
                 )
             }
+
+            // (floating comparison bar removed — replaced by BottomSheet picker)
         }
+
 
 
 
@@ -736,8 +913,160 @@ fun ProfesoresScreen(
             }
         }
     }
-}
 
+    // Comparison Picker BottomSheet
+    if (showComparisonSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showComparisonSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            "Select Coaches to Compare",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "${selectedCoachesForComparison.size} selected (2–3 required)",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            val coachIdsJoined = selectedCoachesForComparison.joinToString(",")
+                            logViewModel.log(
+                                screen = "ProfesoresScreen",
+                                action = "COACHES_COMPARED",
+                                params = mapOf(
+                                    "coach_ids" to coachIdsJoined,
+                                    "coach_count" to selectedCoachesForComparison.size.toString(),
+                                    "compared_names" to selectedCoachesForComparison.map { id ->
+                                        filteredProfesores.find { it.id == id }?.nombre ?: id
+                                    }.joinToString(" vs ")
+                                )
+                            )
+                            showComparisonSheet = false
+                            onNavigate(Screen.CoachComparison.route.replace("{coachIds}", coachIdsJoined))
+                        },
+                        enabled = selectedCoachesForComparison.size >= 2,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF009688)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Compare", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(filteredProfesores) { prof ->
+                        val isSelected = selectedCoachesForComparison.contains(prof.id)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedCoachesForComparison = if (isSelected) {
+                                        selectedCoachesForComparison - prof.id
+                                    } else {
+                                        if (selectedCoachesForComparison.size >= 3) {
+                                            android.widget.Toast
+                                                .makeText(
+                                                    context,
+                                                    "You can compare up to 3 coaches.",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                            selectedCoachesForComparison
+                                        } else {
+                                            selectedCoachesForComparison + prof.id
+                                        }
+                                    }
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Color(0xFFE0F2F1) else Color.Transparent,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF009688)) else null
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Checkbox indicator
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = null,
+                                    tint = if (isSelected) Color(0xFF009688) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                // Name and sport
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = prof.nombre,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = prof.deporte,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                // Rating + reviews
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = Color(0xFFF59E0B),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = if (prof.totalReviews > 0) String.format(Locale.US, "%.1f", prof.rating) else "-",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Text(
+                                        text = "${prof.totalReviews} reviews",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
 @Composable
 fun CoachCard(
     profesor: Profesor,
@@ -749,7 +1078,6 @@ fun CoachCard(
     val context = LocalContext.current
     val openWhatsApp = {
         val cleanNumber = profesor.whatsapp.replace(Regex("\\D"), "")
-        // Bug fix #7: guard against blank number and missing WhatsApp app
         if (cleanNumber.isBlank()) {
             android.widget.Toast.makeText(context, "No contact number available", android.widget.Toast.LENGTH_SHORT).show()
         } else {
@@ -780,7 +1108,7 @@ fun CoachCard(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Verified",
-                            tint = Color(0xFF3B82F6), // Blue 500
+                            tint = Color(0xFF3B82F6),
                             modifier = Modifier
                                 .size(24.dp)
                                 .offset(x = 6.dp, y = 6.dp)
@@ -843,6 +1171,7 @@ fun CoachCard(
                     )
                 }
             }
+
 
             Spacer(modifier = Modifier.height(16.dp))
 
