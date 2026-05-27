@@ -15,14 +15,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.uniandes.sport.data.preferences.WarmupPreferencesRepository
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.viewmodels.warmup.WarmupRoutinesViewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
 // pantalla de configuracion de warm-up.
-// el usuario escoge categoria + intensidad y dispara el fetch a firestore.
-// requiere internet para descargar la primera vez (la cache l1 sirve si repite combinacion)
+// el usuario escoge categoria + intensidad. los filtros se restauran desde datastore
+// al entrar y se guardan al cambiar (resuelve "missing state persistence").
+// trabaja en modo online o offline: si no hay red, el viewmodel pide al service
+// que lea de room/archivo en lugar de tirar un toast generico
 private val CATEGORIES = listOf("Core Activation", "Dynamic Stretching", "Joint Mobility")
 private val INTENSITIES = listOf("Low", "High")
 
@@ -37,11 +43,22 @@ fun WarmupConfigScreen(
     val isOnline = rememberIsOnline()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val scope = rememberCoroutineScope()
+    val prefsRepo = remember { WarmupPreferencesRepository.getInstance(context) }
 
     var selectedCategory by remember { mutableStateOf(CATEGORIES.first()) }
     var selectedIntensity by remember { mutableStateOf(INTENSITIES.first()) }
 
-    // espejo de flutter: toast con el mensaje exacto cuando algo falla
+    // restaurar ultima seleccion de datastore SOLO al entrar (first()).
+    // si usaramos collect() la seleccion local se sobreescribiria cada vez que
+    // el datastore emita despues de setlastcategory/setlastintensity
+    LaunchedEffect(Unit) {
+        val prefs = prefsRepo.preferencesFlow.first()
+        if (prefs.lastCategory in CATEGORIES) selectedCategory = prefs.lastCategory
+        if (prefs.lastIntensity in INTENSITIES) selectedIntensity = prefs.lastIntensity
+    }
+
+    // mostrar errores con toast (solo casos donde la cache tambien esta vacia)
     LaunchedEffect(error) {
         error?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
@@ -76,68 +93,88 @@ fun WarmupConfigScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text(
-                "Pick a category and intensity. We will surface 4 random exercises from the matching routines.",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            // banner offline: indica que se mostraran rutinas cacheadas
+            OfflineConnectivityBanner(
+                offlineMessage = "No internet — showing cached routines from your last session."
             )
 
-            ChipsSection(
-                title = "Category",
-                options = CATEGORIES,
-                selected = selectedCategory,
-                onSelect = { selectedCategory = it }
-            )
-
-            ChipsSection(
-                title = "Intensity",
-                options = INTENSITIES,
-                selected = selectedIntensity,
-                onSelect = { selectedIntensity = it }
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            Button(
-                onClick = {
-                    // espejo flutter: validacion temprana de internet con mensaje explicito.
-                    // (fase 2 reemplaza esto con lectura desde room para vista protegida)
-                    if (!isOnline) {
-                        Toast.makeText(
-                            context,
-                            "Internet connection is required to fetch routines",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        return@Button
-                    }
-                    viewModel.fetchExercises(selectedCategory, selectedIntensity) {
-                        val cat = URLEncoder.encode(selectedCategory, "UTF-8")
-                        val int = URLEncoder.encode(selectedIntensity, "UTF-8")
-                        onNavigateToExercises(cat, int)
-                    }
-                },
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(20.dp),
-                enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                Text(
+                    "Pick a category and intensity. We will surface 4 random exercises from the matching routines.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                ChipsSection(
+                    title = "Category",
+                    options = CATEGORIES,
+                    selected = selectedCategory,
+                    onSelect = {
+                        selectedCategory = it
+                        scope.launch { prefsRepo.setLastCategory(it) }
+                    }
+                )
+
+                ChipsSection(
+                    title = "Intensity",
+                    options = INTENSITIES,
+                    selected = selectedIntensity,
+                    onSelect = {
+                        selectedIntensity = it
+                        scope.launch { prefsRepo.setLastIntensity(it) }
+                    }
+                )
+
+                Spacer(Modifier.weight(1f))
+
+                Button(
+                    onClick = {
+                        // guardar seleccion atomica antes de navegar
+                        scope.launch {
+                            prefsRepo.setLastSelection(selectedCategory, selectedIntensity)
+                        }
+                        // viewmodel decide internamente: si online → firestore + cache,
+                        // si offline → room/archivo. la ui no necesita logica adicional
+                        viewModel.fetchExercises(
+                            category = selectedCategory,
+                            intensity = selectedIntensity,
+                            isOnline = isOnline
+                        ) {
+                            val cat = URLEncoder.encode(selectedCategory, "UTF-8")
+                            val int = URLEncoder.encode(selectedIntensity, "UTF-8")
+                            onNavigateToExercises(cat, int)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
-                } else {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Find routines", fontWeight = FontWeight.Black, fontSize = 16.sp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (isOnline) "Find routines" else "Find cached routines",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
             }
         }

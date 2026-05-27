@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.uniandes.sport.models.warmup.WarmupExercise
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
+import com.uniandes.sport.ui.components.rememberIsOnline
 import com.uniandes.sport.ui.theme.ArchivoFamily
 import com.uniandes.sport.viewmodels.warmup.WarmupRoutinesViewModel
 import kotlinx.coroutines.launch
@@ -40,13 +42,19 @@ fun WarmupExercisesScreen(
     val exercises by viewModel.selectedExercises.collectAsState()
     val pool by viewModel.exercisesPool.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isOnline = rememberIsOnline()
 
-    // al entrar: primero intenta usar la cache l1 del servicio sin red;
-    // si esta vacia, hace fetch real (solo deberia pasar en deep link)
+    // al entrar: primero intenta usar el lrucache del servicio sin red;
+    // si esta vacio (deep link o proceso recien iniciado), delega al viewmodel
+    // que cae a room/archivo segun estado de red
     LaunchedEffect(category, intensity) {
-        viewModel.loadFromCache()
+        viewModel.loadFromCache(category, intensity)
         if (viewModel.exercisesPool.value.isEmpty()) {
-            viewModel.fetchExercises(category, intensity)
+            viewModel.fetchExercises(
+                category = category,
+                intensity = intensity,
+                isOnline = isOnline
+            )
         }
     }
 
@@ -81,11 +89,15 @@ fun WarmupExercisesScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            OfflineConnectivityBanner(
+                offlineMessage = "Showing cached exercises from your last session."
+            )
+            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             when {
                 isLoading && exercises.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -105,6 +117,7 @@ fun WarmupExercisesScreen(
                     poolSize = pool.size,
                     onShuffle = { viewModel.shuffle() }
                 )
+            }
             }
         }
     }

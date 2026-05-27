@@ -11,13 +11,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// viewmodel de warm-up routines.
+// viewmodel de warm-up routines con soporte multinivel del service.
 //
 // --- multithreading ---
-// la llamada a firestore corre en dispatchers.io para no bloquear el hilo principal,
-// y los stateflow se actualizan en dispatchers.main para que la ui (compose) reaccione.
-// la operacion expone callbacks onsuccess/onerror para acoplar la navegacion sin
-// forzar a la ui a observar otro stateflow auxiliar.
+// 1) dispatchers.io para la llamada al service (lectura y escritura paralela en service)
+// 2) withcontext(main) para actualizar los stateflow que la ui observa
+// 3) corrutinas anidadas dentro del service (room write + file write en paralelo)
+//
+// --- eventual connectivity ---
+// fetchexercises acepta isonline; el service se encarga de saltar firestore
+// y leer directo de room/archivo cuando isonline=false. el viewmodel solo
+// expone el resultado a la ui sin distinguir el origen
 class WarmupRoutinesViewModel : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -26,33 +30,47 @@ class WarmupRoutinesViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // pool completo descargado para la combinacion actual
     private val _exercisesPool = MutableStateFlow<List<WarmupExercise>>(emptyList())
     val exercisesPool: StateFlow<List<WarmupExercise>> = _exercisesPool.asStateFlow()
 
-    // seleccion actual de 4 ejercicios mostrados en el carrusel.
-    // se reemplaza al hacer shuffle sin tocar el pool
     private val _selectedExercises = MutableStateFlow<List<WarmupExercise>>(emptyList())
     val selectedExercises: StateFlow<List<WarmupExercise>> = _selectedExercises.asStateFlow()
 
-    // descarga el pool de firestore (o lo trae de la cache l1 del servicio).
-    // ui responsabilidad: validar conectividad antes de llamar este metodo
+    // ultima combinacion consultada (para que loadfromcache pueda reutilizarla)
+    @Volatile private var lastCategory: String = ""
+    @Volatile private var lastIntensity: String = ""
+
+    // descarga el pool. si isonline=true intenta firestore con write-through,
+    // si isonline=false va directo a room/archivo. en ambos casos cae en cascada
     fun fetchExercises(
         category: String,
         intensity: String,
+        isOnline: Boolean,
         onSuccess: () -> Unit = {}
     ) {
         _isLoading.value = true
         _error.value = null
+        lastCategory = category
+        lastIntensity = intensity
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val pool = WarmupRoutinesService.getExercisesPool(category, intensity)
+                val pool = WarmupRoutinesService.getExercisesPool(
+                    category = category,
+                    intensity = intensity,
+                    allowNetwork = isOnline
+                )
                 withContext(Dispatchers.Main) {
                     _exercisesPool.value = pool
                     _selectedExercises.value = pickFour(pool)
                     _isLoading.value = false
-                    if (pool.isNotEmpty()) onSuccess()
-                    else _error.value = "No routines found for the selected combination"
+                    when {
+                        pool.isNotEmpty() -> onSuccess()
+                        !isOnline -> _error.value =
+                            "No cached routines available offline for this combination"
+                        else -> _error.value =
+                            "No routines found for the selected combination"
+                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -63,15 +81,19 @@ class WarmupRoutinesViewModel : ViewModel() {
         }
     }
 
-    // carga el pool desde la cache l1 del servicio sin hacer red.
-    // util al entrar a la pantalla de ejercicios despues de una busqueda exitosa
-    fun loadFromCache() {
-        val pool = WarmupRoutinesService.currentPool()
-        _exercisesPool.value = pool
-        _selectedExercises.value = pickFour(pool)
+    // carga desde el lrucache del service. si esta vacio (proceso recien iniciado),
+    // intenta delegar al service que cae a room/archivo
+    fun loadFromCache(category: String, intensity: String) {
+        lastCategory = category
+        lastIntensity = intensity
+        val cached = WarmupRoutinesService.currentPool(category, intensity)
+        if (cached.isNotEmpty()) {
+            _exercisesPool.value = cached
+            _selectedExercises.value = pickFour(cached)
+        }
+        // si esta vacio, la pantalla de ejercicios llamara a fetchexercises explicito
     }
 
-    // baraja el pool descargado y elige 4 ejercicios distintos sin consumir red
     fun shuffle() {
         _selectedExercises.value = pickFour(_exercisesPool.value)
     }

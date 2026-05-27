@@ -226,7 +226,8 @@ fun AppNavigation(
         composable(Screen.SportTools.route) {
             com.uniandes.sport.ui.screens.sport_tools.SportToolsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToWarmup = { navController.navigate(Screen.WarmupConfig.route) }
+                onNavigateToWarmup = { navController.navigate(Screen.WarmupConfig.route) },
+                onNavigateToNutrition = { navController.navigate(Screen.NutritionAssistant.route) }
             )
         }
 
@@ -255,6 +256,12 @@ fun AppNavigation(
             com.uniandes.sport.ui.screens.sport_tools.WarmupExercisesScreen(
                 category = cat,
                 intensity = int,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.NutritionAssistant.route) {
+            com.uniandes.sport.ui.screens.sport_tools.NutritionAssistantScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.uniandes.sport.ui.components.OfflineConnectivityBanner
 import com.uniandes.sport.ui.theme.ArchivoFamily
 
 // vista principal de sport tools: 4 cards pastel (calisthenics, distance tracker,
@@ -33,7 +34,8 @@ import com.uniandes.sport.ui.theme.ArchivoFamily
 @Composable
 fun SportToolsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToWarmup: () -> Unit
+    onNavigateToWarmup: () -> Unit,
+    onNavigateToNutrition: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -64,9 +66,19 @@ fun SportToolsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // banner offline: warm-up sigue funcional con cache; las demas
+            // herramientas (calisthenics, distance, nutrition) muestran su propio aviso
+            OfflineConnectivityBanner(
+                offlineMessage = "You can still open Warm-Up Routines with cached data."
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             ToolCard(
                 title = "AI Calisthenics Assistant",
                 icon = Icons.Default.FitnessCenter,
@@ -97,10 +109,9 @@ fun SportToolsScreen(
                 icon = Icons.Default.Restaurant,
                 pastel = Color(0xFFFAF6D6),
                 accent = Color(0xFF77692E),
-                onClick = {
-                    Toast.makeText(context, "AI Nutrition — coming soon", Toast.LENGTH_SHORT).show()
-                }
+                onClick = onNavigateToNutrition
             )
+            }
         }
     }
 }

@@ -20,5 +20,6 @@ sealed class Screen(val route: String) {
     object SportTools : Screen("sport_tools")
     object WarmupConfig : Screen("warmup_config")
     object WarmupExercises : Screen("warmup_exercises/{category}/{intensity}")
+    object NutritionAssistant : Screen("nutrition_assistant")
 }
 
