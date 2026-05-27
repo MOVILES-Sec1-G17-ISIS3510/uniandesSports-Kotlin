@@ -627,6 +627,18 @@ fun ProfesoresScreen(
                         Button(
                             onClick = {
                                 val coachIdsJoined = selectedCoachesForComparison.joinToString(",")
+                                // BigQuery Telemetry: Log the comparison action
+                                logViewModel.log(
+                                    screen = "ProfesoresScreen",
+                                    action = "COACHES_COMPARED",
+                                    params = mapOf(
+                                        "coach_ids" to coachIdsJoined,
+                                        "coach_count" to selectedCoachesForComparison.size.toString(),
+                                        "compared_names" to selectedCoachesForComparison.map { id ->
+                                            filteredProfesores.find { it.id == id }?.nombre ?: id
+                                        }.joinToString(" vs ")
+                                    )
+                                )
                                 onNavigate(Screen.CoachComparison.route.replace("{coachIds}", coachIdsJoined))
                             },
                             colors = ButtonDefaults.buttonColors(
