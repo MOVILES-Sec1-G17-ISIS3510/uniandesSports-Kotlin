@@ -155,6 +155,28 @@ fun PerfilUsuarioScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // My Stats Button
+                Button(
+                    onClick = { onNavigate("my_stats") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("My Stats & Badges")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Info Cards
                 InfoRow(icon = Icons.Default.School, label = "Program", value = user?.program ?: "Not set")
                 InfoRow(icon = Icons.Default.Timeline, label = "Semester", value = user?.semester?.toString() ?: "0")
