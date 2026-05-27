@@ -208,8 +208,8 @@ fun AppNavigation(
 
         composable(
             route = Screen.CoachComparison.route,
-            arguments = listOf(androidx.navigation.navArgument("coachIds") { 
-                type = androidx.navigation.NavType.StringType 
+            arguments = listOf(androidx.navigation.navArgument("coachIds") {
+                type = androidx.navigation.NavType.StringType
             })
         ) { backStackEntry ->
             val coachIds = backStackEntry.arguments?.getString("coachIds") ?: ""
@@ -220,6 +220,42 @@ fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() },
                 onBookClass = { id -> navController.navigate(Screen.BookClass.route.replace("{profesorId}", id)) },
                 onViewProfile = { id -> navController.navigate(Screen.CoachProfile.route.replace("{profesorId}", id)) }
+            )
+        }
+
+        composable(Screen.SportTools.route) {
+            com.uniandes.sport.ui.screens.sport_tools.SportToolsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToWarmup = { navController.navigate(Screen.WarmupConfig.route) }
+            )
+        }
+
+        composable(Screen.WarmupConfig.route) {
+            com.uniandes.sport.ui.screens.sport_tools.WarmupConfigScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToExercises = { category, intensity ->
+                    navController.navigate("warmup_exercises/$category/$intensity")
+                }
+            )
+        }
+
+        composable(
+            route = Screen.WarmupExercises.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("category") { type = androidx.navigation.NavType.StringType },
+                androidx.navigation.navArgument("intensity") { type = androidx.navigation.NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val cat = backStackEntry.arguments?.getString("category")?.let {
+                java.net.URLDecoder.decode(it, "UTF-8")
+            } ?: ""
+            val int = backStackEntry.arguments?.getString("intensity")?.let {
+                java.net.URLDecoder.decode(it, "UTF-8")
+            } ?: ""
+            com.uniandes.sport.ui.screens.sport_tools.WarmupExercisesScreen(
+                category = cat,
+                intensity = int,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

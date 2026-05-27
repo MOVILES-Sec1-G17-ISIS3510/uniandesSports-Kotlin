@@ -326,6 +326,11 @@ fun HomeScreen(
                 }
             }
 
+            // Sport Tools Banner — entrada al hub de herramientas (warm-up, ai calisthenics, etc.)
+            item {
+                SportToolsBanner(onClick = { onNavigate(com.uniandes.sport.ui.navigation.Screen.SportTools.route) })
+            }
+
             // Coach Insight Widget
             item {
                 CoachInsightCard(feedback = lastCoachFeedback)
@@ -794,6 +799,71 @@ fun UpcomingMatchItem(event: Event, onClick: () -> Unit = {}) {
                 Text(cleanLocation, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+}
+
+// banner de entrada al hub de sport tools (rutinas de warm-up, ai calisthenics, etc.).
+// espejo del banner equivalente en flutter: gradiente azul + titulo + subtitulo + icono
+@Composable
+private fun SportToolsBanner(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 6.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF60A5FA),
+                            Color(0xFF2563EB)
+                        )
+                    )
+                )
+                .padding(horizontal = 20.dp, vertical = 18.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Ready to improve your training session?",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Use Sport Tools",
+                        color = Color.White,
+                        fontFamily = ArchivoFamily,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Build,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
         }
     }
 }
